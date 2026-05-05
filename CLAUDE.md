@@ -25,10 +25,12 @@ Local clone (typical setup):
 
 ## Stack
 
-- Astro 5 SSR with `@astrojs/node` adapter (`output: "server"`)
+- Astro 5 SSR with `@astrojs/vercel` adapter (`output: "server"`)
 - `@supabase/ssr` for cookie-based auth
 - Tailwind 4
 - Markdown editor with live preview (marked.js)
+
+> **Why Vercel and not Amplify?** Amplify Hosting's auto-detection of Astro SSR with `@astrojs/node` is unreliable (it deployed the `dist/` as static, never running the server, returning 404 on all routes). Vercel has a native, well-maintained Astro adapter — single-click deploy from GitHub, auto-handles serverless functions for SSR routes. Free tier (Hobby) is generous enough for a 1-admin CMS.
 
 ## Database types — KEEP IN SYNC
 
@@ -70,16 +72,16 @@ If types drift, runtime fails with "column not found" or insert errors get silen
 
 ## Deployment
 
-AWS Amplify Hosting (Compute / SSR). Single-app repo so `amplify.yml` is straightforward.
+**Vercel** (Hobby/free tier). Connect this repo, Vercel auto-detects Astro and configures serverless functions for SSR routes.
 
-Required env vars in Amplify Console:
+Required env vars in Vercel Project Settings → Environment Variables:
 | Key | Value |
 |---|---|
 | `PUBLIC_SUPABASE_URL` | `https://ebseegzxfrvblpwhpmhr.supabase.co` |
 | `PUBLIC_SUPABASE_ANON_KEY` | the anon JWT |
 | `PUBLIC_CMS_URL` | `https://cms.casadeasterionediciones.com` |
 
-Custom domain target: `cms.casadeasterionediciones.com` (CNAME via Route 53; the apex is in the sister repo).
+Custom domain: `cms.casadeasterionediciones.com`. Vercel will guide adding a CNAME to Route 53 (DNS lives in AWS for the apex domain).
 
 ## Supabase auth — Redirect URLs allowlist
 

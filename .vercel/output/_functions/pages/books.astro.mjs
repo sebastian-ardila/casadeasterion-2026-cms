@@ -1,0 +1,35 @@
+import { e as createComponent, k as renderComponent, r as renderTemplate, h as createAstro, m as maybeRenderHead, g as addAttribute } from '../chunks/astro/server_Cc6zjcpi.mjs';
+import { $ as $$AppLayout } from '../chunks/AppLayout_P03DaVtk.mjs';
+import { r as requireAdmin } from '../chunks/auth_DWIRVYmF.mjs';
+import { g as getSupabaseServerClient } from '../chunks/supabase-server_ch9TzKCi.mjs';
+export { renderers } from '../renderers.mjs';
+
+const $$Astro = createAstro();
+const $$Index = createComponent(async ($$result, $$props, $$slots) => {
+  const Astro2 = $$result.createAstro($$Astro, $$props, $$slots);
+  Astro2.self = $$Index;
+  const guard = await requireAdmin(Astro2);
+  if (guard instanceof Response) return guard;
+  const supabase = getSupabaseServerClient(Astro2.request, Astro2.cookies);
+  const { data: books } = await supabase.from("books").select("id, slug, title, status, price_amount, price_currency, author_id").order("updated_at", { ascending: false });
+  const { data: authors } = await supabase.from("authors").select("id, name");
+  const authorMap = new Map((authors ?? []).map((a) => [a.id, a.name]));
+  return renderTemplate`${renderComponent($$result, "AppLayout", $$AppLayout, { "title": "Libros" }, { "default": async ($$result2) => renderTemplate` ${maybeRenderHead()}<div class="flex items-center justify-between mb-8"> <h1 class="font-serif text-3xl">Libros</h1> <a href="/books/new" class="btn-primary">+ Nuevo libro</a> </div> ${books && books.length > 0 ? renderTemplate`<div class="border border-stone-200 bg-white"> <table class="w-full text-sm"> <thead class="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-600"> <tr> <th class="text-left px-4 py-3 font-semibold">Título</th> <th class="text-left px-4 py-3 font-semibold">Autor</th> <th class="text-left px-4 py-3 font-semibold">Estado</th> <th class="text-right px-4 py-3 font-semibold">Precio</th> </tr> </thead> <tbody> ${books.map((b) => renderTemplate`<tr class="border-t border-stone-100 hover:bg-stone-50"> <td class="px-4 py-3"> <a${addAttribute(`/books/${b.id}`, "href")} class="hover:underline">${b.title}</a> <p class="text-xs text-stone-500">/${b.slug}</p> </td> <td class="px-4 py-3 text-stone-700">${authorMap.get(b.author_id ?? "") ?? "\u2014"}</td> <td class="px-4 py-3"> <span${addAttribute([
+    "text-[11px] uppercase tracking-[0.12em] px-2 py-0.5",
+    b.status === "published" ? "bg-green-100 text-green-900" : "bg-stone-200 text-stone-700"
+  ], "class:list")}>${b.status}</span> </td> <td class="px-4 py-3 text-right tabular-nums"> ${b.price_amount != null ? new Intl.NumberFormat("es-CO", { style: "currency", currency: b.price_currency, maximumFractionDigits: 0 }).format(Number(b.price_amount)) : "\u2014"} </td> </tr>`)} </tbody> </table> </div>` : renderTemplate`<div class="border border-dashed border-stone-300 p-10 text-center text-stone-500"> <p>Aún no hay libros. <a href="/books/new" class="underline text-stone-900">Crea el primero.</a></p> </div>`}` })}`;
+}, "/Users/dila/Docs/Code/casadeasterion-2026-cms/src/pages/books/index.astro", void 0);
+
+const $$file = "/Users/dila/Docs/Code/casadeasterion-2026-cms/src/pages/books/index.astro";
+const $$url = "/books";
+
+const _page = /*#__PURE__*/Object.freeze(/*#__PURE__*/Object.defineProperty({
+  __proto__: null,
+  default: $$Index,
+  file: $$file,
+  url: $$url
+}, Symbol.toStringTag, { value: 'Module' }));
+
+const page = () => _page;
+
+export { page };
