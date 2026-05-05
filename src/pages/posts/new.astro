@@ -3,11 +3,11 @@ import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
-import { requireAdmin } from "~/lib/auth";
+import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, slugify } from "~/lib/forms";
 
-const guard = await requireAdmin(Astro);
+const guard = await requirePermission(Astro, "posts", "edit");
 if (guard instanceof Response) return guard;
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);

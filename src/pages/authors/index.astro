@@ -1,10 +1,11 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
-import { requireAdmin } from "~/lib/auth";
+import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
-const guard = await requireAdmin(Astro);
+const guard = await requirePermission(Astro, "authors", "view");
 if (guard instanceof Response) return guard;
+const canEdit = guard.permission === "edit";
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 const { data: authors } = await supabase
@@ -16,7 +17,7 @@ const { data: authors } = await supabase
 <AppLayout title="Autores">
   <div class="flex items-center justify-between mb-8">
     <h1 class="font-serif text-3xl">Autores</h1>
-    <a href="/authors/new" class="btn-primary">+ Nuevo autor</a>
+    {canEdit && <a href="/authors/new" class="btn-primary">+ Nuevo autor</a>}
   </div>
 
   {authors && authors.length > 0 ? (
@@ -37,7 +38,7 @@ const { data: authors } = await supabase
     </div>
   ) : (
     <div class="border border-dashed border-stone-300 p-10 text-center text-stone-500">
-      <p>Aún no hay autores. <a href="/authors/new" class="underline text-stone-900">Crea el primero.</a></p>
+      <p>Aún no hay autores.{canEdit && (<> <a href="/authors/new" class="underline text-stone-900">Crea el primero.</a></>)}</p>
     </div>
   )}
 </AppLayout>

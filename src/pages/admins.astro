@@ -1,0 +1,210 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import { requireOwner, RESOURCES, RESOURCE_LABEL, type Resource, type Level } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq } from "~/lib/forms";
+
+const guard = await requireOwner(Astro);
+if (guard instanceof Response) return guard;
+const owner = guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+let saved: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const action = strReq(fd, "_action");
+
+    if (action === "set_permission") {
+      const profileId = strReq(fd, "profile_id");
+      const resource = strReq(fd, "resource") as Resource;
+      const level = strReq(fd, "level") as Level;
+      if (!RESOURCES.includes(resource)) throw new Error("recurso inválido");
+      if (!["none", "view", "edit"].includes(level)) throw new Error("nivel inválido");
+      const { error } = await supabase
+        .from("admin_permissions")
+        .upsert({ profile_id: profileId, resource, level }, { onConflict: "profile_id,resource" });
+      if (error) throw error;
+      saved = "Permiso actualizado.";
+    } else if (action === "add_email") {
+      const email = strReq(fd, "email").trim().toLowerCase();
+      const note = str(fd, "note");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("email inválido");
+      const { error } = await supabase
+        .from("admin_emails")
+        .insert({ email, note, added_by: owner.id });
+      if (error) throw error;
+      saved = `Email pre-aprobado: ${email}`;
+    } else if (action === "remove_admin") {
+      const email = strReq(fd, "email").toLowerCase();
+      if (email === owner.email.toLowerCase()) throw new Error("no puedes quitarte a ti mismo");
+      const { error } = await supabase
+        .from("admin_emails")
+        .delete()
+        .eq("email", email);
+      if (error) throw error;
+      saved = `Acceso revocado: ${email}`;
+    } else {
+      throw new Error("acción desconocida");
+    }
+  } catch (err) {
+    formError = err instanceof Error ? err.message : "Error.";
+  }
+}
+
+const { data: profiles } = await supabase
+  .from("profiles")
+  .select("id, email, full_name, role")
+  .in("role", ["owner", "admin"])
+  .order("role")
+  .order("email");
+
+const { data: allowlist } = await supabase
+  .from("admin_emails")
+  .select("email, added_at, note");
+
+const { data: permRows } = await supabase
+  .from("admin_permissions")
+  .select("profile_id, resource, level");
+
+const permsByProfile = new Map<string, Record<Resource, Level>>();
+for (const p of profiles ?? []) {
+  const initial: Record<Resource, Level> = {
+    posts: "none", books: "none", authors: "none", categories: "none", site: "none",
+  };
+  if (p.role === "owner") for (const r of RESOURCES) initial[r] = "edit";
+  permsByProfile.set(p.id, initial);
+}
+for (const row of permRows ?? []) {
+  const r = permsByProfile.get(row.profile_id);
+  if (r && (RESOURCES as string[]).includes(row.resource)) {
+    r[row.resource as Resource] = row.level as Level;
+  }
+}
+
+const profileEmails = new Set((profiles ?? []).map((p) => p.email.toLowerCase()));
+const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email.toLowerCase()));
+---
+
+<AppLayout title="Administradores">
+  <h1 class="font-serif text-3xl mb-2">Administradores</h1>
+  <p class="text-stone-500 mb-8">Quién puede entrar al CMS y qué puede tocar.</p>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+  {saved && (
+    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">{saved}</p>
+  )}
+
+  <h2 class="font-serif text-xl mt-2 mb-4">Activos</h2>
+  <div class="space-y-6 mb-12">
+    {(profiles ?? []).map((p) => {
+      const isSelf = p.id === owner.id;
+      const isOwnerRow = p.role === "owner";
+      const perms = permsByProfile.get(p.id)!;
+      return (
+        <div class="border border-stone-200 bg-white p-5">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <p class="font-medium">{p.full_name ?? p.email}</p>
+              <p class="text-xs text-stone-500">{p.email}</p>
+              <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-1">
+                {p.role}{isSelf ? " · tú" : ""}
+              </p>
+            </div>
+            {!isOwnerRow && !isSelf && (
+              <form method="POST" onsubmit={`return confirm('¿Revocar acceso de ${p.email}?')`}>
+                <input type="hidden" name="_action" value="remove_admin" />
+                <input type="hidden" name="email" value={p.email} />
+                <button class="btn-danger text-xs">Revocar acceso</button>
+              </form>
+            )}
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+            {RESOURCES.map((r) => (
+              <form method="POST" class="flex flex-col">
+                <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1">
+                  {RESOURCE_LABEL[r]}
+                </label>
+                <input type="hidden" name="_action" value="set_permission" />
+                <input type="hidden" name="profile_id" value={p.id} />
+                <input type="hidden" name="resource" value={r} />
+                <select
+                  name="level"
+                  class="input"
+                  disabled={isOwnerRow}
+                  onchange="this.form.submit()"
+                >
+                  <option value="none" selected={perms[r] === "none"}>sin acceso</option>
+                  <option value="view" selected={perms[r] === "view"}>ver</option>
+                  <option value="edit" selected={perms[r] === "edit"}>editar</option>
+                </select>
+              </form>
+            ))}
+          </div>
+        </div>
+      );
+    })}
+  </div>
+
+  {pendingEmails.length > 0 && (
+    <>
+      <h2 class="font-serif text-xl mb-4">Pre-aprobados (sin haberse logueado aún)</h2>
+      <div class="border border-stone-200 bg-white mb-12">
+        <table class="w-full text-sm">
+          <thead class="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-600">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold">Email</th>
+              <th class="text-left px-4 py-3 font-semibold">Nota</th>
+              <th class="text-left px-4 py-3 font-semibold">Agregado</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingEmails.map((e) => (
+              <tr class="border-t border-stone-100">
+                <td class="px-4 py-3">{e.email}</td>
+                <td class="px-4 py-3 text-stone-600">{e.note ?? "—"}</td>
+                <td class="px-4 py-3 text-stone-500 text-xs">{new Date(e.added_at).toLocaleDateString()}</td>
+                <td class="px-4 py-3 text-right">
+                  <form method="POST" onsubmit={`return confirm('¿Quitar ${e.email} de la lista?')`}>
+                    <input type="hidden" name="_action" value="remove_admin" />
+                    <input type="hidden" name="email" value={e.email} />
+                    <button class="text-xs text-red-700 hover:underline">Quitar</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )}
+
+  <h2 class="font-serif text-xl mb-4">Pre-aprobar nuevo email</h2>
+  <form method="POST" class="border border-stone-300 border-dashed p-5 grid grid-cols-12 gap-3 items-end max-w-3xl">
+    <input type="hidden" name="_action" value="add_email" />
+    <div class="col-span-5">
+      <label class="block">
+        <span class="label">Email</span>
+        <input class="input" type="email" name="email" placeholder="alguien@dominio.com" required />
+      </label>
+    </div>
+    <div class="col-span-5">
+      <label class="block">
+        <span class="label">Nota (opcional)</span>
+        <input class="input" type="text" name="note" placeholder="rol o quién es" />
+      </label>
+    </div>
+    <div class="col-span-2 flex justify-end">
+      <button class="btn-primary">Agregar</button>
+    </div>
+    <p class="col-span-12 text-xs text-stone-500">
+      El nuevo admin entra con todos los permisos en <em>sin acceso</em>. Una vez se loguee por primera vez, podrás darle permisos por sección desde la lista de arriba.
+    </p>
+  </form>
+</AppLayout>

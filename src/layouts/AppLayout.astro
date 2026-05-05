@@ -1,7 +1,11 @@
 ---
 import "~/styles/global.css";
 import Sidebar from "~/components/Sidebar.astro";
+import { getAllPermissions, isCmsUser } from "~/lib/auth";
+
 const user = Astro.locals.user;
+const permissions = isCmsUser(user) ? await getAllPermissions(Astro, user) : null;
+
 interface Props {
   title?: string;
 }
@@ -18,7 +22,7 @@ const { title = "CMS" } = Astro.props;
     <link rel="icon" href="/favicon.svg" />
   </head>
   <body class="min-h-screen flex">
-    <Sidebar user={user} />
+    <Sidebar user={user} permissions={permissions} />
     <main class="flex-1 min-w-0 px-10 py-10 max-w-[1100px]">
       <slot />
     </main>

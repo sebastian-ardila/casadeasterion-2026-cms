@@ -1,18 +1,20 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
-import { requireAdmin } from "~/lib/auth";
+import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, slugify } from "~/lib/forms";
 
-const guard = await requireAdmin(Astro);
+const guard = await requirePermission(Astro, "categories", "view");
 if (guard instanceof Response) return guard;
+const canEdit = guard.permission === "edit";
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
 let saved = false;
 
 if (Astro.request.method === "POST") {
+  if (!canEdit) return Astro.redirect("/?error=no_permission&section=categories");
   try {
     const fd = await Astro.request.formData();
     const action = str(fd, "_action");
@@ -92,15 +94,19 @@ const { data: categories } = await supabase
           <Field label="Orden" name="sort_order" type="number" value={c.sort_order} />
         </div>
         <div class="col-span-3 flex gap-2 justify-end">
-          <button type="submit" class="btn">Guardar</button>
-          <button
-            type="submit"
-            formnovalidate
-            name="_action"
-            value="delete"
-            class="btn-danger"
-            onclick={`return confirm('¿Borrar la categoría \"${c.name}\"?')`}
-          >Borrar</button>
+          {canEdit && (
+            <>
+              <button type="submit" class="btn">Guardar</button>
+              <button
+                type="submit"
+                formnovalidate
+                name="_action"
+                value="delete"
+                class="btn-danger"
+                onclick={`return confirm('¿Borrar la categoría \"${c.name}\"?')`}
+              >Borrar</button>
+            </>
+          )}
         </div>
         <div class="col-span-12">
           <Field label="Descripción" name="description" type="textarea" rows={2} value={c.description} />
@@ -110,6 +116,7 @@ const { data: categories } = await supabase
   </div>
 
   {/* New category */}
+  {canEdit && (
   <form method="POST" class="border border-stone-300 border-dashed p-5 grid grid-cols-12 gap-3 items-end">
     <h2 class="col-span-12 font-serif text-xl">Nueva categoría</h2>
     <div class="col-span-3">
@@ -139,4 +146,5 @@ const { data: categories } = await supabase
       <Field label="Descripción" name="description" type="textarea" rows={2} />
     </div>
   </form>
+  )}
 </AppLayout>

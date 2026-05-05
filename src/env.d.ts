@@ -17,7 +17,7 @@ declare namespace App {
       id: string;
       email: string;
       full_name: string | null;
-      role: "admin" | "editor" | "viewer";
+      role: "owner" | "admin" | "editor" | "viewer";
     } | null;
   }
 }
