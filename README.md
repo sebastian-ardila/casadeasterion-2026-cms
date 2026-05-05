@@ -17,6 +17,6 @@ pnpm dev               # http://localhost:4322
 
 ## Deploy
 
-**Vercel** (Hobby/free tier). Connect this repo, set env vars (`PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_CMS_URL`), deploy.
+**AWS Amplify Hosting** (platform `WEB_COMPUTE`). Connected to GitHub. Env vars (`PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_ANON_KEY`, `PUBLIC_CMS_URL`) set in Amplify Console.
 
 See `CLAUDE.md` for architecture notes and how to keep DB types in sync with the sister repo.

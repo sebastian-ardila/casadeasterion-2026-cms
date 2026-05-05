@@ -1,10 +1,10 @@
 import { defineConfig } from "astro/config";
-import vercel from "@astrojs/vercel";
+import awsAmplify from "astro-aws-amplify";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   output: "server",
-  adapter: vercel(),
+  adapter: awsAmplify(),
   server: { port: 4322, host: "localhost" },
   vite: {
     plugins: [tailwindcss()],

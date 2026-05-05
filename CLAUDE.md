@@ -1,6 +1,6 @@
 # Casa de Asterión CMS — Notes for future sessions
 
-This is the **admin** repo. The public site lives in a sister repo. Both share one Supabase project as backend.
+This is the **admin** repo. The public site lives in a sister repo. Both share one Supabase project as backend. Both deploy to AWS Amplify.
 
 ## Sister repo
 
@@ -25,12 +25,19 @@ Local clone (typical setup):
 
 ## Stack
 
-- Astro 5 SSR with `@astrojs/vercel` adapter (`output: "server"`)
+- Astro 5 SSR with `@astrojs/node` adapter in `standalone` mode (`output: "server"`)
 - `@supabase/ssr` for cookie-based auth
 - Tailwind 4
 - Markdown editor with live preview (marked.js)
+- Deployed to AWS Amplify Hosting with **`platform: WEB_COMPUTE`**
 
-> **Why Vercel and not Amplify?** Amplify Hosting's auto-detection of Astro SSR with `@astrojs/node` is unreliable (it deployed the `dist/` as static, never running the server, returning 404 on all routes). Vercel has a native, well-maintained Astro adapter — single-click deploy from GitHub, auto-handles serverless functions for SSR routes. Free tier (Hobby) is generous enough for a 1-admin CMS.
+> **Why Amplify and not Vercel?** Keeping the entire stack on AWS (DNS in Route 53, public site on Amplify already, IAM/billing unified). Amplify Hosting *does* support Astro SSR — but only when the app's `platform` is `WEB_COMPUTE`. New Amplify apps default to `WEB` (static-only) and the console UI does not expose the toggle. The fix is a one-time CLI command:
+>
+> ```bash
+> aws amplify update-app --app-id dq9ezrf6xwgei --platform WEB_COMPUTE
+> ```
+>
+> After that, Amplify auto-detects Astro's `dist/server/entry.mjs` and deploys it as a Lambda, while `dist/client/` is served from S3+CloudFront.
 
 ## Database types — KEEP IN SYNC
 
@@ -72,16 +79,18 @@ If types drift, runtime fails with "column not found" or insert errors get silen
 
 ## Deployment
 
-**Vercel** (Hobby/free tier). Connect this repo, Vercel auto-detects Astro and configures serverless functions for SSR routes.
+**AWS Amplify Hosting**, app ID `dq9ezrf6xwgei`, region `us-east-1`. Connected to this GitHub repo, deploys on push to `main`.
 
-Required env vars in Vercel Project Settings → Environment Variables:
+Required env vars in Amplify Console → App Settings → Environment Variables (or via CLI `aws amplify update-app --environment-variables ...`):
 | Key | Value |
 |---|---|
 | `PUBLIC_SUPABASE_URL` | `https://ebseegzxfrvblpwhpmhr.supabase.co` |
 | `PUBLIC_SUPABASE_ANON_KEY` | the anon JWT |
 | `PUBLIC_CMS_URL` | `https://cms.casadeasterionediciones.com` |
 
-Custom domain: `cms.casadeasterionediciones.com`. Vercel will guide adding a CNAME to Route 53 (DNS lives in AWS for the apex domain).
+Build spec lives in `amplify.yml` at repo root. The artifacts directory is `dist/` — Amplify (under WEB_COMPUTE) inspects the Astro output structure and routes static assets to S3 while wrapping `dist/server/entry.mjs` in a Lambda.
+
+Custom domain: `cms.casadeasterionediciones.com`. Configured in Amplify Console → Custom domains; Amplify auto-creates Route 53 records since DNS is in the same AWS account.
 
 ## Supabase auth — Redirect URLs allowlist
 
