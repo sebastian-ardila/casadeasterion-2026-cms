@@ -11,6 +11,7 @@ applications:
         build:
           commands:
             - pnpm build
+            - sed -i 's/nodejs20\.x/nodejs22.x/g' .amplify-hosting/deploy-manifest.json
             - mv node_modules ./.amplify-hosting/compute/default
       artifacts:
         baseDirectory: .amplify-hosting
