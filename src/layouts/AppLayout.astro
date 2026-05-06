@@ -3,6 +3,7 @@ import "~/styles/global.css";
 import Sidebar from "~/components/Sidebar.astro";
 import ListPanel from "~/components/ListPanel.astro";
 import BuildStatusBanner from "~/components/BuildStatusBanner.astro";
+import FormGuards from "~/components/FormGuards.astro";
 import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
 
 const user = Astro.locals.user;
@@ -39,5 +40,6 @@ const showListPanel = !!resource && !!permissions && permissions[resource] !== "
       <slot />
     </main>
     <BuildStatusBanner />
+    <FormGuards />
   </body>
 </html>

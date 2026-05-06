@@ -4,6 +4,7 @@ import Field from "~/components/Field.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, slugify } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
 
 const guard = await requirePermission(Astro, "categories", "view");
 if (guard instanceof Response) return guard;
@@ -46,7 +47,7 @@ if (Astro.request.method === "POST") {
     }
     return Astro.redirect("/categories?published=1");
   } catch (err) {
-    formError = err instanceof Error ? err.message : "Error.";
+    formError = friendlyError(err);
   }
 }
 

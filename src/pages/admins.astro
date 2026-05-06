@@ -3,6 +3,7 @@ import AppLayout from "~/layouts/AppLayout.astro";
 import { requireOwner, RESOURCES, RESOURCE_LABEL, type Resource, type Level } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
 
 const guard = await requireOwner(Astro);
 if (guard instanceof Response) return guard;
@@ -50,7 +51,7 @@ if (Astro.request.method === "POST") {
       throw new Error("acción desconocida");
     }
   } catch (err) {
-    formError = err instanceof Error ? err.message : "Error.";
+    formError = friendlyError(err);
   }
 }
 

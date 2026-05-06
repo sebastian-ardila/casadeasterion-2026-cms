@@ -7,6 +7,8 @@ import GalleryUpload from "~/components/GalleryUpload.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray, slugify } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+import { normalizeISBN, isValidISBN } from "~/lib/isbn";
 
 const guard = await requirePermission(Astro, "books", "edit");
 if (guard instanceof Response) return guard;
@@ -21,6 +23,11 @@ if (Astro.request.method === "POST") {
     const slug = str(fd, "slug") ?? slugify(title);
     const status = str(fd, "status") ?? "draft";
     const published_at = status === "published" ? new Date().toISOString() : null;
+    const rawIsbn = str(fd, "isbn");
+    if (!isValidISBN(rawIsbn)) {
+      throw new Error("ISBN inválido. Debe tener 10 o 13 dígitos (con o sin guiones).");
+    }
+    const isbn = normalizeISBN(rawIsbn);
 
     const { data, error } = await supabase
       .from("books")
@@ -32,7 +39,7 @@ if (Astro.request.method === "POST") {
         cover_image_url: str(fd, "cover_image_url"),
         author_id: str(fd, "author_id"),
         category_id: str(fd, "category_id"),
-        isbn: str(fd, "isbn"),
+        isbn,
         pages: num(fd, "pages"),
         format: str(fd, "format"),
         price_amount: num(fd, "price_amount"),
@@ -51,7 +58,7 @@ if (Astro.request.method === "POST") {
     const willPublish = status === "published";
     return Astro.redirect(`/books/${data.id}${willPublish ? "?published=1" : ""}`);
   } catch (err) {
-    formError = err instanceof Error ? err.message : "Error desconocido.";
+    formError = friendlyError(err);
   }
 }
 
@@ -97,7 +104,7 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
     <MarkdownEditor name="description_md" label="Descripción" />
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <Field label="ISBN" name="isbn" />
+      <Field label="ISBN" name="isbn" hint="10 o 13 dígitos. Acepta guiones." />
       <Field label="Páginas" name="pages" type="number" />
       <label class="block">
         <span class="label">Formato</span>

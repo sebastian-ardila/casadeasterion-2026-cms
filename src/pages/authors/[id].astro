@@ -6,6 +6,7 @@ import ImageUpload from "~/components/ImageUpload.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
 
 const guard = await requirePermission(Astro, "authors", "edit");
 if (guard instanceof Response) return guard;
@@ -42,7 +43,7 @@ if (Astro.request.method === "POST") {
     if (error) throw error;
     return Astro.redirect(`/authors/${id}?published=1`);
   } catch (err) {
-    formError = err instanceof Error ? err.message : "Error.";
+    formError = friendlyError(err);
   }
 }
 

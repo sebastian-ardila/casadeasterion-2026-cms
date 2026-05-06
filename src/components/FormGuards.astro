@@ -1,0 +1,48 @@
+---
+// Inline script that disables submit buttons on every form on the page after
+// the first submit, preventing double-clicks from creating duplicate rows.
+// The button text is replaced with a spinner-style "Guardando…" so the user
+// gets feedback that the click was registered.
+//
+// Honors:
+//  - confirm() handlers in onsubmit: if the user cancels, the submit event
+//    never fires, so nothing is disabled.
+//  - novalidate / formnovalidate: still disables (they're submitting too).
+//  - back-button restore: the bfcache will restore the button as enabled.
+---
+<script is:inline>
+  (() => {
+    const restore = (form) => {
+      form.querySelectorAll('button:not([type="button"])').forEach((btn) => {
+        btn.disabled = false;
+        if (btn.dataset.originalLabel) {
+          btn.innerHTML = btn.dataset.originalLabel;
+          delete btn.dataset.originalLabel;
+        }
+      });
+    };
+
+    document.addEventListener('submit', (e) => {
+      const form = e.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      // Defer so the form actually submits before disabling.
+      requestAnimationFrame(() => {
+        const submitter = e.submitter;
+        form.querySelectorAll('button:not([type="button"])').forEach((btn) => {
+          btn.disabled = true;
+          if (!btn.dataset.originalLabel) btn.dataset.originalLabel = btn.innerHTML;
+          if (btn === submitter) {
+            btn.innerHTML = 'Guardando…';
+          }
+        });
+      });
+    });
+
+    // If the user navigates back/forward, re-enable everything.
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) {
+        document.querySelectorAll('form').forEach(restore);
+      }
+    });
+  })();
+</script>
