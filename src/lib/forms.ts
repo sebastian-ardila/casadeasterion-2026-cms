@@ -33,6 +33,16 @@ export function bool(fd: FormData, key: string): boolean {
   return fd.get(key) === "on" || fd.get(key) === "true";
 }
 
+export function jsonStringArray(fd: FormData, key: string): string[] {
+  const v = str(fd, key);
+  if (v === null) return [];
+  try {
+    const parsed = JSON.parse(v);
+    if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === "string");
+  } catch {}
+  return [];
+}
+
 export function slugify(s: string): string {
   return s
     .toLowerCase()

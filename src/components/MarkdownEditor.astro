@@ -5,42 +5,257 @@ interface Props {
   label?: string;
   rows?: number;
   required?: boolean;
+  bucket?: "covers" | "content" | "authors";
 }
-const { name, value, label = "Contenido", rows = 18, required } = Astro.props;
+const {
+  name,
+  value,
+  label = "Contenido",
+  rows = 18,
+  required,
+  bucket = "content",
+} = Astro.props;
 const id = `md-${name}-${Math.random().toString(36).slice(2, 8)}`;
 ---
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-  <label class="block">
-    <span class="label">{label}{required && " *"} (Markdown)</span>
-    <textarea
-      id={id}
-      name={name}
-      class="input min-h-[400px]"
-      rows={rows}
-      required={required}
-      data-md-editor={id}
-      set:html={value ?? ""}
-    />
-  </label>
-  <div>
-    <span class="label">Vista previa</span>
-    <div
-      id={`${id}-preview`}
-      class="input min-h-[400px] bg-stone-50 prose prose-stone max-w-none [&_p]:mb-3 [&_h1]:font-serif [&_h2]:font-serif overflow-auto"
-    ></div>
+<div class="md-editor" data-md-editor={id} data-bucket={bucket}>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div>
+      <div class="flex items-center justify-between mb-1">
+        <span class="label">{label}{required && " *"} (Markdown)</span>
+        <span id={`${id}-status`} class="text-[11px] text-stone-500 min-h-[14px]"></span>
+      </div>
+
+      <div
+        id={`${id}-toolbar`}
+        class="flex flex-wrap items-center gap-1 border border-stone-300 border-b-0 bg-stone-50 px-1 py-1 text-stone-700"
+        role="toolbar"
+        aria-label="Formato"
+      >
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="h1" title="Título 1">H1</button>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="h2" title="Título 2">H2</button>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="h3" title="Título 3">H3</button>
+        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
+        <button type="button" class="px-2.5 py-1 text-xs font-bold hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="bold" title="Negrita (Cmd/Ctrl+B)">B</button>
+        <button type="button" class="px-2.5 py-1 text-xs italic hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="italic" title="Cursiva (Cmd/Ctrl+I)">I</button>
+        <button type="button" class="px-2.5 py-1 text-xs line-through hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="strike" title="Tachado">S</button>
+        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="ul" title="Lista">•</button>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="ol" title="Lista numerada">1.</button>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="quote" title="Cita">❝</button>
+        <button type="button" class="px-2.5 py-1 text-xs font-mono hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="code" title="Código">{"</>"}</button>
+        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="link" title="Enlace (Cmd/Ctrl+K)">🔗</button>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="image" title="Insertar imagen">🖼️</button>
+        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
+        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="hr" title="Separador">—</button>
+      </div>
+
+      <input
+        type="file"
+        id={`${id}-file`}
+        accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+        class="hidden"
+        multiple
+      />
+
+      <textarea
+        id={id}
+        name={name}
+        class="input min-h-[420px] font-mono text-[13px] leading-relaxed border-t-0 rounded-tl-none rounded-tr-none"
+        rows={rows}
+        required={required}
+        data-md-textarea={id}
+        spellcheck="true"
+        set:html={value ?? ""}
+      />
+    </div>
+    <div>
+      <span class="label">Vista previa</span>
+      <div
+        id={`${id}-preview`}
+        class="input min-h-[460px] bg-stone-50 prose prose-stone max-w-none [&_p]:mb-3 [&_h1]:font-serif [&_h2]:font-serif [&_img]:max-w-full overflow-auto"
+      ></div>
+    </div>
   </div>
 </div>
 
-<script type="module" define:vars={{ id }}>
+<script type="module" define:vars={{ id, bucket }}>
   import { marked } from "https://esm.sh/marked@15.0.7";
+
   const ta = document.getElementById(id);
   const preview = document.getElementById(`${id}-preview`);
-  if (ta && preview) {
+  const toolbar = document.getElementById(`${id}-toolbar`);
+  const fileInput = document.getElementById(`${id}-file`);
+  const status = document.getElementById(`${id}-status`);
+
+  if (!ta || !preview || !toolbar) {
+    console.warn("MarkdownEditor: missing elements");
+  } else {
     const render = () => {
       preview.innerHTML = marked.parse(ta.value || "", { async: false });
     };
     render();
     ta.addEventListener("input", render);
+
+    const setStatus = (msg, color = "#57534e") => {
+      status.textContent = msg;
+      status.style.color = color;
+    };
+
+    // ---- Insertion helpers ----
+    const wrapSelection = (prefix, suffix = prefix, placeholder = "") => {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const sel = ta.value.slice(start, end) || placeholder;
+      const before = ta.value.slice(0, start);
+      const after = ta.value.slice(end);
+      ta.value = before + prefix + sel + suffix + after;
+      const cursorStart = before.length + prefix.length;
+      ta.selectionStart = cursorStart;
+      ta.selectionEnd = cursorStart + sel.length;
+      ta.focus();
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    const prefixLines = (prefix) => {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const value = ta.value;
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      let lineEnd = value.indexOf("\n", end);
+      if (lineEnd === -1) lineEnd = value.length;
+      const block = value.slice(lineStart, lineEnd);
+      const newBlock = block
+        .split("\n")
+        .map((l, i) => (typeof prefix === "function" ? prefix(i) : prefix) + l)
+        .join("\n");
+      ta.value = value.slice(0, lineStart) + newBlock + value.slice(lineEnd);
+      ta.selectionStart = lineStart;
+      ta.selectionEnd = lineStart + newBlock.length;
+      ta.focus();
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    const insertAtCursor = (text) => {
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
+      const pos = start + text.length;
+      ta.selectionStart = pos;
+      ta.selectionEnd = pos;
+      ta.focus();
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    const actions = {
+      bold: () => wrapSelection("**", "**", "texto"),
+      italic: () => wrapSelection("_", "_", "texto"),
+      strike: () => wrapSelection("~~", "~~", "texto"),
+      h1: () => prefixLines("# "),
+      h2: () => prefixLines("## "),
+      h3: () => prefixLines("### "),
+      ul: () => prefixLines("- "),
+      ol: () => prefixLines((i) => `${i + 1}. `),
+      quote: () => prefixLines("> "),
+      code: () => {
+        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+        if (sel.includes("\n")) wrapSelection("```\n", "\n```", "código");
+        else wrapSelection("`", "`", "código");
+      },
+      link: () => {
+        const url = window.prompt("URL del enlace:");
+        if (!url) return;
+        const start = ta.selectionStart, end = ta.selectionEnd;
+        const sel = ta.value.slice(start, end) || "texto";
+        const before = ta.value.slice(0, start), after = ta.value.slice(end);
+        ta.value = before + `[${sel}](${url})` + after;
+        ta.selectionStart = before.length + 1;
+        ta.selectionEnd = before.length + 1 + sel.length;
+        ta.focus();
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      image: () => fileInput.click(),
+      hr: () => insertAtCursor("\n\n---\n\n"),
+    };
+
+    toolbar.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-md]");
+      if (!btn) return;
+      e.preventDefault();
+      const action = actions[btn.dataset.md];
+      if (action) action();
+    });
+
+    // ---- Keyboard shortcuts ----
+    ta.addEventListener("keydown", (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const map = { b: "bold", i: "italic", k: "link" };
+      const key = e.key.toLowerCase();
+      if (map[key]) {
+        e.preventDefault();
+        actions[map[key]]();
+      }
+    });
+
+    // ---- Image upload (file picker, drag-and-drop, paste) ----
+    const uploadAndInsert = async (file) => {
+      if (!file.type.startsWith("image/")) return;
+      if (file.size > 10 * 1024 * 1024) {
+        setStatus(`${file.name}: muy grande (>10 MB)`, "#b91c1c");
+        return;
+      }
+      setStatus("Subiendo imagen...");
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("bucket", bucket);
+      try {
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "upload_failed");
+        const alt = file.name.replace(/\.[^.]+$/, "");
+        insertAtCursor(`![${alt}](${json.url})\n\n`);
+        setStatus("Imagen insertada.", "#166534");
+      } catch (err) {
+        setStatus(err.message ?? "Error al subir.", "#b91c1c");
+      }
+    };
+
+    fileInput.addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files ?? []);
+      for (const f of files) await uploadAndInsert(f);
+      e.target.value = "";
+    });
+
+    ta.addEventListener("paste", (e) => {
+      const items = Array.from(e.clipboardData?.items ?? []);
+      const imgs = items.filter((it) => it.type.startsWith("image/"));
+      if (!imgs.length) return;
+      e.preventDefault();
+      imgs.forEach((it) => {
+        const file = it.getAsFile();
+        if (file) uploadAndInsert(file);
+      });
+    });
+
+    ["dragenter", "dragover"].forEach((ev) => {
+      ta.addEventListener(ev, (e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          e.preventDefault();
+          ta.classList.add("ring-2", "ring-stone-700");
+        }
+      });
+    });
+    ["dragleave", "drop"].forEach((ev) => {
+      ta.addEventListener(ev, () => {
+        ta.classList.remove("ring-2", "ring-stone-700");
+      });
+    });
+    ta.addEventListener("drop", async (e) => {
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      if (!files.length) return;
+      e.preventDefault();
+      for (const f of files) await uploadAndInsert(f);
+    });
   }
 </script>

@@ -3,9 +3,10 @@ import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
+import GalleryUpload from "~/components/GalleryUpload.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
-import { num, str, strReq, tags as parseTags } from "~/lib/forms";
+import { num, str, strReq, tags as parseTags, jsonStringArray } from "~/lib/forms";
 
 const guard = await requirePermission(Astro, "books", "edit");
 if (guard instanceof Response) return guard;
@@ -46,6 +47,7 @@ if (Astro.request.method === "POST") {
       publication_date: str(fd, "publication_date"),
       status: newStatus,
       tags: parseTags(fd, "tags"),
+      gallery_urls: jsonStringArray(fd, "gallery_urls"),
     };
 
     // If transitioning to published and no date set, fill it.
@@ -93,6 +95,8 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
     <Field label="Subtítulo" name="subtitle" value={book.subtitle} />
 
     <ImageUpload name="cover_image_url" value={book.cover_image_url} label="Portada" bucket="covers" />
+
+    <GalleryUpload name="gallery_urls" value={book.gallery_urls} label="Galería del libro" bucket="content" hint="Páginas interiores, contraportada, ilustraciones, etc." />
 
     <div class="grid grid-cols-2 gap-4">
       <label class="block">
