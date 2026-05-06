@@ -1,44 +1,18 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import { requirePermission } from "~/lib/auth";
-import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 const guard = await requirePermission(Astro, "authors", "view");
 if (guard instanceof Response) return guard;
 const canEdit = guard.permission === "edit";
-
-const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
-const { data: authors } = await supabase
-  .from("authors")
-  .select("id, slug, name, photo_url")
-  .order("name");
 ---
 
-<AppLayout title="Autores">
-  <div class="flex items-center justify-between mb-8">
-    <h1 class="font-serif text-3xl">Autores</h1>
-    {canEdit && <a href="/authors/new" class="btn-primary">+ Nuevo autor</a>}
+<AppLayout title="Autores" resource="authors">
+  <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
+    <p class="font-serif text-xl mb-2">Autores</p>
+    <p class="text-sm mb-6">Selecciona un autor de la lista{canEdit && " o crea uno nuevo"}.</p>
+    {canEdit && (
+      <a href="/authors/new" class="btn-primary">+ Nuevo autor</a>
+    )}
   </div>
-
-  {authors && authors.length > 0 ? (
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {authors.map((a) => (
-        <a href={`/authors/${a.id}`} class="border border-stone-200 bg-white p-5 hover:border-stone-900 transition flex items-center gap-4">
-          {a.photo_url ? (
-            <img src={a.photo_url} alt="" class="w-16 h-16 object-cover bg-stone-100" />
-          ) : (
-            <div class="w-16 h-16 bg-stone-100"></div>
-          )}
-          <div>
-            <p class="font-serif text-lg">{a.name}</p>
-            <p class="text-xs text-stone-500">/{a.slug}</p>
-          </div>
-        </a>
-      ))}
-    </div>
-  ) : (
-    <div class="border border-dashed border-stone-300 p-10 text-center text-stone-500">
-      <p>Aún no hay autores.{canEdit && (<> <a href="/authors/new" class="underline text-stone-900">Crea el primero.</a></>)}</p>
-    </div>
-  )}
 </AppLayout>

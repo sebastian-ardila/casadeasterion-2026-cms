@@ -1,0 +1,133 @@
+---
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import type { Resource, Level } from "~/lib/auth";
+
+interface Props {
+  resource: Extract<Resource, "posts" | "books" | "authors">;
+  activeId?: string | null;
+  permission: Level;
+}
+const { resource, activeId, permission } = Astro.props;
+const canEdit = permission === "edit";
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+
+type Item = {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  status?: string | null;
+  href: string;
+};
+
+let items: Item[] = [];
+let header: { title: string; newHref: string; newLabel: string };
+
+if (resource === "posts") {
+  const { data } = await supabase
+    .from("posts")
+    .select("id, title, slug, status, updated_at, author_id, authors(name)")
+    .order("updated_at", { ascending: false });
+  items = (data ?? []).map((p: any) => ({
+    id: p.id,
+    title: p.title,
+    subtitle: p.authors?.name ?? p.slug,
+    status: p.status,
+    href: `/posts/${p.id}`,
+  }));
+  header = { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" };
+} else if (resource === "books") {
+  const { data } = await supabase
+    .from("books")
+    .select("id, title, slug, status, updated_at, authors(name)")
+    .order("updated_at", { ascending: false });
+  items = (data ?? []).map((b: any) => ({
+    id: b.id,
+    title: b.title,
+    subtitle: b.authors?.name ?? b.slug,
+    status: b.status,
+    href: `/books/${b.id}`,
+  }));
+  header = { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" };
+} else {
+  const { data } = await supabase
+    .from("authors")
+    .select("id, name, slug")
+    .order("name");
+  items = (data ?? []).map((a: any) => ({
+    id: a.id,
+    title: a.name,
+    subtitle: `/${a.slug}`,
+    href: `/authors/${a.id}`,
+  }));
+  header = { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" };
+}
+
+// Treat /new as a virtual active row at the top.
+const isNew = Astro.url.pathname.endsWith("/new");
+---
+
+<aside class="w-80 shrink-0 border-r border-stone-200 bg-white min-h-screen flex flex-col">
+  <div class="px-5 py-5 border-b border-stone-200 flex items-center justify-between gap-3">
+    <h2 class="font-serif text-lg">{header.title}</h2>
+    {canEdit && (
+      <a
+        href={header.newHref}
+        class:list={[
+          "text-xs px-2.5 py-1.5 border transition",
+          isNew
+            ? "border-stone-900 bg-stone-900 text-white"
+            : "border-stone-300 hover:border-stone-900",
+        ]}
+      >
+        {header.newLabel}
+      </a>
+    )}
+  </div>
+
+  <nav class="flex-1 overflow-y-auto">
+    {items.length === 0 ? (
+      <p class="text-sm text-stone-500 px-5 py-6">
+        Aún no hay {header.title.toLowerCase()}.
+      </p>
+    ) : (
+      <ul>
+        {items.map((it) => {
+          const active = it.id === activeId;
+          return (
+            <li>
+              <a
+                href={it.href}
+                class:list={[
+                  "block px-5 py-3 border-b border-stone-100 transition",
+                  active
+                    ? "bg-stone-100 border-l-2 border-l-stone-900"
+                    : "hover:bg-stone-50",
+                ]}
+              >
+                <div class="flex items-start justify-between gap-2">
+                  <p class="font-medium text-sm text-stone-900 line-clamp-2 flex-1">
+                    {it.title}
+                  </p>
+                  {it.status && (
+                    <span class:list={[
+                      "shrink-0 text-[10px] uppercase tracking-[0.1em] px-1.5 py-0.5 mt-0.5",
+                      it.status === "published"
+                        ? "bg-green-100 text-green-900"
+                        : "bg-stone-200 text-stone-600",
+                    ]}>
+                      {it.status === "published" ? "pub" : "borr"}
+                    </span>
+                  )}
+                </div>
+                {it.subtitle && (
+                  <p class="text-xs text-stone-500 mt-0.5 truncate">{it.subtitle}</p>
+                )}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </nav>
+</aside>

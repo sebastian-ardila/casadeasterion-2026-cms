@@ -42,11 +42,7 @@ if (Astro.request.method === "POST") {
 }
 ---
 
-<AppLayout title="Nuevo autor">
-  <div class="flex items-center gap-3 mb-8">
-    <a href="/authors" class="text-stone-500 hover:text-stone-900 text-sm">← Autores</a>
-  </div>
-
+<AppLayout title="Nuevo autor" resource="authors">
   <h1 class="font-serif text-3xl mb-8">Nuevo autor</h1>
 
   {formError && (

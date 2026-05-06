@@ -1,16 +1,20 @@
 ---
 import "~/styles/global.css";
 import Sidebar from "~/components/Sidebar.astro";
+import ListPanel from "~/components/ListPanel.astro";
 import BuildStatusBanner from "~/components/BuildStatusBanner.astro";
-import { getAllPermissions, isCmsUser } from "~/lib/auth";
+import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
 
 const user = Astro.locals.user;
 const permissions = isCmsUser(user) ? await getAllPermissions(Astro, user) : null;
 
 interface Props {
   title?: string;
+  resource?: Extract<Resource, "posts" | "books" | "authors">;
+  activeId?: string | null;
 }
-const { title = "CMS" } = Astro.props;
+const { title = "CMS", resource, activeId } = Astro.props;
+const showListPanel = !!resource && !!permissions && permissions[resource] !== "none";
 ---
 
 <!doctype html>
@@ -24,6 +28,13 @@ const { title = "CMS" } = Astro.props;
   </head>
   <body class="min-h-screen flex">
     <Sidebar user={user} permissions={permissions} />
+    {showListPanel && (
+      <ListPanel
+        resource={resource!}
+        activeId={activeId}
+        permission={permissions![resource!]}
+      />
+    )}
     <main class="flex-1 min-w-0 px-10 py-10 max-w-[1100px]">
       <slot />
     </main>
