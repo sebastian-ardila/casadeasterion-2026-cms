@@ -1,6 +1,9 @@
 import type { APIRoute } from "astro";
+import sharp from "sharp";
 import { requireAdmin } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
+
+const RASTER_RE = /^image\/(jpeg|png|gif|avif|webp)$/;
 
 export const POST: APIRoute = async (ctx) => {
   const guard = await requireAdmin(ctx);
@@ -27,7 +30,6 @@ export const POST: APIRoute = async (ctx) => {
 
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);
 
-  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
   const safeBase = file.name.replace(/\.[^.]+$/, "")
     .toLowerCase()
     .normalize("NFD")
@@ -35,13 +37,35 @@ export const POST: APIRoute = async (ctx) => {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")
     .slice(0, 60) || "image";
+
+  const inputBuffer = Buffer.from(await file.arrayBuffer());
+
+  let outBuffer: Buffer = inputBuffer;
+  let outType = file.type;
+  let outExt = file.name.split(".").pop()?.toLowerCase() || "bin";
+
+  // Convert raster images to WebP (skip if already WebP).
+  if (RASTER_RE.test(file.type) && file.type !== "image/webp") {
+    try {
+      outBuffer = await sharp(inputBuffer, { animated: false })
+        .rotate() // honor EXIF orientation
+        .webp({ quality: 82, effort: 4 })
+        .toBuffer();
+      outType = "image/webp";
+      outExt = "webp";
+    } catch (err) {
+      // If conversion fails, fall back to original (unlikely for valid raster types).
+      console.error("[upload] webp conversion failed, uploading original:", err);
+    }
+  }
+
   const year = new Date().getFullYear();
-  const path = `${year}/${safeBase}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const path = `${year}/${safeBase}-${crypto.randomUUID().slice(0, 8)}.${outExt}`;
 
   const { error } = await supabase.storage
     .from(bucket)
-    .upload(path, file, {
-      contentType: file.type,
+    .upload(path, outBuffer, {
+      contentType: outType,
       cacheControl: "31536000",
       upsert: false,
     });
@@ -54,7 +78,13 @@ export const POST: APIRoute = async (ctx) => {
   }
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return new Response(JSON.stringify({ url: data.publicUrl, path }), {
+  return new Response(JSON.stringify({
+    url: data.publicUrl,
+    path,
+    contentType: outType,
+    size: outBuffer.length,
+    originalSize: inputBuffer.length,
+  }), {
     headers: { "content-type": "application/json" },
   });
 };

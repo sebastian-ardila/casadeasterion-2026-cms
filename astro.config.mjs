@@ -15,5 +15,10 @@ export default defineConfig({
   security: { checkOrigin: false },
   vite: {
     plugins: [tailwindcss()],
+    ssr: {
+      // sharp ships native binaries; let Node resolve it at runtime instead of
+      // bundling it through Vite (which breaks the .node binary loading).
+      external: ["sharp"],
+    },
   },
 });
