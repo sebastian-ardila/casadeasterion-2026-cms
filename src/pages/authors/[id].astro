@@ -15,7 +15,7 @@ if (!id) return Astro.redirect("/authors");
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 
 let formError: string | null = null;
-let savedAt: string | null = null;
+const justSaved = Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   try {
@@ -23,7 +23,7 @@ if (Astro.request.method === "POST") {
     if (str(fd, "_action") === "delete") {
       const { error } = await supabase.from("authors").delete().eq("id", id);
       if (error) throw error;
-      return Astro.redirect("/authors");
+      return Astro.redirect("/authors?published=1");
     }
     const { error } = await supabase
       .from("authors")
@@ -40,7 +40,7 @@ if (Astro.request.method === "POST") {
       })
       .eq("id", id);
     if (error) throw error;
-    savedAt = new Date().toISOString();
+    return Astro.redirect(`/authors/${id}?published=1`);
   } catch (err) {
     formError = err instanceof Error ? err.message : "Error.";
   }
@@ -62,7 +62,7 @@ const links = (author.links as Record<string, string>) ?? {};
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
-  {savedAt && (
+  {justSaved && (
     <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado.</p>
   )}
 

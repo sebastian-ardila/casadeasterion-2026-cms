@@ -1,0 +1,172 @@
+---
+// Floating banner that appears after a successful publish-affecting save and
+// polls /api/build-status until the public-site Amplify job finishes.
+// Triggered by sessionStorage["cda_publish_at"] = Date.now() set on page load
+// when the URL has ?published=1.
+---
+
+<div
+  id="cda-build-banner"
+  class="hidden fixed bottom-6 right-6 z-50 w-[360px] max-w-[calc(100vw-3rem)] bg-white border border-stone-300 shadow-2xl"
+  role="status"
+  aria-live="polite"
+>
+  <div class="flex items-start gap-3 p-4">
+    <div id="cda-build-icon" class="shrink-0 w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-700">
+      <svg id="cda-build-spinner" class="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle>
+        <path d="M21 12a9 9 0 0 1-9 9" stroke-linecap="round"></path>
+      </svg>
+      <svg id="cda-build-check" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <svg id="cda-build-cross" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <p id="cda-build-title" class="font-medium text-stone-900 text-sm">Publicando…</p>
+      <p id="cda-build-subtitle" class="text-xs text-stone-600 mt-0.5">Disparando rebuild del sitio público.</p>
+      <a
+        id="cda-build-link"
+        href="https://casadeasterionediciones.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="hidden text-xs text-stone-700 underline mt-2 inline-block"
+      >Ver sitio público →</a>
+    </div>
+    <button
+      type="button"
+      id="cda-build-close"
+      aria-label="Cerrar"
+      class="shrink-0 text-stone-400 hover:text-stone-700 text-xl leading-none px-1"
+    >×</button>
+  </div>
+  <div class="h-1 bg-stone-100 overflow-hidden">
+    <div id="cda-build-progress" class="h-full bg-stone-700 transition-all duration-700" style="width: 8%"></div>
+  </div>
+</div>
+
+<script is:inline>
+  (() => {
+    const PUBLISH_KEY = "cda_publish_at";
+    const POLL_INTERVAL = 5000; // ms
+    const MAX_RUNTIME = 10 * 60 * 1000; // 10 min hard cap
+
+    // 1. If URL has ?published=1, store the timestamp and clean URL.
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("published") === "1") {
+      sessionStorage.setItem(PUBLISH_KEY, String(Date.now()));
+      url.searchParams.delete("published");
+      window.history.replaceState({}, "", url.toString());
+    }
+
+    const since = Number(sessionStorage.getItem(PUBLISH_KEY) ?? "0");
+    if (!since || Date.now() - since > MAX_RUNTIME) {
+      sessionStorage.removeItem(PUBLISH_KEY);
+      return;
+    }
+
+    const banner = document.getElementById("cda-build-banner");
+    const title = document.getElementById("cda-build-title");
+    const subtitle = document.getElementById("cda-build-subtitle");
+    const progress = document.getElementById("cda-build-progress");
+    const link = document.getElementById("cda-build-link");
+    const close = document.getElementById("cda-build-close");
+    const spinner = document.getElementById("cda-build-spinner");
+    const check = document.getElementById("cda-build-check");
+    const cross = document.getElementById("cda-build-cross");
+    const icon = document.getElementById("cda-build-icon");
+
+    if (!banner) return;
+    banner.classList.remove("hidden");
+
+    let timer = null;
+    let stopped = false;
+
+    const stop = () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+
+    close.addEventListener("click", () => {
+      banner.classList.add("hidden");
+      sessionStorage.removeItem(PUBLISH_KEY);
+      stop();
+    });
+
+    const setSucceed = (endTime) => {
+      const elapsed = endTime ? Math.round((new Date(endTime).getTime() - since) / 1000) : null;
+      title.textContent = "Sitio publicado";
+      subtitle.textContent = elapsed ? `Listo en ${elapsed}s.` : "Listo.";
+      progress.style.width = "100%";
+      progress.classList.remove("bg-stone-700");
+      progress.classList.add("bg-green-600");
+      icon.classList.remove("bg-stone-100", "text-stone-700");
+      icon.classList.add("bg-green-100", "text-green-700");
+      spinner.classList.add("hidden");
+      check.classList.remove("hidden");
+      link.classList.remove("hidden");
+      sessionStorage.removeItem(PUBLISH_KEY);
+      stop();
+      // Auto-dismiss after 12s
+      setTimeout(() => banner.classList.add("hidden"), 12000);
+    };
+
+    const setFailed = () => {
+      title.textContent = "Falló el deploy del sitio";
+      subtitle.textContent = "Revisa el build log en Amplify.";
+      progress.style.width = "100%";
+      progress.classList.remove("bg-stone-700");
+      progress.classList.add("bg-red-600");
+      icon.classList.remove("bg-stone-100", "text-stone-700");
+      icon.classList.add("bg-red-100", "text-red-700");
+      spinner.classList.add("hidden");
+      cross.classList.remove("hidden");
+      sessionStorage.removeItem(PUBLISH_KEY);
+      stop();
+    };
+
+    const setRunning = () => {
+      title.textContent = "Construyendo sitio público…";
+      subtitle.textContent = "Generando HTML estático en Amplify.";
+      // Ramp progress from current to ~85% over time
+      const cur = parseFloat(progress.style.width) || 8;
+      const next = Math.min(85, cur + 8);
+      progress.style.width = next + "%";
+    };
+
+    const setPending = () => {
+      title.textContent = "Esperando rebuild…";
+      subtitle.textContent = "El trigger sale en 1-2 segundos.";
+    };
+
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const res = await fetch(`/api/build-status?since=${since}`, {
+          headers: { accept: "application/json" },
+          credentials: "same-origin",
+        });
+        if (!res.ok) throw new Error("http_" + res.status);
+        const data = await res.json();
+        if (data.phase === "succeed") return setSucceed(data.endTime);
+        if (data.phase === "failed") return setFailed();
+        if (data.phase === "running") setRunning();
+        else setPending();
+      } catch {
+        // ignore transient errors, keep polling
+      }
+      if (Date.now() - since > MAX_RUNTIME) {
+        title.textContent = "Tomó más de lo esperado";
+        subtitle.textContent = "El build sigue corriendo. Revisa Amplify.";
+        stop();
+        return;
+      }
+      timer = setTimeout(poll, POLL_INTERVAL);
+    };
+
+    poll();
+  })();
+</script>

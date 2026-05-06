@@ -10,7 +10,7 @@ if (guard instanceof Response) return guard;
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
-let saved = false;
+const saved = Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   try {
@@ -39,7 +39,7 @@ if (Astro.request.method === "POST") {
       .upsert(rows, { onConflict: "key" });
     if (error) throw error;
 
-    saved = true;
+    return Astro.redirect("/site?published=1");
   } catch (err) {
     formError = err instanceof Error ? err.message : "Error.";
   }

@@ -16,7 +16,7 @@ if (!id) return Astro.redirect("/books");
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
-let savedAt: string | null = null;
+const justSaved = Astro.url.searchParams.get("saved") === "1" || Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   try {
@@ -24,9 +24,11 @@ if (Astro.request.method === "POST") {
     const action = str(fd, "_action");
 
     if (action === "delete") {
+      const { data: existingRow } = await supabase.from("books").select("status").eq("id", id).single();
+      const wasPublished = existingRow?.status === "published";
       const { error } = await supabase.from("books").delete().eq("id", id);
       if (error) throw error;
-      return Astro.redirect("/books");
+      return Astro.redirect(`/books${wasPublished ? "?published=1" : ""}`);
     }
 
     const newStatus = str(fd, "status") ?? "draft";
@@ -59,7 +61,8 @@ if (Astro.request.method === "POST") {
 
     const { error } = await supabase.from("books").update(update).eq("id", id);
     if (error) throw error;
-    savedAt = new Date().toISOString();
+    const triggersRebuild = newStatus === "published" || existing?.status === "published";
+    return Astro.redirect(`/books/${id}${triggersRebuild ? "?published=1" : "?saved=1"}`);
   } catch (err) {
     formError = err instanceof Error ? err.message : "Error desconocido.";
   }
@@ -85,7 +88,7 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
-  {savedAt && (
+  {justSaved && (
     <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado.</p>
   )}
 

@@ -48,7 +48,8 @@ if (Astro.request.method === "POST") {
       .single();
 
     if (error) throw error;
-    return Astro.redirect(`/books/${data.id}`);
+    const willPublish = status === "published";
+    return Astro.redirect(`/books/${data.id}${willPublish ? "?published=1" : ""}`);
   } catch (err) {
     formError = err instanceof Error ? err.message : "Error desconocido.";
   }

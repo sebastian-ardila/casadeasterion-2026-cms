@@ -35,7 +35,7 @@ if (Astro.request.method === "POST") {
       .select("id")
       .single();
     if (error) throw error;
-    return Astro.redirect(`/authors/${data.id}`);
+    return Astro.redirect(`/authors/${data.id}?published=1`);
   } catch (err) {
     formError = err instanceof Error ? err.message : "Error.";
   }

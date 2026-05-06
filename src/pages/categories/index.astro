@@ -11,7 +11,7 @@ const canEdit = guard.permission === "edit";
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
-let saved = false;
+const saved = Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   if (!canEdit) return Astro.redirect("/?error=no_permission&section=categories");
@@ -44,7 +44,7 @@ if (Astro.request.method === "POST") {
       });
       if (error) throw error;
     }
-    saved = true;
+    return Astro.redirect("/categories?published=1");
   } catch (err) {
     formError = err instanceof Error ? err.message : "Error.";
   }

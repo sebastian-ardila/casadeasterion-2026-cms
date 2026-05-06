@@ -1,6 +1,7 @@
 ---
 import "~/styles/global.css";
 import Sidebar from "~/components/Sidebar.astro";
+import BuildStatusBanner from "~/components/BuildStatusBanner.astro";
 import { getAllPermissions, isCmsUser } from "~/lib/auth";
 
 const user = Astro.locals.user;
@@ -26,5 +27,6 @@ const { title = "CMS" } = Astro.props;
     <main class="flex-1 min-w-0 px-10 py-10 max-w-[1100px]">
       <slot />
     </main>
+    <BuildStatusBanner />
   </body>
 </html>
