@@ -63,19 +63,38 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
       class="fixed top-0 left-0 right-0 h-0.5 bg-stone-900 origin-left z-[60] pointer-events-none scale-x-0 transition-transform duration-300"
     ></div>
 
+    <style is:global>
+      /* Faded-out state applied to <main> the moment a navigation starts.
+         Removed once astro:after-swap fires. Gives instant visual feedback
+         that the click was registered and content is loading. */
+      main.cas-nav-loading {
+        opacity: 0.35;
+        pointer-events: none;
+        transition: opacity 120ms ease-out;
+      }
+      .cas-listpanel-loading {
+        opacity: 0.5;
+        transition: opacity 120ms ease-out;
+        pointer-events: none;
+      }
+    </style>
+
     <script is:inline>
       (() => {
         if (window.__casNavInit) return;
         window.__casNavInit = true;
+
         const bar = document.getElementById("route-progress");
-        if (!bar) return;
         let timeout;
-        const start = () => {
+
+        const startBar = () => {
+          if (!bar) return;
           clearTimeout(timeout);
           bar.style.transition = "transform 0.3s ease-out";
           bar.style.transform = "scaleX(0.7)";
         };
-        const done = () => {
+        const doneBar = () => {
+          if (!bar) return;
           clearTimeout(timeout);
           bar.style.transform = "scaleX(1)";
           timeout = setTimeout(() => {
@@ -83,8 +102,95 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
             bar.style.transform = "scaleX(0)";
           }, 200);
         };
-        document.addEventListener("astro:before-preparation", start);
-        document.addEventListener("astro:page-load", done);
+
+        // -----------------------------------------------------------
+        // Optimistic UI on navigation
+        // -----------------------------------------------------------
+        const RESOURCES_WITH_PANEL = {
+          posts: { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
+          books: { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" },
+          authors: { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
+        };
+
+        const pathToResource = (path) => {
+          for (const r of Object.keys(RESOURCES_WITH_PANEL)) {
+            if (path === "/" + r || path.startsWith("/" + r + "/")) return r;
+          }
+          return null;
+        };
+
+        // Swap the existing list panel header + body to a skeleton tied to
+        // the new resource. Astro will swap the real markup in once the SSR
+        // response arrives; meanwhile the user sees an immediate change.
+        const showListPanelSkeletonFor = (resource) => {
+          const panel = document.querySelector("[data-list-panel]");
+          if (!panel) return;
+          const meta = RESOURCES_WITH_PANEL[resource];
+          if (!meta) return;
+          panel.dataset.listPanel = resource;
+          panel.dataset.activeId = "";
+
+          const titleEl = panel.querySelector("h2");
+          if (titleEl) titleEl.textContent = meta.title;
+
+          const newLink = panel.querySelector('[class*="border-stone-300"], [class*="bg-stone-900"]');
+          // Find "+ Nuevo …" link by scanning hrefs.
+          panel.querySelectorAll("a").forEach((a) => {
+            const href = a.getAttribute("href") || "";
+            if (href.endsWith("/new")) {
+              a.setAttribute("href", meta.newHref);
+              a.textContent = meta.newLabel;
+            }
+          });
+
+          // Reset list to skeleton state.
+          const skeleton = panel.querySelector("[data-list-skeleton]");
+          const items = panel.querySelector("[data-list-items]");
+          const empty = panel.querySelector("[data-list-empty]");
+          const errEl = panel.querySelector("[data-list-error]");
+          skeleton?.classList.remove("hidden");
+          items?.classList.add("hidden");
+          empty?.classList.add("hidden");
+          errEl?.classList.add("hidden");
+        };
+
+        const applyOptimistic = (toUrl) => {
+          const main = document.querySelector("main");
+          main?.classList.add("cas-nav-loading");
+
+          const dest = pathToResource(toUrl.pathname);
+          const cur = pathToResource(location.pathname);
+          const panel = document.querySelector("[data-list-panel]");
+
+          if (dest && dest !== cur) {
+            // Switching to a different resource section — show new skeleton.
+            showListPanelSkeletonFor(dest);
+          } else if (!dest && panel) {
+            // Going to a non-list section (admins/subscribers/site/home/categories).
+            // Just dim it; Astro will remove it on swap.
+            panel.classList.add("cas-listpanel-loading");
+          }
+        };
+
+        const clearOptimistic = () => {
+          document.querySelector("main")?.classList.remove("cas-nav-loading");
+          document.querySelectorAll(".cas-listpanel-loading").forEach((el) =>
+            el.classList.remove("cas-listpanel-loading")
+          );
+        };
+
+        document.addEventListener("astro:before-preparation", (e) => {
+          startBar();
+          try {
+            const dest = e.to instanceof URL ? e.to : new URL(e.to);
+            applyOptimistic(dest);
+          } catch {}
+        });
+        document.addEventListener("astro:after-swap", clearOptimistic);
+        document.addEventListener("astro:page-load", () => {
+          doneBar();
+          clearOptimistic();
+        });
       })();
     </script>
   </body>
