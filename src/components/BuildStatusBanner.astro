@@ -1,8 +1,14 @@
 ---
-// Floating banner that appears after a successful publish-affecting save and
-// polls /api/build-status until the public-site Amplify job finishes.
-// Triggered by sessionStorage["cda_publish_at"] = Date.now() set on page load
-// when the URL has ?published=1.
+// Floating banner that appears immediately after a publish-affecting save and
+// transitions through phases:
+//   saved        → just submitted, scheduling rebuild (instant)
+//   pending      → trigger queued, waiting for the cron dispatcher
+//   running      → Amplify build job in progress
+//   succeed/fail → terminal
+//
+// Driven by sessionStorage["cda_publish_at"] = Date.now() set when the URL
+// has ?published=1 (set by every CMS POST handler that mutates published
+// content). Persists across view transitions via transition:persist.
 ---
 
 <div
@@ -26,8 +32,8 @@
       </svg>
     </div>
     <div class="flex-1 min-w-0">
-      <p id="cda-build-title" class="font-medium text-stone-900 text-sm">Publicando…</p>
-      <p id="cda-build-subtitle" class="text-xs text-stone-600 mt-0.5">Disparando rebuild del sitio público.</p>
+      <p id="cda-build-title" class="font-medium text-stone-900 text-sm">Cambios guardados</p>
+      <p id="cda-build-subtitle" class="text-xs text-stone-600 mt-0.5">Programando publicación…</p>
       <a
         id="cda-build-link"
         href="https://casadeasterionediciones.com"
@@ -40,110 +46,127 @@
       type="button"
       id="cda-build-close"
       aria-label="Cerrar"
-      class="shrink-0 text-stone-400 hover:text-stone-700 text-xl leading-none px-1"
+      class="shrink-0 cursor-pointer text-stone-400 hover:text-stone-700 text-xl leading-none px-1"
     >×</button>
   </div>
   <div class="h-1 bg-stone-100 overflow-hidden">
-    <div id="cda-build-progress" class="h-full bg-stone-700 transition-all duration-700" style="width: 8%"></div>
+    <div id="cda-build-progress" class="h-full bg-stone-700 transition-all duration-700" style="width: 6%"></div>
   </div>
 </div>
 
 <script is:inline>
   (() => {
+    if (window.__casBuildBannerInit) return;
+    window.__casBuildBannerInit = true;
+
     const PUBLISH_KEY = "cda_publish_at";
-    const POLL_INTERVAL = 5000; // ms
+    const FIRST_POLL_DELAY = 1500;
+    const POLL_INTERVAL = 5000;
     const MAX_RUNTIME = 10 * 60 * 1000; // 10 min hard cap
 
-    // 1. If URL has ?published=1, store the timestamp and clean URL.
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("published") === "1") {
-      sessionStorage.setItem(PUBLISH_KEY, String(Date.now()));
-      url.searchParams.delete("published");
-      window.history.replaceState({}, "", url.toString());
-    }
-
-    const since = Number(sessionStorage.getItem(PUBLISH_KEY) ?? "0");
-    if (!since || Date.now() - since > MAX_RUNTIME) {
-      sessionStorage.removeItem(PUBLISH_KEY);
-      return;
-    }
-
-    const banner = document.getElementById("cda-build-banner");
-    const title = document.getElementById("cda-build-title");
-    const subtitle = document.getElementById("cda-build-subtitle");
-    const progress = document.getElementById("cda-build-progress");
-    const link = document.getElementById("cda-build-link");
-    const close = document.getElementById("cda-build-close");
-    const spinner = document.getElementById("cda-build-spinner");
-    const check = document.getElementById("cda-build-check");
-    const cross = document.getElementById("cda-build-cross");
-    const icon = document.getElementById("cda-build-icon");
-
-    if (!banner) return;
-    banner.classList.remove("hidden");
-
     let timer = null;
-    let stopped = false;
+    let pollingForSince = 0;
+    let lastPhase = null;
 
     const stop = () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
+      pollingForSince = 0;
+      lastPhase = null;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
     };
 
-    close.addEventListener("click", () => {
-      banner.classList.add("hidden");
-      sessionStorage.removeItem(PUBLISH_KEY);
-      stop();
+    const els = () => ({
+      banner: document.getElementById("cda-build-banner"),
+      title: document.getElementById("cda-build-title"),
+      subtitle: document.getElementById("cda-build-subtitle"),
+      progress: document.getElementById("cda-build-progress"),
+      link: document.getElementById("cda-build-link"),
+      close: document.getElementById("cda-build-close"),
+      spinner: document.getElementById("cda-build-spinner"),
+      check: document.getElementById("cda-build-check"),
+      cross: document.getElementById("cda-build-cross"),
+      icon: document.getElementById("cda-build-icon"),
     });
 
-    const setSucceed = (endTime) => {
-      const elapsed = endTime ? Math.round((new Date(endTime).getTime() - since) / 1000) : null;
-      title.textContent = "Sitio publicado";
-      subtitle.textContent = elapsed ? `Listo en ${elapsed}s.` : "Listo.";
-      progress.style.width = "100%";
-      progress.classList.remove("bg-stone-700");
-      progress.classList.add("bg-green-600");
-      icon.classList.remove("bg-stone-100", "text-stone-700");
-      icon.classList.add("bg-green-100", "text-green-700");
-      spinner.classList.add("hidden");
-      check.classList.remove("hidden");
-      link.classList.remove("hidden");
+    const setPhase = (phase, extra) => {
+      const e = els();
+      if (!e.banner) return;
+      lastPhase = phase;
+      e.banner.classList.remove("hidden");
+
+      // Reset terminal-state styles each call.
+      e.progress.classList.remove("bg-green-600", "bg-red-600");
+      e.progress.classList.add("bg-stone-700");
+      e.icon.classList.remove("bg-green-100", "text-green-700", "bg-red-100", "text-red-700");
+      e.icon.classList.add("bg-stone-100", "text-stone-700");
+      e.spinner.classList.remove("hidden");
+      e.check.classList.add("hidden");
+      e.cross.classList.add("hidden");
+      e.link.classList.add("hidden");
+
+      if (phase === "saved") {
+        e.title.textContent = "Cambios guardados";
+        e.subtitle.textContent = "Programando publicación…";
+        e.progress.style.width = "8%";
+      } else if (phase === "pending") {
+        e.title.textContent = "Esperando rebuild";
+        e.subtitle.textContent = "Disparando el build en Amplify.";
+        // Ramp from 8% to ~28% over the wait.
+        const cur = parseFloat(e.progress.style.width) || 8;
+        e.progress.style.width = Math.max(cur, Math.min(28, cur + 4)) + "%";
+      } else if (phase === "running") {
+        e.title.textContent = "Construyendo sitio público…";
+        e.subtitle.textContent = "Generando HTML estático en Amplify.";
+        const cur = parseFloat(e.progress.style.width) || 30;
+        e.progress.style.width = Math.min(85, Math.max(cur, 32) + 5) + "%";
+      } else if (phase === "succeed") {
+        e.title.textContent = "Sitio publicado";
+        const elapsed = extra && extra.endTime
+          ? Math.round((new Date(extra.endTime).getTime() - (extra.since || Date.now())) / 1000)
+          : null;
+        e.subtitle.textContent = elapsed ? `Listo en ${elapsed}s.` : "Listo.";
+        e.progress.style.width = "100%";
+        e.progress.classList.remove("bg-stone-700");
+        e.progress.classList.add("bg-green-600");
+        e.icon.classList.remove("bg-stone-100", "text-stone-700");
+        e.icon.classList.add("bg-green-100", "text-green-700");
+        e.spinner.classList.add("hidden");
+        e.check.classList.remove("hidden");
+        e.link.classList.remove("hidden");
+      } else if (phase === "failed") {
+        e.title.textContent = "Falló el deploy del sitio";
+        e.subtitle.textContent = "Revisa el build log en Amplify.";
+        e.progress.style.width = "100%";
+        e.progress.classList.remove("bg-stone-700");
+        e.progress.classList.add("bg-red-600");
+        e.icon.classList.remove("bg-stone-100", "text-stone-700");
+        e.icon.classList.add("bg-red-100", "text-red-700");
+        e.spinner.classList.add("hidden");
+        e.cross.classList.remove("hidden");
+      } else if (phase === "timeout") {
+        e.title.textContent = "Tomó más de lo esperado";
+        e.subtitle.textContent = "El build sigue corriendo. Revisa Amplify.";
+      }
+    };
+
+    const dismiss = () => {
+      const e = els();
+      if (e.banner) e.banner.classList.add("hidden");
       sessionStorage.removeItem(PUBLISH_KEY);
       stop();
-      // Auto-dismiss after 12s
-      setTimeout(() => banner.classList.add("hidden"), 12000);
     };
 
-    const setFailed = () => {
-      title.textContent = "Falló el deploy del sitio";
-      subtitle.textContent = "Revisa el build log en Amplify.";
-      progress.style.width = "100%";
-      progress.classList.remove("bg-stone-700");
-      progress.classList.add("bg-red-600");
-      icon.classList.remove("bg-stone-100", "text-stone-700");
-      icon.classList.add("bg-red-100", "text-red-700");
-      spinner.classList.add("hidden");
-      cross.classList.remove("hidden");
-      sessionStorage.removeItem(PUBLISH_KEY);
-      stop();
+    const wireClose = () => {
+      const e = els();
+      if (!e.close || e.close.dataset.casWired) return;
+      e.close.dataset.casWired = "1";
+      e.close.addEventListener("click", dismiss);
     };
 
-    const setRunning = () => {
-      title.textContent = "Construyendo sitio público…";
-      subtitle.textContent = "Generando HTML estático en Amplify.";
-      // Ramp progress from current to ~85% over time
-      const cur = parseFloat(progress.style.width) || 8;
-      const next = Math.min(85, cur + 8);
-      progress.style.width = next + "%";
-    };
-
-    const setPending = () => {
-      title.textContent = "Esperando rebuild…";
-      subtitle.textContent = "El trigger sale en 1-2 segundos.";
-    };
-
-    const poll = async () => {
-      if (stopped) return;
+    const poll = async (since) => {
+      if (pollingForSince !== since) return; // a newer publish superseded this
       try {
         const res = await fetch(`/api/build-status?since=${since}`, {
           headers: { accept: "application/json" },
@@ -151,22 +174,80 @@
         });
         if (!res.ok) throw new Error("http_" + res.status);
         const data = await res.json();
-        if (data.phase === "succeed") return setSucceed(data.endTime);
-        if (data.phase === "failed") return setFailed();
-        if (data.phase === "running") setRunning();
-        else setPending();
+        if (data.phase === "succeed") {
+          setPhase("succeed", { endTime: data.endTime, since });
+          sessionStorage.removeItem(PUBLISH_KEY);
+          // Auto-dismiss after 12s.
+          setTimeout(() => {
+            const e = els();
+            if (e.banner) e.banner.classList.add("hidden");
+          }, 12000);
+          stop();
+          return;
+        }
+        if (data.phase === "failed") {
+          setPhase("failed");
+          sessionStorage.removeItem(PUBLISH_KEY);
+          stop();
+          return;
+        }
+        if (data.phase === "running") setPhase("running");
+        else if (lastPhase !== "pending" && lastPhase !== "running") setPhase("pending");
+        else if (lastPhase === "pending") setPhase("pending"); // bump progress
       } catch {
         // ignore transient errors, keep polling
       }
       if (Date.now() - since > MAX_RUNTIME) {
-        title.textContent = "Tomó más de lo esperado";
-        subtitle.textContent = "El build sigue corriendo. Revisa Amplify.";
+        setPhase("timeout");
+        sessionStorage.removeItem(PUBLISH_KEY);
         stop();
         return;
       }
-      timer = setTimeout(poll, POLL_INTERVAL);
+      timer = setTimeout(() => poll(since), POLL_INTERVAL);
     };
 
-    poll();
+    const evaluate = () => {
+      // 1. Did this page load result from a publish-affecting POST?
+      //    Capture the timestamp and clean the URL.
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("published") === "1") {
+        sessionStorage.setItem(PUBLISH_KEY, String(Date.now()));
+        url.searchParams.delete("published");
+        window.history.replaceState({}, "", url.toString());
+      }
+
+      const since = Number(sessionStorage.getItem(PUBLISH_KEY) ?? "0");
+      if (!since || Date.now() - since > MAX_RUNTIME) {
+        sessionStorage.removeItem(PUBLISH_KEY);
+        return;
+      }
+
+      wireClose();
+
+      // 2. If we're not already polling for this publish, start now.
+      if (pollingForSince !== since) {
+        if (timer) clearTimeout(timer);
+        pollingForSince = since;
+
+        // Show "saved → scheduling" instantly, then transition to pending after
+        // the first poll. The first poll is fast (1.5s) so we detect the job
+        // as soon as the cron dispatcher fires.
+        setPhase("saved");
+        timer = setTimeout(() => poll(since), FIRST_POLL_DELAY);
+      } else {
+        // Same publish in progress; just make sure the banner is visible.
+        const e = els();
+        if (e.banner) e.banner.classList.remove("hidden");
+      }
+    };
+
+    // Run on first paint AND on every navigation (form submits via Astro's
+    // ClientRouter trigger astro:page-load instead of a full reload).
+    document.addEventListener("astro:page-load", evaluate);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", evaluate);
+    } else {
+      evaluate();
+    }
   })();
 </script>
