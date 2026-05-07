@@ -13,46 +13,236 @@
 
 <div
   id="cda-build-banner"
-  class="hidden fixed bottom-6 right-6 z-50 w-[360px] max-w-[calc(100vw-3rem)] bg-white border border-stone-300 shadow-2xl"
+  data-phase="saved"
+  class="cas-banner hidden"
   role="status"
   aria-live="polite"
 >
+  <div class="cas-banner-glow" aria-hidden="true"></div>
   <div class="flex items-start gap-3 p-4">
-    <div id="cda-build-icon" class="shrink-0 w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-700">
-      <svg id="cda-build-spinner" class="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="9" stroke-opacity="0.25"></circle>
+    <div id="cda-build-icon" class="cas-banner-icon shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-300">
+      {/* Per-phase icons. Visibility toggled by JS via data-phase. */}
+      <svg data-icon="saved" class="cas-icon w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/>
+        <polyline points="7 3 7 8 15 8"/>
+      </svg>
+      <svg data-icon="pending" class="cas-icon cas-icon-spin w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke-opacity="0.2"></circle>
+        <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round"></path>
+      </svg>
+      <svg data-icon="running" class="cas-icon cas-icon-spin w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke-opacity="0.2"></circle>
         <path d="M21 12a9 9 0 0 1-9 9" stroke-linecap="round"></path>
       </svg>
-      <svg id="cda-build-check" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg data-icon="succeed" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <polyline points="20 6 9 17 4 12"></polyline>
       </svg>
-      <svg id="cda-build-cross" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg data-icon="failed" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <line x1="18" y1="6" x2="6" y2="18"></line>
         <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>
+      <svg data-icon="timeout" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <polyline points="12 7 12 12 15 14"/>
+      </svg>
     </div>
     <div class="flex-1 min-w-0">
-      <p id="cda-build-title" class="font-medium text-stone-900 text-sm">Cambios guardados</p>
-      <p id="cda-build-subtitle" class="text-xs text-stone-600 mt-0.5">Programando publicación…</p>
+      <div class="flex items-center gap-2">
+        <p id="cda-build-title" class="font-medium text-sm text-stone-900">Cambios guardados</p>
+        <span class="cas-banner-pill" id="cda-build-pill">Programando</span>
+      </div>
+      <p id="cda-build-subtitle" class="text-xs text-stone-600 mt-1 leading-relaxed">Disparando publicación al sitio público.</p>
       <a
         id="cda-build-link"
         href="https://casadeasterionediciones.com"
         target="_blank"
         rel="noopener noreferrer"
-        class="hidden text-xs text-stone-700 underline mt-2 inline-block"
-      >Ver sitio público →</a>
+        class="hidden items-center gap-1 text-xs text-stone-700 hover:text-stone-900 underline mt-2"
+      >
+        Ver sitio público
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 17 17 7"/>
+          <path d="M7 7h10v10"/>
+        </svg>
+      </a>
     </div>
     <button
       type="button"
       id="cda-build-close"
       aria-label="Cerrar"
-      class="shrink-0 cursor-pointer text-stone-400 hover:text-stone-700 text-xl leading-none px-1"
-    >×</button>
+      class="shrink-0 cursor-pointer w-7 h-7 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center transition"
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
   </div>
-  <div class="h-1 bg-stone-100 overflow-hidden">
-    <div id="cda-build-progress" class="h-full bg-stone-700 transition-all duration-700" style="width: 6%"></div>
+  <div class="cas-banner-progress-track">
+    <div id="cda-build-progress" class="cas-banner-progress-bar" style="width: 8%"></div>
   </div>
 </div>
+
+<style is:global>
+  /* Base shell */
+  .cas-banner {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 50;
+    width: 380px;
+    max-width: calc(100vw - 2rem);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: saturate(180%) blur(8px);
+    -webkit-backdrop-filter: saturate(180%) blur(8px);
+    border: 1px solid #e7e5e4; /* stone-200 */
+    border-left-width: 3px;
+    box-shadow:
+      0 18px 40px -12px rgba(28, 25, 23, 0.18),
+      0 4px 12px -4px rgba(28, 25, 23, 0.1);
+    overflow: hidden;
+    transform: translateY(8px);
+    opacity: 0;
+    transition:
+      opacity 220ms ease-out,
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 280ms ease,
+      background 280ms ease;
+  }
+  .cas-banner:not(.hidden) {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .cas-banner-glow {
+    position: absolute;
+    top: -40px;
+    left: -40px;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(28px);
+    opacity: 0.55;
+    transition: background 320ms ease, opacity 320ms ease;
+  }
+
+  .cas-banner-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    transition: background 220ms ease, color 220ms ease;
+  }
+
+  .cas-banner-icon {
+    transition: background 280ms ease, color 280ms ease;
+  }
+
+  .cas-icon-spin {
+    animation: cas-spin 1.1s linear infinite;
+  }
+  @keyframes cas-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .cas-banner-progress-track {
+    height: 3px;
+    background: rgba(120, 113, 108, 0.08); /* stone-500/8 */
+    overflow: hidden;
+    position: relative;
+  }
+  .cas-banner-progress-bar {
+    height: 100%;
+    transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1), background 280ms ease;
+    background: #44403c; /* stone-700 */
+  }
+
+  /* Indeterminate stripe overlay during running phase */
+  .cas-banner[data-phase="running"] .cas-banner-progress-track::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 40%,
+      rgba(255, 255, 255, 0.55) 50%,
+      transparent 60%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: cas-shimmer 1.6s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes cas-shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+
+  /* ─────────────────────────────────────────────
+     Per-phase color treatments
+     ───────────────────────────────────────────── */
+
+  /* Saved — neutral stone, slow heartbeat */
+  .cas-banner[data-phase="saved"] {
+    border-left-color: #78716c; /* stone-500 */
+  }
+  .cas-banner[data-phase="saved"] .cas-banner-glow { background: #d6d3d1; opacity: 0.4; }
+  .cas-banner[data-phase="saved"] .cas-banner-icon { background: #f5f5f4; color: #44403c; }
+  .cas-banner[data-phase="saved"] .cas-banner-pill { background: #f5f5f4; color: #57534e; }
+  .cas-banner[data-phase="saved"] .cas-banner-progress-bar { background: #78716c; }
+
+  /* Pending — amber/golden, queueing */
+  .cas-banner[data-phase="pending"] {
+    border-left-color: #d97706; /* amber-600 */
+  }
+  .cas-banner[data-phase="pending"] .cas-banner-glow { background: #fbbf24; opacity: 0.35; }
+  .cas-banner[data-phase="pending"] .cas-banner-icon { background: #fef3c7; color: #92400e; }
+  .cas-banner[data-phase="pending"] .cas-banner-pill { background: #fef3c7; color: #92400e; }
+  .cas-banner[data-phase="pending"] .cas-banner-progress-bar { background: #d97706; }
+
+  /* Running — indigo/blue, in-flight */
+  .cas-banner[data-phase="running"] {
+    border-left-color: #4f46e5; /* indigo-600 */
+  }
+  .cas-banner[data-phase="running"] .cas-banner-glow { background: #818cf8; opacity: 0.45; }
+  .cas-banner[data-phase="running"] .cas-banner-icon { background: #e0e7ff; color: #3730a3; }
+  .cas-banner[data-phase="running"] .cas-banner-pill { background: #e0e7ff; color: #3730a3; }
+  .cas-banner[data-phase="running"] .cas-banner-progress-bar { background: #4f46e5; }
+
+  /* Succeed — green */
+  .cas-banner[data-phase="succeed"] {
+    border-left-color: #059669; /* emerald-600 */
+  }
+  .cas-banner[data-phase="succeed"] .cas-banner-glow { background: #34d399; opacity: 0.4; }
+  .cas-banner[data-phase="succeed"] .cas-banner-icon { background: #d1fae5; color: #065f46; }
+  .cas-banner[data-phase="succeed"] .cas-banner-pill { background: #d1fae5; color: #065f46; }
+  .cas-banner[data-phase="succeed"] .cas-banner-progress-bar { background: #059669; }
+
+  /* Failed — red */
+  .cas-banner[data-phase="failed"] {
+    border-left-color: #dc2626; /* red-600 */
+  }
+  .cas-banner[data-phase="failed"] .cas-banner-glow { background: #f87171; opacity: 0.4; }
+  .cas-banner[data-phase="failed"] .cas-banner-icon { background: #fee2e2; color: #991b1b; }
+  .cas-banner[data-phase="failed"] .cas-banner-pill { background: #fee2e2; color: #991b1b; }
+  .cas-banner[data-phase="failed"] .cas-banner-progress-bar { background: #dc2626; }
+
+  /* Timeout — slate */
+  .cas-banner[data-phase="timeout"] {
+    border-left-color: #475569; /* slate-600 */
+  }
+  .cas-banner[data-phase="timeout"] .cas-banner-glow { background: #94a3b8; opacity: 0.35; }
+  .cas-banner[data-phase="timeout"] .cas-banner-icon { background: #f1f5f9; color: #334155; }
+  .cas-banner[data-phase="timeout"] .cas-banner-pill { background: #f1f5f9; color: #334155; }
+  .cas-banner[data-phase="timeout"] .cas-banner-progress-bar { background: #475569; }
+</style>
 
 <script is:inline>
   (() => {
@@ -62,11 +252,20 @@
     const PUBLISH_KEY = "cda_publish_at";
     const FIRST_POLL_DELAY = 1500;
     const POLL_INTERVAL = 5000;
-    const MAX_RUNTIME = 10 * 60 * 1000; // 10 min hard cap
+    const MAX_RUNTIME = 10 * 60 * 1000;
 
     let timer = null;
     let pollingForSince = 0;
     let lastPhase = null;
+
+    const PHASE_CONFIG = {
+      saved:   { title: "Cambios guardados",        pill: "Programando", subtitle: "Disparando publicación al sitio público.", progress: 8,   showLink: false },
+      pending: { title: "Esperando rebuild",        pill: "En cola",     subtitle: "Esperando que Amplify reciba el trigger.",  progress: 22,  showLink: false },
+      running: { title: "Construyendo sitio",       pill: "Publicando",  subtitle: "Generando HTML estático en Amplify.",       progress: 65,  showLink: false },
+      succeed: { title: "Sitio publicado",          pill: "Listo",       subtitle: "El sitio público se actualizó.",            progress: 100, showLink: true  },
+      failed:  { title: "Falló el deploy",          pill: "Error",       subtitle: "Revisa el build log en Amplify.",           progress: 100, showLink: false },
+      timeout: { title: "Tomó más de lo esperado", pill: "En curso",    subtitle: "El build sigue corriendo. Revisa Amplify.", progress: 92,  showLink: false },
+    };
 
     const stop = () => {
       pollingForSince = 0;
@@ -80,75 +279,51 @@
     const els = () => ({
       banner: document.getElementById("cda-build-banner"),
       title: document.getElementById("cda-build-title"),
+      pill: document.getElementById("cda-build-pill"),
       subtitle: document.getElementById("cda-build-subtitle"),
       progress: document.getElementById("cda-build-progress"),
       link: document.getElementById("cda-build-link"),
       close: document.getElementById("cda-build-close"),
-      spinner: document.getElementById("cda-build-spinner"),
-      check: document.getElementById("cda-build-check"),
-      cross: document.getElementById("cda-build-cross"),
       icon: document.getElementById("cda-build-icon"),
     });
+
+    const showIcon = (banner, phase) => {
+      banner.querySelectorAll(".cas-icon").forEach((svg) => {
+        svg.classList.toggle("hidden", svg.getAttribute("data-icon") !== phase);
+      });
+    };
 
     const setPhase = (phase, extra) => {
       const e = els();
       if (!e.banner) return;
+      const cfg = PHASE_CONFIG[phase];
+      if (!cfg) return;
+
       lastPhase = phase;
+      e.banner.dataset.phase = phase;
       e.banner.classList.remove("hidden");
 
-      // Reset terminal-state styles each call.
-      e.progress.classList.remove("bg-green-600", "bg-red-600");
-      e.progress.classList.add("bg-stone-700");
-      e.icon.classList.remove("bg-green-100", "text-green-700", "bg-red-100", "text-red-700");
-      e.icon.classList.add("bg-stone-100", "text-stone-700");
-      e.spinner.classList.remove("hidden");
-      e.check.classList.add("hidden");
-      e.cross.classList.add("hidden");
-      e.link.classList.add("hidden");
+      e.title.textContent = cfg.title;
+      e.pill.textContent = cfg.pill;
 
-      if (phase === "saved") {
-        e.title.textContent = "Cambios guardados";
-        e.subtitle.textContent = "Programando publicación…";
-        e.progress.style.width = "8%";
-      } else if (phase === "pending") {
-        e.title.textContent = "Esperando rebuild";
-        e.subtitle.textContent = "Disparando el build en Amplify.";
-        // Ramp from 8% to ~28% over the wait.
-        const cur = parseFloat(e.progress.style.width) || 8;
-        e.progress.style.width = Math.max(cur, Math.min(28, cur + 4)) + "%";
-      } else if (phase === "running") {
-        e.title.textContent = "Construyendo sitio público…";
-        e.subtitle.textContent = "Generando HTML estático en Amplify.";
-        const cur = parseFloat(e.progress.style.width) || 30;
-        e.progress.style.width = Math.min(85, Math.max(cur, 32) + 5) + "%";
-      } else if (phase === "succeed") {
-        e.title.textContent = "Sitio publicado";
-        const elapsed = extra && extra.endTime
-          ? Math.round((new Date(extra.endTime).getTime() - (extra.since || Date.now())) / 1000)
-          : null;
-        e.subtitle.textContent = elapsed ? `Listo en ${elapsed}s.` : "Listo.";
-        e.progress.style.width = "100%";
-        e.progress.classList.remove("bg-stone-700");
-        e.progress.classList.add("bg-green-600");
-        e.icon.classList.remove("bg-stone-100", "text-stone-700");
-        e.icon.classList.add("bg-green-100", "text-green-700");
-        e.spinner.classList.add("hidden");
-        e.check.classList.remove("hidden");
-        e.link.classList.remove("hidden");
-      } else if (phase === "failed") {
-        e.title.textContent = "Falló el deploy del sitio";
-        e.subtitle.textContent = "Revisa el build log en Amplify.";
-        e.progress.style.width = "100%";
-        e.progress.classList.remove("bg-stone-700");
-        e.progress.classList.add("bg-red-600");
-        e.icon.classList.remove("bg-stone-100", "text-stone-700");
-        e.icon.classList.add("bg-red-100", "text-red-700");
-        e.spinner.classList.add("hidden");
-        e.cross.classList.remove("hidden");
-      } else if (phase === "timeout") {
-        e.title.textContent = "Tomó más de lo esperado";
-        e.subtitle.textContent = "El build sigue corriendo. Revisa Amplify.";
+      if (phase === "succeed" && extra && extra.endTime && extra.since) {
+        const elapsed = Math.round((new Date(extra.endTime).getTime() - extra.since) / 1000);
+        e.subtitle.textContent = `Listo en ${elapsed}s. El sitio público ya está actualizado.`;
+      } else {
+        e.subtitle.textContent = cfg.subtitle;
       }
+
+      // Smooth progress: never go backwards.
+      const cur = parseFloat(e.progress.style.width) || 0;
+      const target = phase === "succeed" || phase === "failed"
+        ? cfg.progress
+        : Math.max(cur, cfg.progress);
+      e.progress.style.width = target + "%";
+
+      if (cfg.showLink) e.link.classList.remove("hidden"), e.link.classList.add("inline-flex");
+      else e.link.classList.add("hidden"), e.link.classList.remove("inline-flex");
+
+      showIcon(e.banner, phase);
     };
 
     const dismiss = () => {
@@ -166,7 +341,7 @@
     };
 
     const poll = async (since) => {
-      if (pollingForSince !== since) return; // a newer publish superseded this
+      if (pollingForSince !== since) return;
       try {
         const res = await fetch(`/api/build-status?since=${since}`, {
           headers: { accept: "application/json" },
@@ -177,7 +352,6 @@
         if (data.phase === "succeed") {
           setPhase("succeed", { endTime: data.endTime, since });
           sessionStorage.removeItem(PUBLISH_KEY);
-          // Auto-dismiss after 12s.
           setTimeout(() => {
             const e = els();
             if (e.banner) e.banner.classList.add("hidden");
@@ -192,8 +366,7 @@
           return;
         }
         if (data.phase === "running") setPhase("running");
-        else if (lastPhase !== "pending" && lastPhase !== "running") setPhase("pending");
-        else if (lastPhase === "pending") setPhase("pending"); // bump progress
+        else setPhase("pending");
       } catch {
         // ignore transient errors, keep polling
       }
@@ -207,8 +380,6 @@
     };
 
     const evaluate = () => {
-      // 1. Did this page load result from a publish-affecting POST?
-      //    Capture the timestamp and clean the URL.
       const url = new URL(window.location.href);
       if (url.searchParams.get("published") === "1") {
         sessionStorage.setItem(PUBLISH_KEY, String(Date.now()));
@@ -224,25 +395,17 @@
 
       wireClose();
 
-      // 2. If we're not already polling for this publish, start now.
       if (pollingForSince !== since) {
         if (timer) clearTimeout(timer);
         pollingForSince = since;
-
-        // Show "saved → scheduling" instantly, then transition to pending after
-        // the first poll. The first poll is fast (1.5s) so we detect the job
-        // as soon as the cron dispatcher fires.
         setPhase("saved");
         timer = setTimeout(() => poll(since), FIRST_POLL_DELAY);
       } else {
-        // Same publish in progress; just make sure the banner is visible.
         const e = els();
         if (e.banner) e.banner.classList.remove("hidden");
       }
     };
 
-    // Run on first paint AND on every navigation (form submits via Astro's
-    // ClientRouter trigger astro:page-load instead of a full reload).
     document.addEventListener("astro:page-load", evaluate);
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", evaluate);
