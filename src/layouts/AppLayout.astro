@@ -133,7 +133,6 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
           const titleEl = panel.querySelector("h2");
           if (titleEl) titleEl.textContent = meta.title;
 
-          const newLink = panel.querySelector('[class*="border-stone-300"], [class*="bg-stone-900"]');
           // Find "+ Nuevo …" link by scanning hrefs.
           panel.querySelectorAll("a").forEach((a) => {
             const href = a.getAttribute("href") || "";

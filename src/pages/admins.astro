@@ -1,6 +1,6 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
-import { requireOwner, RESOURCES, RESOURCE_LABEL } from "~/lib/auth";
+import { requireOwner, RESOURCES, RESOURCE_LABEL, invalidateAuthCache } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
@@ -29,6 +29,9 @@ if (Astro.request.method === "POST") {
         .from("admin_permissions")
         .upsert({ profile_id: profileId, resource, level }, { onConflict: "profile_id,resource" });
       if (error) throw error;
+      // Bust the in-memory permissions cache for this admin so the change
+      // is visible immediately on subsequent navigations.
+      invalidateAuthCache(Astro, profileId);
       saved = "Permiso actualizado.";
     } else if (action === "add_email") {
       const email = strReq(fd, "email").trim().toLowerCase();
