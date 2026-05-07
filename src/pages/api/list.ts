@@ -9,11 +9,27 @@ type Item = {
   status?: string | null;
   href: string;
   imageUrl?: string | null;
-  /** "photo" → round, used for authors. "cover" → rectangular, used for books/articles. */
-  imageStyle?: "photo" | "cover";
+  /** "photo" → round, used for authors. "cover" → rectangular, used for books/articles.
+   *  "emoji" → render `imageUrl` as a literal character/emoji (used for categories). */
+  imageStyle?: "photo" | "cover" | "emoji";
+  /** Categories: extra metadata used to render reorder controls. */
+  reorderable?: boolean;
 };
 
-const ALLOWED = new Set<Resource>(["posts", "books", "authors"]);
+const ALLOWED = new Set<Resource>(["posts", "books", "authors", "categories"]);
+
+const KIND_EMOJI: Record<string, string> = {
+  philosophy: "✦",
+  poetry: "❀",
+  book: "❑",
+  other: "◇",
+};
+const KIND_LABEL: Record<string, string> = {
+  philosophy: "Filosofía",
+  poetry: "Poesía",
+  book: "Libro",
+  other: "Otro",
+};
 
 export const GET: APIRoute = async (ctx) => {
   const url = new URL(ctx.request.url);
@@ -77,6 +93,21 @@ export const GET: APIRoute = async (ctx) => {
       href: `/authors/${a.id}`,
       imageUrl: a.photo_url ?? null,
       imageStyle: "photo",
+    }));
+  } else if (resource === "categories") {
+    const { data } = await supabase
+      .from("categories")
+      .select("id, name, slug, kind, sort_order")
+      .order("sort_order")
+      .order("name");
+    items = (data ?? []).map((c: any) => ({
+      id: c.id,
+      title: c.name,
+      subtitle: KIND_LABEL[c.kind] ?? c.kind,
+      href: `/categories/${c.id}`,
+      imageUrl: KIND_EMOJI[c.kind] ?? KIND_EMOJI.other,
+      imageStyle: "emoji",
+      reorderable: true,
     }));
   }
 

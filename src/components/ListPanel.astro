@@ -2,7 +2,7 @@
 import type { Resource, Level } from "~/lib/auth";
 
 interface Props {
-  resource: Extract<Resource, "posts" | "books" | "authors">;
+  resource: Extract<Resource, "posts" | "books" | "authors" | "categories">;
   activeId?: string | null;
   permission: Level;
   // When true, hide the list panel on mobile (used when the user is
@@ -16,6 +16,7 @@ const headerByResource = {
   posts: { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
   books: { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
+  categories: { title: "Categorías", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
 };
 const header = headerByResource[resource];
 
@@ -159,6 +160,85 @@ const isNew = Astro.url.pathname.endsWith("/new");
     justify-content: space-between;
     gap: 8px;
   }
+
+  /* Emoji-style thumb (used for category kinds) */
+  .lp-thumb-emoji {
+    background: #fafaf9;
+    border: 1px solid #e7e5e4;
+    border-radius: 9999px;
+    font-size: 16px;
+    color: #44403c;
+  }
+  .lp-thumb-emoji-philosophy { background: #eef2ff; border-color: #e0e7ff; color: #3730a3; }
+  .lp-thumb-emoji-poetry     { background: #fff1f2; border-color: #ffe4e6; color: #9f1239; }
+  .lp-thumb-emoji-book       { background: #fffbeb; border-color: #fef3c7; color: #92400e; }
+  .lp-thumb-emoji-other      { background: #f5f5f4; border-color: #e7e5e4; color: #44403c; }
+
+  /* Reorder controls — only rendered for resources where reorderable=true */
+  .lp-link.lp-link-reorderable {
+    padding-right: 0;
+  }
+  .lp-link-body {
+    flex: 1 1 0%;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .lp-grip {
+    flex-shrink: 0;
+    width: 22px;
+    margin: -4px 0 -4px -4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d6d3d1;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .lp-grip:hover { color: #57534e; background: #f5f5f4; }
+  .lp-grip:active { cursor: grabbing; }
+  .lp-arrows {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid #f5f5f4;
+    align-self: stretch;
+    margin-left: 8px;
+  }
+  .lp-arrow {
+    width: 28px;
+    flex: 1 1 0%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a8a29e;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    transition: background 0.15s, color 0.15s;
+  }
+  .lp-arrow:hover:not(:disabled) {
+    background: #fafaf9;
+    color: #1c1917;
+  }
+  .lp-arrow:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+  }
+  .lp-arrow + .lp-arrow {
+    border-top: 1px solid #f5f5f4;
+  }
+
+  /* Drag/drop visual indicators */
+  .lp-link.lp-dragging { opacity: 0.4; }
+  .lp-link.lp-drop-above { box-shadow: 0 -2px 0 0 #1c1917 inset; }
+  .lp-link.lp-drop-below { box-shadow: 0 2px 0 0 #1c1917 inset; }
+  .lp-link.lp-saving { background: #fafaf9; }
 </style>
 
 <script is:inline>
@@ -190,6 +270,126 @@ const isNew = Astro.url.pathname.endsWith("/new");
       return seg === "new" ? "" : seg;
     };
 
+    // ── Reorder logic (currently used only by `categories`) ──
+    let draggedItem = null;
+
+    const updateArrowDisabled = (list) => {
+      const items = list.querySelectorAll("li > a.lp-link");
+      items.forEach((a, idx) => {
+        const up = a.querySelector('[data-move="up"]');
+        const down = a.querySelector('[data-move="down"]');
+        if (up) up.disabled = idx === 0;
+        if (down) down.disabled = idx === items.length - 1;
+      });
+    };
+
+    const persistReorder = async (panel, list) => {
+      const resource = panel.dataset.listPanel;
+      // Only categories supports reorder right now.
+      if (resource !== "categories") return;
+      const ids = Array.from(list.querySelectorAll("li > a.lp-link")).map((a) => a.dataset.id);
+      list.querySelectorAll("a.lp-link").forEach((a) => a.classList.add("lp-saving"));
+      try {
+        const res = await fetch(`/api/${resource}/reorder`, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ order: ids }),
+        });
+        if (!res.ok) throw new Error("http_" + res.status);
+        try { sessionStorage.removeItem(cacheKey(resource)); } catch {}
+        if (typeof window.__casAddBuildToast === "function") {
+          window.__casAddBuildToast("Categorías reordenadas");
+        }
+      } catch {
+        // Silent fail — visual order persists even if the network failed.
+      } finally {
+        list.querySelectorAll("a.lp-link").forEach((a) => a.classList.remove("lp-saving"));
+      }
+    };
+
+    const wireReorder = (panel, list) => {
+      // Click on grip / arrows / drag should NOT navigate.
+      list.addEventListener("click", (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+        const grip = t.closest("[data-grip]");
+        const moveBtn = t.closest("[data-move]");
+        if (grip || moveBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        if (moveBtn) {
+          const id = moveBtn.dataset.id;
+          const dir = moveBtn.dataset.move;
+          const link = list.querySelector(`a.lp-link[data-id="${id}"]`);
+          if (!link) return;
+          const li = link.parentElement;
+          if (!li) return;
+          const sibling = dir === "up" ? li.previousElementSibling : li.nextElementSibling;
+          if (!sibling) return;
+          if (dir === "up") list.insertBefore(li, sibling);
+          else list.insertBefore(sibling, li);
+          updateArrowDisabled(list);
+          persistReorder(panel, list);
+        }
+      });
+
+      // Drag start (on the grip)
+      list.addEventListener("dragstart", (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+        if (!t.closest("[data-grip]")) return;
+        const li = t.closest("li");
+        if (!li) return;
+        draggedItem = li;
+        li.querySelector(".lp-link")?.classList.add("lp-dragging");
+        try {
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", li.querySelector(".lp-link")?.dataset.id || "");
+          }
+        } catch {}
+      });
+      list.addEventListener("dragend", () => {
+        list.querySelectorAll(".lp-dragging, .lp-drop-above, .lp-drop-below")
+          .forEach((el) => el.classList.remove("lp-dragging", "lp-drop-above", "lp-drop-below"));
+        draggedItem = null;
+      });
+      list.addEventListener("dragover", (e) => {
+        if (!draggedItem) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        const target = e.target instanceof Element ? e.target.closest("li") : null;
+        list.querySelectorAll(".lp-drop-above, .lp-drop-below")
+          .forEach((el) => el.classList.remove("lp-drop-above", "lp-drop-below"));
+        if (!target || target === draggedItem) return;
+        const link = target.querySelector(".lp-link");
+        if (!link) return;
+        const rect = target.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        link.classList.add(before ? "lp-drop-above" : "lp-drop-below");
+      });
+      list.addEventListener("drop", (e) => {
+        if (!draggedItem) return;
+        e.preventDefault();
+        const target = e.target instanceof Element ? e.target.closest("li") : null;
+        list.querySelectorAll(".lp-drop-above, .lp-drop-below")
+          .forEach((el) => el.classList.remove("lp-drop-above", "lp-drop-below"));
+        if (!target || target === draggedItem) {
+          draggedItem = null;
+          return;
+        }
+        const rect = target.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        if (before) list.insertBefore(draggedItem, target);
+        else list.insertBefore(draggedItem, target.nextElementSibling);
+        draggedItem = null;
+        updateArrowDisabled(list);
+        persistReorder(panel, list);
+      });
+    };
+
     const renderItems = (panel, items) => {
       const skeleton = panel.querySelector("[data-list-skeleton]");
       const empty = panel.querySelector("[data-list-empty]");
@@ -213,35 +413,74 @@ const isNew = Astro.url.pathname.endsWith("/new");
       // Inline SVG placeholders, kept short so we can embed many of them.
       const PLACEHOLDER_PHOTO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>`;
       const PLACEHOLDER_COVER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-7 7"/></svg>`;
+      const GRIP_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>`;
+      const ARROW_UP = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>`;
+      const ARROW_DOWN = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+
+      // Map kind labels (pulled from subtitle for emoji items) to a CSS variant
+      // so the thumb gets a colored background per category kind.
+      const KIND_VARIANTS = {
+        "Filosofía": "philosophy",
+        "Poesía": "poetry",
+        "Libro": "book",
+        "Otro": "other",
+      };
+
+      const reorderable = items.some((it) => it.reorderable);
 
       list.innerHTML = items
-        .map((it) => {
+        .map((it, idx) => {
           const active = it.id === activeId;
-          const cls = "lp-link" + (active ? " lp-link-active" : "");
+          const cls = "lp-link" + (active ? " lp-link-active" : "") + (reorderable ? " lp-link-reorderable" : "");
           const status = it.status
             ? `<span class="lp-status ${it.status === "published" ? "lp-status-pub" : "lp-status-draft"}">${it.status === "published" ? "pub" : "borr"}</span>`
             : "";
+
           const isPhoto = it.imageStyle === "photo";
-          const thumbClass = "lp-thumb" + (isPhoto ? " lp-thumb-photo" : "");
-          const placeholder = isPhoto ? PLACEHOLDER_PHOTO : PLACEHOLDER_COVER;
-          const thumb = it.imageUrl
-            ? `<div class="${thumbClass}"><img src="${escape(it.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML=this.dataset.fallback;" data-fallback="${escape(placeholder)}"/></div>`
-            : `<div class="${thumbClass}">${placeholder}</div>`;
+          const isEmoji = it.imageStyle === "emoji";
+          let thumb = "";
+          if (isEmoji) {
+            const variant = KIND_VARIANTS[it.subtitle || ""] || "other";
+            thumb = `<div class="lp-thumb lp-thumb-emoji lp-thumb-emoji-${variant}">${escape(it.imageUrl || "◇")}</div>`;
+          } else {
+            const thumbClass = "lp-thumb" + (isPhoto ? " lp-thumb-photo" : "");
+            const placeholder = isPhoto ? PLACEHOLDER_PHOTO : PLACEHOLDER_COVER;
+            thumb = it.imageUrl
+              ? `<div class="${thumbClass}"><img src="${escape(it.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML=this.dataset.fallback;" data-fallback="${escape(placeholder)}"/></div>`
+              : `<div class="${thumbClass}">${placeholder}</div>`;
+          }
+
+          const grip = it.reorderable
+            ? `<span class="lp-grip" data-grip draggable="true" aria-label="Arrastrar para reordenar" title="Arrastrar para reordenar">${GRIP_SVG}</span>`
+            : "";
+
+          const arrows = it.reorderable ? `
+            <div class="lp-arrows">
+              <button type="button" class="lp-arrow" data-move="up" data-id="${escape(it.id)}" aria-label="Subir"${idx === 0 ? " disabled" : ""}>${ARROW_UP}</button>
+              <button type="button" class="lp-arrow" data-move="down" data-id="${escape(it.id)}" aria-label="Bajar"${idx === items.length - 1 ? " disabled" : ""}>${ARROW_DOWN}</button>
+            </div>` : "";
+
           return `
             <li>
-              <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch>
-                ${thumb}
-                <div class="lp-body">
-                  <div class="lp-row-top">
-                    <p class="lp-title">${escape(it.title)}</p>
-                    ${status}
+              <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch data-id="${escape(it.id)}">
+                <span class="lp-link-body">
+                  ${grip}
+                  ${thumb}
+                  <div class="lp-body">
+                    <div class="lp-row-top">
+                      <p class="lp-title">${escape(it.title)}</p>
+                      ${status}
+                    </div>
+                    ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
                   </div>
-                  ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
-                </div>
+                </span>
+                ${arrows}
               </a>
             </li>`;
         })
         .join("");
+
+      if (reorderable) wireReorder(panel, list);
     };
 
     const showError = (panel) => {

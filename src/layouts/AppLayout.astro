@@ -13,7 +13,7 @@ const permissions = isCmsUser(user) ? await getAllPermissions(Astro, user) : nul
 
 interface Props {
   title?: string;
-  resource?: Extract<Resource, "posts" | "books" | "authors">;
+  resource?: Extract<Resource, "posts" | "books" | "authors" | "categories">;
   activeId?: string | null;
   breadcrumbLabel?: string;
 }
@@ -110,6 +110,7 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
           posts: { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
           books: { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" },
           authors: { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
+          categories: { title: "Categorías", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
         };
 
         const pathToResource = (path) => {

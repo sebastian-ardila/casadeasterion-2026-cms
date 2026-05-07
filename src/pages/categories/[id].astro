@@ -1,0 +1,122 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import BackToList from "~/components/BackToList.astro";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { num, str, strReq } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requirePermission(Astro, "categories", "edit");
+if (guard instanceof Response) return guard;
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/categories");
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+const justSaved = Astro.url.searchParams.get("saved") === "1" || Astro.url.searchParams.get("published") === "1";
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const action = str(fd, "_action");
+
+    if (action === "delete") {
+      const { error } = await supabase.from("categories").delete().eq("id", id);
+      if (error) throw error;
+      return Astro.redirect(`/categories?published=1&item=${encodeURIComponent("Categoría eliminada")}`);
+    }
+
+    const name = strReq(fd, "name");
+    const { error } = await supabase
+      .from("categories")
+      .update({
+        name,
+        slug: strReq(fd, "slug"),
+        kind: strReq(fd, "kind"),
+        description: str(fd, "description"),
+        // sort_order intentionally omitted — managed via /api/categories/reorder.
+      })
+      .eq("id", id);
+    if (error) throw error;
+    const label = encodeURIComponent("Categoría: " + name);
+    return Astro.redirect(`/categories/${id}?published=1&item=${label}`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+const { data: category } = await supabase.from("categories").select("*").eq("id", id).maybeSingle();
+if (!category) return Astro.redirect("/categories");
+
+const kindOptions = [
+  { value: "philosophy", label: "Filosofía", hint: "ensayo, pensamiento" },
+  { value: "poetry", label: "Poesía", hint: "verso, antología" },
+  { value: "book", label: "Libro", hint: "para libros del catálogo" },
+  { value: "other", label: "Otro", hint: "narrativa, varios" },
+];
+---
+
+<AppLayout title={category.name} resource="categories" activeId={category.id} breadcrumbLabel={category.name}>
+  <BackToList href="/categories" label="Categorías" />
+
+  <header class="mb-8">
+    <h1 class="font-serif text-3xl md:text-4xl mb-2 leading-tight">{category.name}</h1>
+    <p class="text-stone-500 text-xs">/{category.slug} · orden {category.sort_order ?? 0}</p>
+  </header>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+  {justSaved && (
+    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado.</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra la categoría en el sitio.</p>
+      </div>
+      <Field label="Nombre" name="name" value={category.name} required description="Como se mostrará al público." />
+      <Field label="Slug" name="slug" value={category.slug} required description="Solo minúsculas, números y guiones." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Tipo</h2>
+        <p class="card-section-desc">Determina dónde aparece la categoría en el sitio público.</p>
+      </div>
+      <Dropdown name="kind" value={category.kind} options={kindOptions} />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Descripción</h2>
+        <p class="card-section-desc">Texto opcional que puede aparecer en la cabecera de la sección y en meta tags SEO.</p>
+      </div>
+      <Field label="Descripción" name="description" type="textarea" rows={3} value={category.description} description="Opcional." />
+    </section>
+
+    <p class="text-xs text-stone-500">
+      El <strong>orden</strong> se ajusta arrastrando categorías en el panel de la izquierda o con los botones <span class="font-mono">↑</span> <span class="font-mono">↓</span>. No es un campo editable aquí.
+    </p>
+
+    <div class="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t border-stone-200">
+      <button type="submit" class="btn-primary">Guardar cambios</button>
+      <a href="/categories" class="btn">Cancelar</a>
+    </div>
+  </form>
+
+  <form
+    method="POST"
+    class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
+    onsubmit={`return confirm('¿Borrar la categoría "${category.name}"? Los artículos y libros asociados quedarán sin categoría.')`}
+  >
+    <input type="hidden" name="_action" value="delete" />
+    <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>
+    <button type="submit" class="btn-danger">Borrar categoría</button>
+  </form>
+</AppLayout>

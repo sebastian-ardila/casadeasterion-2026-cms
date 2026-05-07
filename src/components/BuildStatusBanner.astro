@@ -1,17 +1,19 @@
 ---
 // Stack of build/publish toasts. Each publish-affecting save adds a toast to
-// the queue (driven by `?published=1&item=…` on the redirect URL). All toasts
-// share the same Amplify build status — when the rebuild succeeds/fails, every
+// the queue (driven by `?published=1&item=…` on the redirect URL, or by a
+// programmatic call to window.__casAddBuildToast(item)). All toasts share
+// the same Amplify build status — when the rebuild succeeds/fails, every
 // active toast transitions together.
 //
-// Why a stack and not a single banner? Editors often save several things back
-// to back (e.g. an author photo, then a new article). The debounced rebuild
-// hook fires only once, but each save deserves its own visual confirmation.
+// Up to 4 toasts are rendered visually with decreasing opacity (latest on
+// top); any extras collapse into a "+N más" summary card that expands on
+// click.
 ---
 
 <div
   id="cda-toast-stack"
-  class="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 pointer-events-none w-[380px] max-w-[calc(100vw-2rem)]"
+  class="fixed bottom-6 right-6 z-50 flex flex-col items-stretch gap-2 pointer-events-none w-[380px] max-w-[calc(100vw-2rem)]"
+  data-expanded="0"
   aria-live="polite"
 ></div>
 
@@ -78,6 +80,21 @@
   </div>
 </template>
 
+<template id="cda-toast-summary-template">
+  <button
+    type="button"
+    class="cas-toast-summary"
+    aria-expanded="false"
+  >
+    <span class="cas-toast-summary-icon shrink-0 w-6 h-6 rounded-full bg-stone-100 text-stone-700 flex items-center justify-center">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </span>
+    <span class="cas-toast-summary-text text-[12px] text-stone-700">+ <span data-count>0</span> más</span>
+  </button>
+</template>
+
 <style is:global>
   /* Stack pointer-events: only the toasts themselves accept clicks. */
   #cda-toast-stack > * { pointer-events: auto; }
@@ -117,6 +134,13 @@
     padding: 0;
     border-width: 0;
   }
+  /* Stacked opacity tiers (newest at top → most visible). The data-stack-pos
+     index is set by JS based on collapsed-stack ordering. */
+  #cda-toast-stack[data-expanded="0"] .cas-toast[data-stack-pos="0"] { opacity: 1; }
+  #cda-toast-stack[data-expanded="0"] .cas-toast[data-stack-pos="1"] { opacity: 0.92; }
+  #cda-toast-stack[data-expanded="0"] .cas-toast[data-stack-pos="2"] { opacity: 0.84; }
+  #cda-toast-stack[data-expanded="0"] .cas-toast[data-stack-pos="3"] { opacity: 0.76; }
+  #cda-toast-stack[data-expanded="0"] .cas-toast.cas-toast-hidden { display: none; }
 
   .cas-toast-glow {
     position: absolute;
@@ -154,7 +178,6 @@
     to { transform: rotate(360deg); }
   }
 
-  /* Small breathing ring around the icon for live phases. */
   .cas-toast[data-phase="saved"] .cas-toast-icon,
   .cas-toast[data-phase="pending"] .cas-toast-icon,
   .cas-toast[data-phase="running"] .cas-toast-icon {
@@ -176,7 +199,6 @@
     50%      { transform: scale(1.18); opacity: 0.35; }
   }
 
-  /* Three-dot loading indicator next to status text. */
   .cas-loading-dots {
     display: inline-flex;
     align-items: center;
@@ -197,7 +219,6 @@
     0%, 80%, 100% { transform: scale(0.7); opacity: 0.3; }
     40%           { transform: scale(1.2); opacity: 1; }
   }
-  /* Hide dots on terminal phases. */
   .cas-toast[data-phase="succeed"] .cas-loading-dots,
   .cas-toast[data-phase="failed"] .cas-loading-dots,
   .cas-toast[data-phase="timeout"] .cas-loading-dots {
@@ -215,7 +236,6 @@
     transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1), background 280ms ease;
     background: #44403c;
   }
-  /* Animated stripe for the running phase. */
   .cas-toast[data-phase="running"] .cas-toast-progress-track::after {
     content: "";
     position: absolute;
@@ -236,8 +256,6 @@
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
   }
-  /* Indeterminate fill for "saved" / "pending" phases — slow pulse so the
-     bar visibly does *something* even before the build job is detected. */
   .cas-toast[data-phase="saved"] .cas-toast-progress-bar,
   .cas-toast[data-phase="pending"] .cas-toast-progress-bar {
     animation: cas-pulse 1.6s ease-in-out infinite;
@@ -247,56 +265,69 @@
     50%      { opacity: 1; }
   }
 
-  /* ─────────────────────────────────────────────
-     Per-phase color treatments
-     ───────────────────────────────────────────── */
-  .cas-toast[data-phase="saved"] {
-    border-left-color: #78716c;
-  }
+  /* Per-phase color treatments */
+  .cas-toast[data-phase="saved"]   { border-left-color: #78716c; }
   .cas-toast[data-phase="saved"] .cas-toast-glow { background: #d6d3d1; opacity: 0.35; }
   .cas-toast[data-phase="saved"] .cas-toast-icon { background: #f5f5f4; color: #44403c; }
   .cas-toast[data-phase="saved"] .cas-toast-pill { background: #f5f5f4; color: #57534e; }
   .cas-toast[data-phase="saved"] .cas-toast-progress-bar { background: #78716c; }
 
-  .cas-toast[data-phase="pending"] {
-    border-left-color: #d97706;
-  }
+  .cas-toast[data-phase="pending"] { border-left-color: #d97706; }
   .cas-toast[data-phase="pending"] .cas-toast-glow { background: #fbbf24; opacity: 0.35; }
   .cas-toast[data-phase="pending"] .cas-toast-icon { background: #fef3c7; color: #92400e; }
   .cas-toast[data-phase="pending"] .cas-toast-pill { background: #fef3c7; color: #92400e; }
   .cas-toast[data-phase="pending"] .cas-toast-progress-bar { background: #d97706; }
 
-  .cas-toast[data-phase="running"] {
-    border-left-color: #4f46e5;
-  }
+  .cas-toast[data-phase="running"] { border-left-color: #4f46e5; }
   .cas-toast[data-phase="running"] .cas-toast-glow { background: #818cf8; opacity: 0.45; }
   .cas-toast[data-phase="running"] .cas-toast-icon { background: #e0e7ff; color: #3730a3; }
   .cas-toast[data-phase="running"] .cas-toast-pill { background: #e0e7ff; color: #3730a3; }
   .cas-toast[data-phase="running"] .cas-toast-progress-bar { background: #4f46e5; }
 
-  .cas-toast[data-phase="succeed"] {
-    border-left-color: #059669;
-  }
+  .cas-toast[data-phase="succeed"] { border-left-color: #059669; }
   .cas-toast[data-phase="succeed"] .cas-toast-glow { background: #34d399; opacity: 0.4; }
   .cas-toast[data-phase="succeed"] .cas-toast-icon { background: #d1fae5; color: #065f46; }
   .cas-toast[data-phase="succeed"] .cas-toast-pill { background: #d1fae5; color: #065f46; }
   .cas-toast[data-phase="succeed"] .cas-toast-progress-bar { background: #059669; }
 
-  .cas-toast[data-phase="failed"] {
-    border-left-color: #dc2626;
-  }
+  .cas-toast[data-phase="failed"] { border-left-color: #dc2626; }
   .cas-toast[data-phase="failed"] .cas-toast-glow { background: #f87171; opacity: 0.4; }
   .cas-toast[data-phase="failed"] .cas-toast-icon { background: #fee2e2; color: #991b1b; }
   .cas-toast[data-phase="failed"] .cas-toast-pill { background: #fee2e2; color: #991b1b; }
   .cas-toast[data-phase="failed"] .cas-toast-progress-bar { background: #dc2626; }
 
-  .cas-toast[data-phase="timeout"] {
-    border-left-color: #475569;
-  }
+  .cas-toast[data-phase="timeout"] { border-left-color: #475569; }
   .cas-toast[data-phase="timeout"] .cas-toast-glow { background: #94a3b8; opacity: 0.35; }
   .cas-toast[data-phase="timeout"] .cas-toast-icon { background: #f1f5f9; color: #334155; }
   .cas-toast[data-phase="timeout"] .cas-toast-pill { background: #f1f5f9; color: #334155; }
   .cas-toast[data-phase="timeout"] .cas-toast-progress-bar { background: #475569; }
+
+  /* Summary "+N más" card */
+  .cas-toast-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: saturate(180%) blur(8px);
+    -webkit-backdrop-filter: saturate(180%) blur(8px);
+    border: 1px dashed #d6d3d1;
+    border-radius: 0;
+    cursor: pointer;
+    transition: background 200ms ease, border-color 200ms ease;
+    width: 100%;
+    text-align: left;
+  }
+  .cas-toast-summary:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: #78716c;
+  }
+  .cas-toast-summary[aria-expanded="true"] .cas-toast-summary-icon svg {
+    transform: rotate(180deg);
+  }
+  .cas-toast-summary-icon svg {
+    transition: transform 200ms ease;
+  }
 </style>
 
 <script is:inline>
@@ -305,9 +336,12 @@
     window.__casToastInit = true;
 
     const STORAGE_KEY = "cda_toasts_v2";
-    const FIRST_POLL_DELAY = 1500;
-    const POLL_INTERVAL = 5000;
+    const FIRST_POLL_DELAY = 800;
+    const POLL_INTERVAL_FAST = 3000;  // first ~30s
+    const POLL_INTERVAL_SLOW = 5000;
+    const FAST_WINDOW = 30_000;
     const MAX_RUNTIME = 10 * 60 * 1000;
+    const MAX_VISIBLE = 4;
 
     const PHASE_CONFIG = {
       saved:   { pill: "Programando", text: "Disparando publicación al sitio público.", progress: 12  },
@@ -319,9 +353,10 @@
     };
 
     let pollTimer = null;
-    let pollingFor = 0;
-    let currentPhase = null;
-    let toastEls = new Map(); // toast id → element
+    let polling = false;
+    let toastEls = new Map();        // toast id → element
+    let summaryEl = null;             // the "+N más" card, if mounted
+    let expandedSummary = false;
 
     // ── State persistence ──
     const readState = () => {
@@ -329,7 +364,6 @@
         const raw = sessionStorage.getItem(STORAGE_KEY);
         if (!raw) return { toasts: [] };
         const parsed = JSON.parse(raw);
-        // Drop stale toasts (older than MAX_RUNTIME or already terminal & expired).
         const now = Date.now();
         const live = (parsed.toasts ?? []).filter((t) => {
           if (t.dismissedAt) return false;
@@ -361,14 +395,6 @@
       return id;
     };
 
-    const updateToast = (id, patch) => {
-      const state = readState();
-      const t = state.toasts.find((x) => x.id === id);
-      if (!t) return;
-      Object.assign(t, patch);
-      writeState(state);
-    };
-
     const dismissToast = (id) => {
       const state = readState();
       const t = state.toasts.find((x) => x.id === id);
@@ -379,7 +405,8 @@
 
     // ── DOM rendering ──
     const stack = () => document.getElementById("cda-toast-stack");
-    const tpl = () => document.getElementById("cda-toast-template");
+    const toastTpl = () => document.getElementById("cda-toast-template");
+    const summaryTpl = () => document.getElementById("cda-toast-summary-template");
 
     const showIcon = (el, phase) => {
       el.querySelectorAll(".cas-icon").forEach((svg) => {
@@ -407,29 +434,47 @@
       showIcon(el, toast.phase);
     };
 
-    const renderToast = (toast) => {
-      const container = stack();
-      const t = tpl();
-      if (!container || !t) return null;
+    const buildToastNode = (toast) => {
+      const t = toastTpl();
+      if (!t) return null;
       const node = t.content.firstElementChild.cloneNode(true);
       applyPhaseToToast(node, toast);
-      // Wire the close button.
-      node.querySelector(".cas-toast-close").addEventListener("click", () => {
+      node.querySelector(".cas-toast-close").addEventListener("click", (e) => {
+        e.stopPropagation();
         node.classList.add("cas-toast-leaving");
         dismissToast(toast.id);
         setTimeout(() => {
           node.remove();
           toastEls.delete(toast.id);
+          renderAll();
         }, 280);
       });
-      container.appendChild(node);
-      // Animate in on next frame.
-      requestAnimationFrame(() => node.classList.add("cas-toast-visible"));
       return node;
     };
 
-    const removeStaleToastsFromDom = (liveToasts) => {
-      const liveIds = new Set(liveToasts.map((t) => t.id));
+    const buildSummaryNode = () => {
+      const t = summaryTpl();
+      if (!t) return null;
+      const node = t.content.firstElementChild.cloneNode(true);
+      node.addEventListener("click", () => {
+        expandedSummary = !expandedSummary;
+        const s = stack();
+        if (s) s.dataset.expanded = expandedSummary ? "1" : "0";
+        node.setAttribute("aria-expanded", expandedSummary ? "true" : "false");
+        renderAll();
+      });
+      return node;
+    };
+
+    const renderAll = () => {
+      const container = stack();
+      if (!container) return;
+      const state = readState();
+      // Newest first
+      const sorted = [...state.toasts].sort((a, b) => b.createdAt - a.createdAt);
+
+      // Drop DOM nodes whose toasts are gone
+      const liveIds = new Set(sorted.map((t) => t.id));
       for (const [id, el] of toastEls.entries()) {
         if (!liveIds.has(id)) {
           el.classList.add("cas-toast-leaving");
@@ -437,18 +482,71 @@
           toastEls.delete(id);
         }
       }
-    };
 
-    const renderAll = () => {
-      const state = readState();
-      removeStaleToastsFromDom(state.toasts);
-      for (const toast of state.toasts) {
+      // Ensure each toast has a DOM node, and that the order in the DOM
+      // matches `sorted` (insertBefore re-orders without rebuilding).
+      let prev = null;
+      sorted.forEach((toast, idx) => {
         let el = toastEls.get(toast.id);
         if (!el) {
-          el = renderToast(toast);
-          if (el) toastEls.set(toast.id, el);
+          el = buildToastNode(toast);
+          if (!el) return;
+          toastEls.set(toast.id, el);
+          // Insert before `prev` (which is the next sibling in render order).
+          // Wait until we attach below — simpler to just append now and reorder.
+          container.appendChild(el);
+          requestAnimationFrame(() => el.classList.add("cas-toast-visible"));
         } else {
           applyPhaseToToast(el, toast);
+        }
+        // Set stack position for the opacity tier.
+        const visiblePos = expandedSummary ? -1 : idx;
+        if (visiblePos >= 0 && visiblePos < MAX_VISIBLE) {
+          el.dataset.stackPos = String(visiblePos);
+          el.classList.remove("cas-toast-hidden");
+        } else if (expandedSummary) {
+          el.dataset.stackPos = "0"; // uniform opacity when expanded
+          el.classList.remove("cas-toast-hidden");
+        } else {
+          el.classList.add("cas-toast-hidden");
+        }
+      });
+
+      // DOM order: walk sorted and insertBefore relative to next item.
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        const toast = sorted[i];
+        const el = toastEls.get(toast.id);
+        if (!el) continue;
+        // Move to its correct slot among siblings.
+        const desiredSibling = container.children[i];
+        if (desiredSibling && desiredSibling !== el) {
+          container.insertBefore(el, desiredSibling);
+        }
+      }
+
+      // Summary card "+ N más"
+      const overflow = sorted.length - MAX_VISIBLE;
+      if (overflow > 0 && !expandedSummary) {
+        if (!summaryEl || !summaryEl.isConnected) {
+          summaryEl = buildSummaryNode();
+        }
+        if (summaryEl) {
+          summaryEl.querySelector("[data-count]").textContent = String(overflow);
+          // append at end
+          if (summaryEl.parentElement !== container) {
+            container.appendChild(summaryEl);
+          } else {
+            container.appendChild(summaryEl); // re-append so it's last
+          }
+        }
+      } else if (summaryEl && summaryEl.parentElement === container) {
+        // Show summary even when expanded so user can collapse.
+        if (overflow > 0 && expandedSummary) {
+          summaryEl.querySelector("[data-count]").textContent = "Ocultar " + overflow;
+          summaryEl.setAttribute("aria-expanded", "true");
+          container.appendChild(summaryEl);
+        } else {
+          summaryEl.remove();
         }
       }
     };
@@ -456,8 +554,6 @@
     // ── Polling ──
     const since = () => {
       const state = readState();
-      // Poll for the oldest live, non-terminal toast — earliest createdAt is
-      // what determines whether a build job has started.
       const live = state.toasts.filter((t) => !t.dismissedAt && !t.terminalAt);
       if (live.length === 0) return 0;
       return Math.min(...live.map((t) => t.createdAt));
@@ -468,6 +564,8 @@
       let mutated = false;
       for (const t of state.toasts) {
         if (t.dismissedAt || t.terminalAt) continue;
+        // Only allow forward transitions to terminal states; let saved↔pending
+        // and pending↔running freely intermix.
         t.phase = phase;
         if (phase === "succeed" || phase === "failed" || phase === "timeout") {
           t.terminalAt = (extra && extra.endTime ? new Date(extra.endTime).getTime() : Date.now());
@@ -477,21 +575,31 @@
       if (mutated) {
         writeState(state);
         renderAll();
-        currentPhase = phase;
       }
     };
 
     const stopPoll = () => {
-      pollingFor = 0;
+      polling = false;
       if (pollTimer) {
         clearTimeout(pollTimer);
         pollTimer = null;
       }
     };
 
+    const scheduleNextPoll = (s) => {
+      const elapsed = Date.now() - s;
+      const interval = elapsed < FAST_WINDOW ? POLL_INTERVAL_FAST : POLL_INTERVAL_SLOW;
+      pollTimer = setTimeout(poll, interval);
+    };
+
     const poll = async () => {
       const s = since();
-      if (s === 0 || pollingFor !== s) return;
+      // No more live toasts → polling is genuinely done.
+      if (s === 0) {
+        polling = false;
+        return;
+      }
+      polling = true;
       try {
         const res = await fetch(`/api/build-status?since=${s}`, {
           headers: { accept: "application/json" },
@@ -501,8 +609,9 @@
         const data = await res.json();
         if (data.phase === "succeed") {
           setAllLivePhase("succeed", { endTime: data.endTime });
-          stopPoll();
-          // Schedule auto-dismiss after 12s.
+          // Schedule auto-dismiss after 12s. Don't stop polling outright —
+          // a new toast added during the dismiss window must still kick in,
+          // and ensurePolling() handles that.
           setTimeout(() => {
             const state = readState();
             for (const t of state.toasts) {
@@ -510,36 +619,43 @@
             }
             writeState(state);
             renderAll();
+            // After dismissals, see if anything else is still live.
+            ensurePolling();
           }, 12_500);
+          // Polling for THIS batch is done — but if a new toast comes in,
+          // ensurePolling() will restart us. Reset state so it can.
+          polling = false;
           return;
         }
         if (data.phase === "failed") {
           setAllLivePhase("failed");
-          stopPoll();
+          polling = false;
           return;
         }
         if (data.phase === "running") setAllLivePhase("running");
         else setAllLivePhase("pending");
       } catch {
-        // ignore transient errors; keep polling
+        // Transient error: keep polling.
       }
+      // Always reschedule unless we hit a terminal phase above.
       if (Date.now() - s > MAX_RUNTIME) {
         setAllLivePhase("timeout");
-        stopPoll();
+        polling = false;
         return;
       }
-      pollTimer = setTimeout(poll, POLL_INTERVAL);
+      scheduleNextPoll(s);
     };
 
     const ensurePolling = () => {
       const s = since();
       if (s === 0) {
-        stopPoll();
+        // Nothing to poll for. Safe to stop any orphaned timer.
+        if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+        polling = false;
         return;
       }
-      if (pollingFor === s) return; // already polling for this batch
-      stopPoll();
-      pollingFor = s;
+      if (polling || pollTimer) return; // already polling
+      polling = true;
       pollTimer = setTimeout(poll, FIRST_POLL_DELAY);
     };
 
@@ -564,8 +680,9 @@
       evaluate();
     }
 
-    // Expose a programmatic API for client-side mutations that trigger a
-    // rebuild without a redirect (e.g. drag-and-drop reordering).
+    // Programmatic API for client-side actions that trigger a rebuild
+    // (e.g. drag-and-drop reorder) — they don't navigate, so they can't
+    // rely on ?published=1 in the URL.
     window.__casAddBuildToast = (item) => {
       addToast(item || "Cambios guardados");
       renderAll();

@@ -1,0 +1,101 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import BackToList from "~/components/BackToList.astro";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq, slugify } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requirePermission(Astro, "categories", "edit");
+if (guard instanceof Response) return guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const name = strReq(fd, "name");
+
+    // New categories land at the end of the list (max sort_order + 10).
+    const { data: maxRow } = await supabase
+      .from("categories")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const next = ((maxRow?.sort_order ?? 0) as number) + 10;
+
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({
+        slug: str(fd, "slug") ?? slugify(name),
+        name,
+        kind: strReq(fd, "kind"),
+        description: str(fd, "description"),
+        sort_order: next,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    const label = encodeURIComponent("Categoría: " + name);
+    return Astro.redirect(`/categories/${data.id}?published=1&item=${label}`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+const kindOptions = [
+  { value: "philosophy", label: "Filosofía", hint: "ensayo, pensamiento" },
+  { value: "poetry", label: "Poesía", hint: "verso, antología" },
+  { value: "book", label: "Libro", hint: "para libros del catálogo" },
+  { value: "other", label: "Otro", hint: "narrativa, varios" },
+];
+---
+
+<AppLayout title="Nueva categoría" resource="categories">
+  <BackToList href="/categories" label="Categorías" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nueva categoría</h1>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se nombrará la categoría en el sitio.</p>
+      </div>
+      <Field label="Nombre" name="name" required description="Como se mostrará al público." />
+      <Field label="Slug" name="slug" description="Auto-generado del nombre si lo dejas vacío." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Tipo</h2>
+        <p class="card-section-desc">Determina dónde aparece la categoría.</p>
+      </div>
+      <Dropdown name="kind" value="philosophy" options={kindOptions} />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Descripción</h2>
+        <p class="card-section-desc">Texto opcional que aparece en la cabecera de la sección.</p>
+      </div>
+      <Field label="Descripción" name="description" type="textarea" rows={3} description="Opcional." />
+    </section>
+
+    <p class="text-xs text-stone-500">
+      Se agregará al final de la lista. Después puedes arrastrarla a la posición que quieras desde el panel de la izquierda.
+    </p>
+
+    <div class="flex flex-col sm:flex-row gap-3 pt-4 border-t border-stone-200">
+      <button type="submit" class="btn-primary">Crear categoría</button>
+      <a href="/categories" class="btn">Cancelar</a>
+    </div>
+  </form>
+</AppLayout>
