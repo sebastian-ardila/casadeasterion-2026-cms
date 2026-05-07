@@ -92,7 +92,9 @@ const isNew = Astro.url.pathname.endsWith("/new");
     color: #57534e;
   }
   .lp-link {
-    display: block;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
     padding: 12px 20px;
     border-bottom: 1px solid #f5f5f4;
     transition: background-color 0.1s;
@@ -103,6 +105,35 @@ const isNew = Astro.url.pathname.endsWith("/new");
   .lp-link-active {
     background: #f5f5f4;
     border-left: 2px solid #1c1917;
+  }
+  .lp-thumb {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    background: #f5f5f4;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #a8a29e;
+  }
+  .lp-thumb-photo {
+    border-radius: 9999px;
+  }
+  .lp-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .lp-thumb svg {
+    width: 22px;
+    height: 22px;
+    opacity: 0.7;
+  }
+  .lp-body {
+    flex: 1 1 0%;
+    min-width: 0;
   }
   .lp-title {
     font-weight: 500;
@@ -178,6 +209,11 @@ const isNew = Astro.url.pathname.endsWith("/new");
 
       empty?.classList.add("hidden");
       list.classList.remove("hidden");
+
+      // Inline SVG placeholders, kept short so we can embed many of them.
+      const PLACEHOLDER_PHOTO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>`;
+      const PLACEHOLDER_COVER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-7 7"/></svg>`;
+
       list.innerHTML = items
         .map((it) => {
           const active = it.id === activeId;
@@ -185,14 +221,23 @@ const isNew = Astro.url.pathname.endsWith("/new");
           const status = it.status
             ? `<span class="lp-status ${it.status === "published" ? "lp-status-pub" : "lp-status-draft"}">${it.status === "published" ? "pub" : "borr"}</span>`
             : "";
+          const isPhoto = it.imageStyle === "photo";
+          const thumbClass = "lp-thumb" + (isPhoto ? " lp-thumb-photo" : "");
+          const placeholder = isPhoto ? PLACEHOLDER_PHOTO : PLACEHOLDER_COVER;
+          const thumb = it.imageUrl
+            ? `<div class="${thumbClass}"><img src="${escape(it.imageUrl)}" alt="" loading="lazy" onerror="this.parentElement.innerHTML=this.dataset.fallback;" data-fallback="${escape(placeholder)}"/></div>`
+            : `<div class="${thumbClass}">${placeholder}</div>`;
           return `
             <li>
               <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch>
-                <div class="lp-row-top">
-                  <p class="lp-title">${escape(it.title)}</p>
-                  ${status}
+                ${thumb}
+                <div class="lp-body">
+                  <div class="lp-row-top">
+                    <p class="lp-title">${escape(it.title)}</p>
+                    ${status}
+                  </div>
+                  ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
                 </div>
-                ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
               </a>
             </li>`;
         })

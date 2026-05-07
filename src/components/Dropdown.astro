@@ -9,6 +9,11 @@ export interface DropdownOption {
   value: string;
   label: string;
   hint?: string;
+  /** Optional thumbnail (URL). If omitted, a generic person icon is shown
+   *  when `iconStyle` is "person", or no icon at all otherwise. */
+  imageUrl?: string | null;
+  /** "person" → round thumbnail with user fallback; "none" (default) → no thumb. */
+  iconStyle?: "person" | "none";
 }
 
 interface Props {
@@ -37,6 +42,8 @@ const {
 
 const current = options.find((o) => o.value === value);
 const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
+
+const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>`;
 ---
 
 <div
@@ -55,8 +62,28 @@ const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
     aria-expanded="false"
     data-dd-button
   >
-    <span class="cas-dd-label" data-dd-display>
-      {current ? current.label : <span class="text-stone-400">{placeholder}</span>}
+    <span class="cas-dd-label flex items-center gap-2 min-w-0" data-dd-display>
+      {current ? (
+        <>
+          {current.iconStyle === "person" && (
+            <span class="cas-dd-thumb shrink-0">
+              {current.imageUrl ? (
+                <img
+                  src={current.imageUrl}
+                  alt=""
+                  referrerpolicy="no-referrer"
+                  onerror={`this.parentElement.innerHTML='${PERSON_FALLBACK.replace(/'/g, "\\'")}';`}
+                />
+              ) : (
+                <Fragment set:html={PERSON_FALLBACK} />
+              )}
+            </span>
+          )}
+          <span class="truncate">{current.label}</span>
+        </>
+      ) : (
+        <span class="text-stone-400">{placeholder}</span>
+      )}
     </span>
     <svg
       class="cas-dd-caret"
@@ -83,13 +110,30 @@ const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
           aria-selected={opt.value === value ? "true" : "false"}
           data-dd-option
           data-value={opt.value}
+          data-label={opt.label}
+          data-image={opt.imageUrl ?? ""}
+          data-icon-style={opt.iconStyle ?? "none"}
           class:list={[
             "cas-dd-option",
             opt.value === value && "cas-dd-option-selected",
           ]}
         >
-          <span class="font-medium">{opt.label}</span>
-          {opt.hint && <span class="text-stone-500 text-xs ml-2">{opt.hint}</span>}
+          {opt.iconStyle === "person" && (
+            <span class="cas-dd-thumb cas-dd-thumb-option shrink-0">
+              {opt.imageUrl ? (
+                <img
+                  src={opt.imageUrl}
+                  alt=""
+                  referrerpolicy="no-referrer"
+                  onerror={`this.parentElement.innerHTML='${PERSON_FALLBACK.replace(/'/g, "\\'")}';`}
+                />
+              ) : (
+                <Fragment set:html={PERSON_FALLBACK} />
+              )}
+            </span>
+          )}
+          <span class="font-medium truncate">{opt.label}</span>
+          {opt.hint && <span class="text-stone-500 text-xs ml-2 shrink-0">{opt.hint}</span>}
         </button>
       </li>
     ))}
@@ -186,6 +230,39 @@ const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
     background: #1c1917; /* stone-900 */
     color: #fff;
   }
+
+  /* Thumbnails (used for "person" iconStyle dropdowns like the author selector) */
+  .cas-dd-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #f5f5f4;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #a8a29e;
+    border: 1px solid #e7e5e4;
+  }
+  .cas-dd-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .cas-dd-thumb svg {
+    width: 14px;
+    height: 14px;
+  }
+  .cas-dd-thumb-option {
+    margin-right: 8px;
+  }
+  /* Selected option in the menu uses dark colors — invert the thumb fallback. */
+  .cas-dd-option-selected .cas-dd-thumb {
+    background: #292524;
+    color: #d6d3d1;
+    border-color: #44403c;
+  }
 </style>
 
 <script is:inline>
@@ -252,22 +329,40 @@ const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
       }
     };
 
-    const setValue = (root, value, label) => {
+    const PERSON_FALLBACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>';
+
+    const escapeHtml = (s) =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    const setValue = (root, option) => {
       const input = root.querySelector("[data-dd-input]");
       const display = root.querySelector("[data-dd-display]");
       if (!input || !display) return;
       const previousValue = input.value;
-      input.value = value;
-      display.textContent = label;
+      input.value = option.value;
+
+      // Re-render the display to keep thumbnail (if iconStyle === "person").
+      const iconStyle = option.iconStyle || "none";
+      const label = option.label;
+      const img = option.image;
+      let thumbHtml = "";
+      if (iconStyle === "person") {
+        if (img) {
+          thumbHtml = `<span class="cas-dd-thumb shrink-0"><img src="${escapeHtml(img)}" alt="" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='${PERSON_FALLBACK.replace(/'/g, "\\'")}';"/></span>`;
+        } else {
+          thumbHtml = `<span class="cas-dd-thumb shrink-0">${PERSON_FALLBACK}</span>`;
+        }
+      }
+      display.innerHTML = thumbHtml + `<span class="truncate">${escapeHtml(label)}</span>`;
+
       // Update aria-selected on options
       root.querySelectorAll("[data-dd-option]").forEach((o) => {
-        const isSel = o.dataset.value === value;
+        const isSel = o.dataset.value === option.value;
         o.setAttribute("aria-selected", isSel ? "true" : "false");
         o.classList.toggle("cas-dd-option-selected", isSel);
       });
-      // Fire change event so other code listening can react.
       input.dispatchEvent(new Event("change", { bubbles: true }));
-      if (root.dataset.submitOnChange === "1" && previousValue !== value) {
+      if (root.dataset.submitOnChange === "1" && previousValue !== option.value) {
         const form = root.closest("form");
         if (form) form.requestSubmit();
       }
@@ -293,7 +388,12 @@ const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
       if (option && openDd) {
         const root = option.closest("[data-dropdown]");
         if (root) {
-          setValue(root, option.dataset.value || "", option.textContent?.trim() || "");
+          setValue(root, {
+            value: option.dataset.value || "",
+            label: option.dataset.label || option.textContent?.trim() || "",
+            image: option.dataset.image || "",
+            iconStyle: option.dataset.iconStyle || "none",
+          });
           closeOpen();
         }
         return;
@@ -345,7 +445,12 @@ const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
           e.preventDefault();
           const root = target.closest("[data-dropdown]");
           if (root) {
-            setValue(root, target.dataset.value || "", target.textContent?.trim() || "");
+            setValue(root, {
+              value: target.dataset.value || "",
+              label: target.dataset.label || target.textContent?.trim() || "",
+              image: target.dataset.image || "",
+              iconStyle: target.dataset.iconStyle || "none",
+            });
             closeOpen();
             const btn = root.querySelector("[data-dd-button]");
             btn?.focus();

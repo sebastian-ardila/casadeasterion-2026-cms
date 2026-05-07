@@ -8,6 +8,9 @@ type Item = {
   subtitle: string | null;
   status?: string | null;
   href: string;
+  imageUrl?: string | null;
+  /** "photo" → round, used for authors. "cover" → rectangular, used for books/articles. */
+  imageStyle?: "photo" | "cover";
 };
 
 const ALLOWED = new Set<Resource>(["posts", "books", "authors"]);
@@ -37,7 +40,7 @@ export const GET: APIRoute = async (ctx) => {
   if (resource === "posts") {
     const { data } = await supabase
       .from("posts")
-      .select("id, title, slug, status, updated_at, authors(name)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors(name)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((p: any) => ({
       id: p.id,
@@ -45,11 +48,13 @@ export const GET: APIRoute = async (ctx) => {
       subtitle: p.authors?.name ?? p.slug,
       status: p.status,
       href: `/posts/${p.id}`,
+      imageUrl: p.cover_image_url ?? null,
+      imageStyle: "cover",
     }));
   } else if (resource === "books") {
     const { data } = await supabase
       .from("books")
-      .select("id, title, slug, status, updated_at, authors(name)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors(name)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((b: any) => ({
       id: b.id,
@@ -57,17 +62,21 @@ export const GET: APIRoute = async (ctx) => {
       subtitle: b.authors?.name ?? b.slug,
       status: b.status,
       href: `/books/${b.id}`,
+      imageUrl: b.cover_image_url ?? null,
+      imageStyle: "cover",
     }));
   } else if (resource === "authors") {
     const { data } = await supabase
       .from("authors")
-      .select("id, name, slug")
+      .select("id, name, slug, photo_url")
       .order("name");
     items = (data ?? []).map((a: any) => ({
       id: a.id,
       title: a.name,
       subtitle: `/${a.slug}`,
       href: `/authors/${a.id}`,
+      imageUrl: a.photo_url ?? null,
+      imageStyle: "photo",
     }));
   }
 
