@@ -563,5 +563,13 @@
     } else {
       evaluate();
     }
+
+    // Expose a programmatic API for client-side mutations that trigger a
+    // rebuild without a redirect (e.g. drag-and-drop reordering).
+    window.__casAddBuildToast = (item) => {
+      addToast(item || "Cambios guardados");
+      renderAll();
+      ensurePolling();
+    };
   })();
 </script>
