@@ -40,7 +40,7 @@ if (Astro.request.method === "POST") {
       .upsert(rows, { onConflict: "key" });
     if (error) throw error;
 
-    return Astro.redirect("/site?published=1");
+    return Astro.redirect("/site?published=1&item=" + encodeURIComponent("Configuración del sitio"));
   } catch (err) {
     formError = friendlyError(err);
   }

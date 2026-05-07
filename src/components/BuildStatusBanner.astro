@@ -1,134 +1,137 @@
 ---
-// Floating banner that appears immediately after a publish-affecting save and
-// transitions through phases:
-//   saved        → just submitted, scheduling rebuild (instant)
-//   pending      → trigger queued, waiting for the cron dispatcher
-//   running      → Amplify build job in progress
-//   succeed/fail → terminal
+// Stack of build/publish toasts. Each publish-affecting save adds a toast to
+// the queue (driven by `?published=1&item=…` on the redirect URL). All toasts
+// share the same Amplify build status — when the rebuild succeeds/fails, every
+// active toast transitions together.
 //
-// Driven by sessionStorage["cda_publish_at"] = Date.now() set when the URL
-// has ?published=1 (set by every CMS POST handler that mutates published
-// content). Persists across view transitions via transition:persist.
+// Why a stack and not a single banner? Editors often save several things back
+// to back (e.g. an author photo, then a new article). The debounced rebuild
+// hook fires only once, but each save deserves its own visual confirmation.
 ---
 
 <div
-  id="cda-build-banner"
-  data-phase="saved"
-  class="cas-banner hidden"
-  role="status"
+  id="cda-toast-stack"
+  class="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 pointer-events-none w-[380px] max-w-[calc(100vw-2rem)]"
   aria-live="polite"
->
-  <div class="cas-banner-glow" aria-hidden="true"></div>
-  <div class="flex items-start gap-3 p-4">
-    <div id="cda-build-icon" class="cas-banner-icon shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-colors duration-300">
-      {/* Per-phase icons. Visibility toggled by JS via data-phase. */}
-      <svg data-icon="saved" class="cas-icon w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-        <polyline points="17 21 17 13 7 13 7 21"/>
-        <polyline points="7 3 7 8 15 8"/>
-      </svg>
-      <svg data-icon="pending" class="cas-icon cas-icon-spin w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" stroke-opacity="0.2"></circle>
-        <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round"></path>
-      </svg>
-      <svg data-icon="running" class="cas-icon cas-icon-spin w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" stroke-opacity="0.2"></circle>
-        <path d="M21 12a9 9 0 0 1-9 9" stroke-linecap="round"></path>
-      </svg>
-      <svg data-icon="succeed" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-      <svg data-icon="failed" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
-      <svg data-icon="timeout" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="9"/>
-        <polyline points="12 7 12 12 15 14"/>
-      </svg>
-    </div>
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2">
-        <p id="cda-build-title" class="font-medium text-sm text-stone-900">Cambios guardados</p>
-        <span class="cas-banner-pill" id="cda-build-pill">Programando</span>
-      </div>
-      <p id="cda-build-subtitle" class="text-xs text-stone-600 mt-1 leading-relaxed">Disparando publicación al sitio público.</p>
-      <a
-        id="cda-build-link"
-        href="https://casadeasterionediciones.com"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="hidden items-center gap-1 text-xs text-stone-700 hover:text-stone-900 underline mt-2"
-      >
-        Ver sitio público
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M7 17 17 7"/>
-          <path d="M7 7h10v10"/>
+></div>
+
+<template id="cda-toast-template">
+  <div
+    class="cas-toast"
+    data-phase="saved"
+    role="status"
+  >
+    <div class="cas-toast-glow" aria-hidden="true"></div>
+    <div class="flex items-start gap-3 p-3.5">
+      <div class="cas-toast-icon shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors duration-300">
+        <svg data-icon="saved" class="cas-icon w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
         </svg>
-      </a>
+        <svg data-icon="pending" class="cas-icon cas-icon-spin w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke-opacity="0.18"></circle>
+          <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round"></path>
+        </svg>
+        <svg data-icon="running" class="cas-icon cas-icon-spin w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke-opacity="0.18"></circle>
+          <path d="M21 12a9 9 0 0 1-9 9" stroke-linecap="round"></path>
+        </svg>
+        <svg data-icon="succeed" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <svg data-icon="failed" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        <svg data-icon="timeout" class="cas-icon w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 15 14"/>
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="cas-toast-item font-medium text-[13px] text-stone-900 truncate">Cambios</p>
+          <span class="cas-toast-pill" data-pill>Programando</span>
+        </div>
+        <p class="cas-toast-status text-[11px] text-stone-600 mt-0.5 leading-snug flex items-center gap-1.5">
+          <span class="cas-loading-dots">
+            <span></span><span></span><span></span>
+          </span>
+          <span data-status-text>Disparando publicación al sitio público.</span>
+        </p>
+      </div>
+      <button
+        type="button"
+        class="cas-toast-close shrink-0 cursor-pointer w-6 h-6 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center transition"
+        aria-label="Cerrar"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
     </div>
-    <button
-      type="button"
-      id="cda-build-close"
-      aria-label="Cerrar"
-      class="shrink-0 cursor-pointer w-7 h-7 rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-100 flex items-center justify-center transition"
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
-    </button>
+    <div class="cas-toast-progress-track">
+      <div class="cas-toast-progress-bar" style="width: 8%"></div>
+    </div>
   </div>
-  <div class="cas-banner-progress-track">
-    <div id="cda-build-progress" class="cas-banner-progress-bar" style="width: 8%"></div>
-  </div>
-</div>
+</template>
 
 <style is:global>
-  /* Base shell */
-  .cas-banner {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    z-index: 50;
-    width: 380px;
-    max-width: calc(100vw - 2rem);
-    background: rgba(255, 255, 255, 0.96);
+  /* Stack pointer-events: only the toasts themselves accept clicks. */
+  #cda-toast-stack > * { pointer-events: auto; }
+
+  .cas-toast {
+    position: relative;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.97);
     backdrop-filter: saturate(180%) blur(8px);
     -webkit-backdrop-filter: saturate(180%) blur(8px);
-    border: 1px solid #e7e5e4; /* stone-200 */
+    border: 1px solid #e7e5e4;
     border-left-width: 3px;
     box-shadow:
       0 18px 40px -12px rgba(28, 25, 23, 0.18),
       0 4px 12px -4px rgba(28, 25, 23, 0.1);
     overflow: hidden;
-    transform: translateY(8px);
+    transform: translateY(8px) scale(0.98);
     opacity: 0;
     transition:
       opacity 220ms ease-out,
       transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
       border-color 280ms ease,
-      background 280ms ease;
+      max-height 280ms ease,
+      margin 280ms ease,
+      padding 280ms ease;
+    max-height: 200px;
   }
-  .cas-banner:not(.hidden) {
-    transform: translateY(0);
+  .cas-toast.cas-toast-visible {
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
+  .cas-toast.cas-toast-leaving {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+  }
 
-  .cas-banner-glow {
+  .cas-toast-glow {
     position: absolute;
-    top: -40px;
-    left: -40px;
-    width: 160px;
-    height: 160px;
+    top: -36px;
+    left: -36px;
+    width: 140px;
+    height: 140px;
     border-radius: 50%;
     pointer-events: none;
-    filter: blur(28px);
-    opacity: 0.55;
+    filter: blur(26px);
+    opacity: 0.5;
     transition: background 320ms ease, opacity 320ms ease;
   }
 
-  .cas-banner-pill {
+  .cas-toast-pill {
     display: inline-flex;
     align-items: center;
     font-size: 9px;
@@ -140,7 +143,7 @@
     transition: background 220ms ease, color 220ms ease;
   }
 
-  .cas-banner-icon {
+  .cas-toast-icon {
     transition: background 280ms ease, color 280ms ease;
   }
 
@@ -151,20 +154,69 @@
     to { transform: rotate(360deg); }
   }
 
-  .cas-banner-progress-track {
+  /* Small breathing ring around the icon for live phases. */
+  .cas-toast[data-phase="saved"] .cas-toast-icon,
+  .cas-toast[data-phase="pending"] .cas-toast-icon,
+  .cas-toast[data-phase="running"] .cas-toast-icon {
+    position: relative;
+  }
+  .cas-toast[data-phase="saved"] .cas-toast-icon::after,
+  .cas-toast[data-phase="pending"] .cas-toast-icon::after,
+  .cas-toast[data-phase="running"] .cas-toast-icon::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    opacity: 0.25;
+    animation: cas-breathe 2.2s ease-in-out infinite;
+  }
+  @keyframes cas-breathe {
+    0%, 100% { transform: scale(1); opacity: 0.0; }
+    50%      { transform: scale(1.18); opacity: 0.35; }
+  }
+
+  /* Three-dot loading indicator next to status text. */
+  .cas-loading-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 8px;
+  }
+  .cas-loading-dots span {
+    width: 3px;
     height: 3px;
-    background: rgba(120, 113, 108, 0.08); /* stone-500/8 */
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.4;
+    animation: cas-dot 1.2s ease-in-out infinite;
+  }
+  .cas-loading-dots span:nth-child(2) { animation-delay: 0.18s; }
+  .cas-loading-dots span:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes cas-dot {
+    0%, 80%, 100% { transform: scale(0.7); opacity: 0.3; }
+    40%           { transform: scale(1.2); opacity: 1; }
+  }
+  /* Hide dots on terminal phases. */
+  .cas-toast[data-phase="succeed"] .cas-loading-dots,
+  .cas-toast[data-phase="failed"] .cas-loading-dots,
+  .cas-toast[data-phase="timeout"] .cas-loading-dots {
+    display: none;
+  }
+
+  .cas-toast-progress-track {
+    height: 3px;
+    background: rgba(120, 113, 108, 0.08);
     overflow: hidden;
     position: relative;
   }
-  .cas-banner-progress-bar {
+  .cas-toast-progress-bar {
     height: 100%;
     transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1), background 280ms ease;
-    background: #44403c; /* stone-700 */
+    background: #44403c;
   }
-
-  /* Indeterminate stripe overlay during running phase */
-  .cas-banner[data-phase="running"] .cas-banner-progress-track::after {
+  /* Animated stripe for the running phase. */
+  .cas-toast[data-phase="running"] .cas-toast-progress-track::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -184,226 +236,325 @@
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
   }
+  /* Indeterminate fill for "saved" / "pending" phases — slow pulse so the
+     bar visibly does *something* even before the build job is detected. */
+  .cas-toast[data-phase="saved"] .cas-toast-progress-bar,
+  .cas-toast[data-phase="pending"] .cas-toast-progress-bar {
+    animation: cas-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes cas-pulse {
+    0%, 100% { opacity: 0.6; }
+    50%      { opacity: 1; }
+  }
 
   /* ─────────────────────────────────────────────
      Per-phase color treatments
      ───────────────────────────────────────────── */
-
-  /* Saved — neutral stone, slow heartbeat */
-  .cas-banner[data-phase="saved"] {
-    border-left-color: #78716c; /* stone-500 */
+  .cas-toast[data-phase="saved"] {
+    border-left-color: #78716c;
   }
-  .cas-banner[data-phase="saved"] .cas-banner-glow { background: #d6d3d1; opacity: 0.4; }
-  .cas-banner[data-phase="saved"] .cas-banner-icon { background: #f5f5f4; color: #44403c; }
-  .cas-banner[data-phase="saved"] .cas-banner-pill { background: #f5f5f4; color: #57534e; }
-  .cas-banner[data-phase="saved"] .cas-banner-progress-bar { background: #78716c; }
+  .cas-toast[data-phase="saved"] .cas-toast-glow { background: #d6d3d1; opacity: 0.35; }
+  .cas-toast[data-phase="saved"] .cas-toast-icon { background: #f5f5f4; color: #44403c; }
+  .cas-toast[data-phase="saved"] .cas-toast-pill { background: #f5f5f4; color: #57534e; }
+  .cas-toast[data-phase="saved"] .cas-toast-progress-bar { background: #78716c; }
 
-  /* Pending — amber/golden, queueing */
-  .cas-banner[data-phase="pending"] {
-    border-left-color: #d97706; /* amber-600 */
+  .cas-toast[data-phase="pending"] {
+    border-left-color: #d97706;
   }
-  .cas-banner[data-phase="pending"] .cas-banner-glow { background: #fbbf24; opacity: 0.35; }
-  .cas-banner[data-phase="pending"] .cas-banner-icon { background: #fef3c7; color: #92400e; }
-  .cas-banner[data-phase="pending"] .cas-banner-pill { background: #fef3c7; color: #92400e; }
-  .cas-banner[data-phase="pending"] .cas-banner-progress-bar { background: #d97706; }
+  .cas-toast[data-phase="pending"] .cas-toast-glow { background: #fbbf24; opacity: 0.35; }
+  .cas-toast[data-phase="pending"] .cas-toast-icon { background: #fef3c7; color: #92400e; }
+  .cas-toast[data-phase="pending"] .cas-toast-pill { background: #fef3c7; color: #92400e; }
+  .cas-toast[data-phase="pending"] .cas-toast-progress-bar { background: #d97706; }
 
-  /* Running — indigo/blue, in-flight */
-  .cas-banner[data-phase="running"] {
-    border-left-color: #4f46e5; /* indigo-600 */
+  .cas-toast[data-phase="running"] {
+    border-left-color: #4f46e5;
   }
-  .cas-banner[data-phase="running"] .cas-banner-glow { background: #818cf8; opacity: 0.45; }
-  .cas-banner[data-phase="running"] .cas-banner-icon { background: #e0e7ff; color: #3730a3; }
-  .cas-banner[data-phase="running"] .cas-banner-pill { background: #e0e7ff; color: #3730a3; }
-  .cas-banner[data-phase="running"] .cas-banner-progress-bar { background: #4f46e5; }
+  .cas-toast[data-phase="running"] .cas-toast-glow { background: #818cf8; opacity: 0.45; }
+  .cas-toast[data-phase="running"] .cas-toast-icon { background: #e0e7ff; color: #3730a3; }
+  .cas-toast[data-phase="running"] .cas-toast-pill { background: #e0e7ff; color: #3730a3; }
+  .cas-toast[data-phase="running"] .cas-toast-progress-bar { background: #4f46e5; }
 
-  /* Succeed — green */
-  .cas-banner[data-phase="succeed"] {
-    border-left-color: #059669; /* emerald-600 */
+  .cas-toast[data-phase="succeed"] {
+    border-left-color: #059669;
   }
-  .cas-banner[data-phase="succeed"] .cas-banner-glow { background: #34d399; opacity: 0.4; }
-  .cas-banner[data-phase="succeed"] .cas-banner-icon { background: #d1fae5; color: #065f46; }
-  .cas-banner[data-phase="succeed"] .cas-banner-pill { background: #d1fae5; color: #065f46; }
-  .cas-banner[data-phase="succeed"] .cas-banner-progress-bar { background: #059669; }
+  .cas-toast[data-phase="succeed"] .cas-toast-glow { background: #34d399; opacity: 0.4; }
+  .cas-toast[data-phase="succeed"] .cas-toast-icon { background: #d1fae5; color: #065f46; }
+  .cas-toast[data-phase="succeed"] .cas-toast-pill { background: #d1fae5; color: #065f46; }
+  .cas-toast[data-phase="succeed"] .cas-toast-progress-bar { background: #059669; }
 
-  /* Failed — red */
-  .cas-banner[data-phase="failed"] {
-    border-left-color: #dc2626; /* red-600 */
+  .cas-toast[data-phase="failed"] {
+    border-left-color: #dc2626;
   }
-  .cas-banner[data-phase="failed"] .cas-banner-glow { background: #f87171; opacity: 0.4; }
-  .cas-banner[data-phase="failed"] .cas-banner-icon { background: #fee2e2; color: #991b1b; }
-  .cas-banner[data-phase="failed"] .cas-banner-pill { background: #fee2e2; color: #991b1b; }
-  .cas-banner[data-phase="failed"] .cas-banner-progress-bar { background: #dc2626; }
+  .cas-toast[data-phase="failed"] .cas-toast-glow { background: #f87171; opacity: 0.4; }
+  .cas-toast[data-phase="failed"] .cas-toast-icon { background: #fee2e2; color: #991b1b; }
+  .cas-toast[data-phase="failed"] .cas-toast-pill { background: #fee2e2; color: #991b1b; }
+  .cas-toast[data-phase="failed"] .cas-toast-progress-bar { background: #dc2626; }
 
-  /* Timeout — slate */
-  .cas-banner[data-phase="timeout"] {
-    border-left-color: #475569; /* slate-600 */
+  .cas-toast[data-phase="timeout"] {
+    border-left-color: #475569;
   }
-  .cas-banner[data-phase="timeout"] .cas-banner-glow { background: #94a3b8; opacity: 0.35; }
-  .cas-banner[data-phase="timeout"] .cas-banner-icon { background: #f1f5f9; color: #334155; }
-  .cas-banner[data-phase="timeout"] .cas-banner-pill { background: #f1f5f9; color: #334155; }
-  .cas-banner[data-phase="timeout"] .cas-banner-progress-bar { background: #475569; }
+  .cas-toast[data-phase="timeout"] .cas-toast-glow { background: #94a3b8; opacity: 0.35; }
+  .cas-toast[data-phase="timeout"] .cas-toast-icon { background: #f1f5f9; color: #334155; }
+  .cas-toast[data-phase="timeout"] .cas-toast-pill { background: #f1f5f9; color: #334155; }
+  .cas-toast[data-phase="timeout"] .cas-toast-progress-bar { background: #475569; }
 </style>
 
 <script is:inline>
   (() => {
-    if (window.__casBuildBannerInit) return;
-    window.__casBuildBannerInit = true;
+    if (window.__casToastInit) return;
+    window.__casToastInit = true;
 
-    const PUBLISH_KEY = "cda_publish_at";
+    const STORAGE_KEY = "cda_toasts_v2";
     const FIRST_POLL_DELAY = 1500;
     const POLL_INTERVAL = 5000;
     const MAX_RUNTIME = 10 * 60 * 1000;
 
-    let timer = null;
-    let pollingForSince = 0;
-    let lastPhase = null;
-
     const PHASE_CONFIG = {
-      saved:   { title: "Cambios guardados",        pill: "Programando", subtitle: "Disparando publicación al sitio público.", progress: 8,   showLink: false },
-      pending: { title: "Esperando rebuild",        pill: "En cola",     subtitle: "Esperando que Amplify reciba el trigger.",  progress: 22,  showLink: false },
-      running: { title: "Construyendo sitio",       pill: "Publicando",  subtitle: "Generando HTML estático en Amplify.",       progress: 65,  showLink: false },
-      succeed: { title: "Sitio publicado",          pill: "Listo",       subtitle: "El sitio público se actualizó.",            progress: 100, showLink: true  },
-      failed:  { title: "Falló el deploy",          pill: "Error",       subtitle: "Revisa el build log en Amplify.",           progress: 100, showLink: false },
-      timeout: { title: "Tomó más de lo esperado", pill: "En curso",    subtitle: "El build sigue corriendo. Revisa Amplify.", progress: 92,  showLink: false },
+      saved:   { pill: "Programando", text: "Disparando publicación al sitio público.", progress: 12  },
+      pending: { pill: "En cola",     text: "Esperando que Amplify reciba el trigger.",  progress: 28  },
+      running: { pill: "Publicando",  text: "Generando HTML estático en Amplify.",       progress: 70  },
+      succeed: { pill: "Listo",       text: "El sitio público se actualizó.",            progress: 100 },
+      failed:  { pill: "Error",       text: "Revisa el build log en Amplify.",           progress: 100 },
+      timeout: { pill: "En curso",    text: "El build sigue corriendo. Revisa Amplify.", progress: 92  },
     };
 
-    const stop = () => {
-      pollingForSince = 0;
-      lastPhase = null;
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
+    let pollTimer = null;
+    let pollingFor = 0;
+    let currentPhase = null;
+    let toastEls = new Map(); // toast id → element
+
+    // ── State persistence ──
+    const readState = () => {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) return { toasts: [] };
+        const parsed = JSON.parse(raw);
+        // Drop stale toasts (older than MAX_RUNTIME or already terminal & expired).
+        const now = Date.now();
+        const live = (parsed.toasts ?? []).filter((t) => {
+          if (t.dismissedAt) return false;
+          if (t.terminalAt && now - t.terminalAt > 12_000) return false;
+          if (now - t.createdAt > MAX_RUNTIME) return false;
+          return true;
+        });
+        return { ...parsed, toasts: live };
+      } catch {
+        return { toasts: [] };
       }
     };
+    const writeState = (state) => {
+      try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    };
 
-    const els = () => ({
-      banner: document.getElementById("cda-build-banner"),
-      title: document.getElementById("cda-build-title"),
-      pill: document.getElementById("cda-build-pill"),
-      subtitle: document.getElementById("cda-build-subtitle"),
-      progress: document.getElementById("cda-build-progress"),
-      link: document.getElementById("cda-build-link"),
-      close: document.getElementById("cda-build-close"),
-      icon: document.getElementById("cda-build-icon"),
-    });
+    const addToast = (item) => {
+      const state = readState();
+      const id = `t_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      state.toasts.push({
+        id,
+        item: item || "Cambios guardados",
+        createdAt: Date.now(),
+        phase: "saved",
+        terminalAt: null,
+        dismissedAt: null,
+      });
+      writeState(state);
+      return id;
+    };
 
-    const showIcon = (banner, phase) => {
-      banner.querySelectorAll(".cas-icon").forEach((svg) => {
+    const updateToast = (id, patch) => {
+      const state = readState();
+      const t = state.toasts.find((x) => x.id === id);
+      if (!t) return;
+      Object.assign(t, patch);
+      writeState(state);
+    };
+
+    const dismissToast = (id) => {
+      const state = readState();
+      const t = state.toasts.find((x) => x.id === id);
+      if (!t) return;
+      t.dismissedAt = Date.now();
+      writeState(state);
+    };
+
+    // ── DOM rendering ──
+    const stack = () => document.getElementById("cda-toast-stack");
+    const tpl = () => document.getElementById("cda-toast-template");
+
+    const showIcon = (el, phase) => {
+      el.querySelectorAll(".cas-icon").forEach((svg) => {
         svg.classList.toggle("hidden", svg.getAttribute("data-icon") !== phase);
       });
     };
 
-    const setPhase = (phase, extra) => {
-      const e = els();
-      if (!e.banner) return;
-      const cfg = PHASE_CONFIG[phase];
-      if (!cfg) return;
-
-      lastPhase = phase;
-      e.banner.dataset.phase = phase;
-      e.banner.classList.remove("hidden");
-
-      e.title.textContent = cfg.title;
-      e.pill.textContent = cfg.pill;
-
-      if (phase === "succeed" && extra && extra.endTime && extra.since) {
-        const elapsed = Math.round((new Date(extra.endTime).getTime() - extra.since) / 1000);
-        e.subtitle.textContent = `Listo en ${elapsed}s. El sitio público ya está actualizado.`;
+    const applyPhaseToToast = (el, toast) => {
+      const cfg = PHASE_CONFIG[toast.phase] || PHASE_CONFIG.saved;
+      el.dataset.phase = toast.phase;
+      el.querySelector(".cas-toast-item").textContent = toast.item;
+      el.querySelector("[data-pill]").textContent = cfg.pill;
+      const txt = el.querySelector("[data-status-text]");
+      if (toast.phase === "succeed" && toast.terminalAt && toast.createdAt) {
+        const sec = Math.round((toast.terminalAt - toast.createdAt) / 1000);
+        txt.textContent = `Listo en ${sec}s. El sitio público ya está actualizado.`;
       } else {
-        e.subtitle.textContent = cfg.subtitle;
+        txt.textContent = cfg.text;
       }
-
-      // Smooth progress: never go backwards.
-      const cur = parseFloat(e.progress.style.width) || 0;
-      const target = phase === "succeed" || phase === "failed"
+      const bar = el.querySelector(".cas-toast-progress-bar");
+      const cur = parseFloat(bar.style.width) || 0;
+      bar.style.width = (toast.phase === "succeed" || toast.phase === "failed"
         ? cfg.progress
-        : Math.max(cur, cfg.progress);
-      e.progress.style.width = target + "%";
-
-      if (cfg.showLink) e.link.classList.remove("hidden"), e.link.classList.add("inline-flex");
-      else e.link.classList.add("hidden"), e.link.classList.remove("inline-flex");
-
-      showIcon(e.banner, phase);
+        : Math.max(cur, cfg.progress)) + "%";
+      showIcon(el, toast.phase);
     };
 
-    const dismiss = () => {
-      const e = els();
-      if (e.banner) e.banner.classList.add("hidden");
-      sessionStorage.removeItem(PUBLISH_KEY);
-      stop();
+    const renderToast = (toast) => {
+      const container = stack();
+      const t = tpl();
+      if (!container || !t) return null;
+      const node = t.content.firstElementChild.cloneNode(true);
+      applyPhaseToToast(node, toast);
+      // Wire the close button.
+      node.querySelector(".cas-toast-close").addEventListener("click", () => {
+        node.classList.add("cas-toast-leaving");
+        dismissToast(toast.id);
+        setTimeout(() => {
+          node.remove();
+          toastEls.delete(toast.id);
+        }, 280);
+      });
+      container.appendChild(node);
+      // Animate in on next frame.
+      requestAnimationFrame(() => node.classList.add("cas-toast-visible"));
+      return node;
     };
 
-    const wireClose = () => {
-      const e = els();
-      if (!e.close || e.close.dataset.casWired) return;
-      e.close.dataset.casWired = "1";
-      e.close.addEventListener("click", dismiss);
+    const removeStaleToastsFromDom = (liveToasts) => {
+      const liveIds = new Set(liveToasts.map((t) => t.id));
+      for (const [id, el] of toastEls.entries()) {
+        if (!liveIds.has(id)) {
+          el.classList.add("cas-toast-leaving");
+          setTimeout(() => el.remove(), 280);
+          toastEls.delete(id);
+        }
+      }
     };
 
-    const poll = async (since) => {
-      if (pollingForSince !== since) return;
+    const renderAll = () => {
+      const state = readState();
+      removeStaleToastsFromDom(state.toasts);
+      for (const toast of state.toasts) {
+        let el = toastEls.get(toast.id);
+        if (!el) {
+          el = renderToast(toast);
+          if (el) toastEls.set(toast.id, el);
+        } else {
+          applyPhaseToToast(el, toast);
+        }
+      }
+    };
+
+    // ── Polling ──
+    const since = () => {
+      const state = readState();
+      // Poll for the oldest live, non-terminal toast — earliest createdAt is
+      // what determines whether a build job has started.
+      const live = state.toasts.filter((t) => !t.dismissedAt && !t.terminalAt);
+      if (live.length === 0) return 0;
+      return Math.min(...live.map((t) => t.createdAt));
+    };
+
+    const setAllLivePhase = (phase, extra) => {
+      const state = readState();
+      let mutated = false;
+      for (const t of state.toasts) {
+        if (t.dismissedAt || t.terminalAt) continue;
+        t.phase = phase;
+        if (phase === "succeed" || phase === "failed" || phase === "timeout") {
+          t.terminalAt = (extra && extra.endTime ? new Date(extra.endTime).getTime() : Date.now());
+        }
+        mutated = true;
+      }
+      if (mutated) {
+        writeState(state);
+        renderAll();
+        currentPhase = phase;
+      }
+    };
+
+    const stopPoll = () => {
+      pollingFor = 0;
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const poll = async () => {
+      const s = since();
+      if (s === 0 || pollingFor !== s) return;
       try {
-        const res = await fetch(`/api/build-status?since=${since}`, {
+        const res = await fetch(`/api/build-status?since=${s}`, {
           headers: { accept: "application/json" },
           credentials: "same-origin",
         });
         if (!res.ok) throw new Error("http_" + res.status);
         const data = await res.json();
         if (data.phase === "succeed") {
-          setPhase("succeed", { endTime: data.endTime, since });
-          sessionStorage.removeItem(PUBLISH_KEY);
+          setAllLivePhase("succeed", { endTime: data.endTime });
+          stopPoll();
+          // Schedule auto-dismiss after 12s.
           setTimeout(() => {
-            const e = els();
-            if (e.banner) e.banner.classList.add("hidden");
-          }, 12000);
-          stop();
+            const state = readState();
+            for (const t of state.toasts) {
+              if (t.terminalAt && Date.now() - t.terminalAt > 11_000) t.dismissedAt = Date.now();
+            }
+            writeState(state);
+            renderAll();
+          }, 12_500);
           return;
         }
         if (data.phase === "failed") {
-          setPhase("failed");
-          sessionStorage.removeItem(PUBLISH_KEY);
-          stop();
+          setAllLivePhase("failed");
+          stopPoll();
           return;
         }
-        if (data.phase === "running") setPhase("running");
-        else setPhase("pending");
+        if (data.phase === "running") setAllLivePhase("running");
+        else setAllLivePhase("pending");
       } catch {
-        // ignore transient errors, keep polling
+        // ignore transient errors; keep polling
       }
-      if (Date.now() - since > MAX_RUNTIME) {
-        setPhase("timeout");
-        sessionStorage.removeItem(PUBLISH_KEY);
-        stop();
+      if (Date.now() - s > MAX_RUNTIME) {
+        setAllLivePhase("timeout");
+        stopPoll();
         return;
       }
-      timer = setTimeout(() => poll(since), POLL_INTERVAL);
+      pollTimer = setTimeout(poll, POLL_INTERVAL);
     };
 
+    const ensurePolling = () => {
+      const s = since();
+      if (s === 0) {
+        stopPoll();
+        return;
+      }
+      if (pollingFor === s) return; // already polling for this batch
+      stopPoll();
+      pollingFor = s;
+      pollTimer = setTimeout(poll, FIRST_POLL_DELAY);
+    };
+
+    // ── Page load handling ──
     const evaluate = () => {
       const url = new URL(window.location.href);
       if (url.searchParams.get("published") === "1") {
-        sessionStorage.setItem(PUBLISH_KEY, String(Date.now()));
+        const item = url.searchParams.get("item") || "Cambios guardados";
+        addToast(decodeURIComponent(item));
         url.searchParams.delete("published");
+        url.searchParams.delete("item");
         window.history.replaceState({}, "", url.toString());
       }
-
-      const since = Number(sessionStorage.getItem(PUBLISH_KEY) ?? "0");
-      if (!since || Date.now() - since > MAX_RUNTIME) {
-        sessionStorage.removeItem(PUBLISH_KEY);
-        return;
-      }
-
-      wireClose();
-
-      if (pollingForSince !== since) {
-        if (timer) clearTimeout(timer);
-        pollingForSince = since;
-        setPhase("saved");
-        timer = setTimeout(() => poll(since), FIRST_POLL_DELAY);
-      } else {
-        const e = els();
-        if (e.banner) e.banner.classList.remove("hidden");
-      }
+      renderAll();
+      ensurePolling();
     };
 
     document.addEventListener("astro:page-load", evaluate);

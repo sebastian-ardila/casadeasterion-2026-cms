@@ -58,7 +58,8 @@ if (Astro.request.method === "POST") {
 
     if (error) throw error;
     const willPublish = status === "published";
-    return Astro.redirect(`/books/${data.id}${willPublish ? "?published=1" : ""}`);
+    const label = encodeURIComponent("Libro: " + title);
+    return Astro.redirect(`/books/${data.id}${willPublish ? `?published=1&item=${label}` : ""}`);
   } catch (err) {
     formError = friendlyError(err);
   }

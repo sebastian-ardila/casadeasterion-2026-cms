@@ -62,7 +62,8 @@ if (Astro.request.method === "POST") {
     const { error } = await supabase.from("posts").update(update).eq("id", id);
     if (error) throw error;
     const triggersRebuild = newStatus === "published" || existing?.status === "published";
-    return Astro.redirect(`/posts/${id}${triggersRebuild ? "?published=1" : "?saved=1"}`);
+    const label = encodeURIComponent("Artículo: " + String(update.title));
+    return Astro.redirect(`/posts/${id}${triggersRebuild ? `?published=1&item=${label}` : "?saved=1"}`);
   } catch (err) {
     formError = friendlyError(err);
   }

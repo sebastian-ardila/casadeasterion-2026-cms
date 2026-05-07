@@ -24,20 +24,24 @@ if (Astro.request.method === "POST") {
     const fd = await Astro.request.formData();
     const action = str(fd, "_action");
 
+    let label = "Categorías";
     if (action === "delete") {
       const id = strReq(fd, "id");
       const { error } = await supabase.from("categories").delete().eq("id", id);
       if (error) throw error;
+      label = "Categoría eliminada";
     } else if (action === "update") {
       const id = strReq(fd, "id");
+      const name = strReq(fd, "name");
       const { error } = await supabase.from("categories").update({
         slug: strReq(fd, "slug"),
-        name: strReq(fd, "name"),
+        name,
         kind: strReq(fd, "kind"),
         description: str(fd, "description"),
         sort_order: num(fd, "sort_order") ?? 0,
       }).eq("id", id);
       if (error) throw error;
+      label = "Categoría: " + name;
     } else {
       const name = strReq(fd, "name");
       const { error } = await supabase.from("categories").insert({
@@ -48,8 +52,9 @@ if (Astro.request.method === "POST") {
         sort_order: num(fd, "sort_order") ?? 0,
       });
       if (error) throw error;
+      label = "Categoría: " + name;
     }
-    return Astro.redirect("/categories?published=1");
+    return Astro.redirect(`/categories?published=1&item=${encodeURIComponent(label)}`);
   } catch (err) {
     formError = friendlyError(err);
   }

@@ -27,10 +27,11 @@ if (Astro.request.method === "POST") {
       if (error) throw error;
       return Astro.redirect("/authors?published=1");
     }
+    const name = strReq(fd, "name");
     const { error } = await supabase
       .from("authors")
       .update({
-        name: strReq(fd, "name"),
+        name,
         slug: strReq(fd, "slug"),
         bio_md: str(fd, "bio_md"),
         photo_url: str(fd, "photo_url"),
@@ -42,7 +43,8 @@ if (Astro.request.method === "POST") {
       })
       .eq("id", id);
     if (error) throw error;
-    return Astro.redirect(`/authors/${id}?published=1`);
+    const label = encodeURIComponent("Autor: " + name);
+    return Astro.redirect(`/authors/${id}?published=1&item=${label}`);
   } catch (err) {
     formError = friendlyError(err);
   }
