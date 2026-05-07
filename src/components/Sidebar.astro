@@ -184,9 +184,10 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
       }
     });
 
-    // Re-sync the active state of nav links on each navigation.
-    const syncActive = () => {
-      const path = window.location.pathname;
+    // Re-sync the active state of nav links. Called immediately on click and
+    // again when a navigation completes — so the highlighted item updates the
+    // moment you tap, not after the destination page finishes loading.
+    const setActive = (path) => {
       const isActive = (href) =>
         href === path || (href !== "/" && path.startsWith(href));
       document.querySelectorAll("#cms-sidebar [data-sidebar-nav] a").forEach((a) => {
@@ -194,6 +195,15 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         a.classList.toggle("nav-link-active", isActive(href));
       });
     };
+    const syncActive = () => setActive(window.location.pathname);
+
+    // Highlight the target link immediately on click — no waiting for SSR.
+    document.addEventListener("astro:before-preparation", (e) => {
+      try {
+        const dest = e.to instanceof URL ? e.to : new URL(e.to);
+        setActive(dest.pathname);
+      } catch {}
+    });
     document.addEventListener("astro:page-load", syncActive);
     document.addEventListener("astro:after-swap", syncActive);
     syncActive();

@@ -1,8 +1,9 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import { requireAdmin, getAllPermissions, RESOURCE_LABEL } from "~/lib/auth";
-import { getSupabaseServerClient } from "~/lib/supabase-server";
 
+// SSR: only auth gate + permissions for which cards to show. Stats are loaded
+// client-side from /api/page-data?type=home so the shell paints instantly.
 const guard = await requireAdmin(Astro);
 if (guard instanceof Response) return guard;
 const user = guard;
@@ -11,28 +12,6 @@ const isOwner = user.role === "owner";
 
 const error = Astro.url.searchParams.get("error");
 const section = Astro.url.searchParams.get("section");
-
-const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
-
-const fetches = await Promise.all([
-  perms.books !== "none" ? supabase.from("books").select("id,status") : Promise.resolve({ data: null }),
-  perms.posts !== "none" ? supabase.from("posts").select("id,status") : Promise.resolve({ data: null }),
-  perms.authors !== "none" ? supabase.from("authors").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
-  perms.categories !== "none" ? supabase.from("categories").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
-  isOwner ? supabase.from("subscribers").select("id,confirmed_at,unsubscribed_at") : Promise.resolve({ data: null }),
-]);
-const [books, posts, authors, categories, subs] = fetches as any[];
-
-const stats = {
-  books_total: books.data?.length ?? 0,
-  books_published: books.data?.filter((b: any) => b.status === "published").length ?? 0,
-  posts_total: posts.data?.length ?? 0,
-  posts_published: posts.data?.filter((p: any) => p.status === "published").length ?? 0,
-  authors: authors.count ?? 0,
-  categories: categories.count ?? 0,
-  subs_confirmed: subs.data?.filter((s: any) => s.confirmed_at && !s.unsubscribed_at).length ?? 0,
-  subs_pending: subs.data?.filter((s: any) => !s.confirmed_at).length ?? 0,
-};
 ---
 
 <AppLayout title="Inicio">
@@ -50,50 +29,62 @@ const stats = {
     </p>
   )}
 
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-10">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-10" data-home-stats>
     {perms.books !== "none" && (
-      <a href="/books" class="card p-5 hover:border-stone-900 transition">
+      <a href="/books" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
         <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Libros</p>
-        <p class="font-serif text-3xl mt-1">{stats.books_total}</p>
-        <p class="text-xs text-stone-500 mt-1">{stats.books_published} publicados</p>
+        <p class="font-serif text-3xl mt-1" data-stat="books_total">
+          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
+        </p>
+        <p class="text-xs text-stone-500 mt-1">
+          <span data-stat="books_published">…</span> publicados
+        </p>
       </a>
     )}
     {perms.posts !== "none" && (
-      <a href="/posts" class="card p-5 hover:border-stone-900 transition">
+      <a href="/posts" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
         <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Artículos</p>
-        <p class="font-serif text-3xl mt-1">{stats.posts_total}</p>
-        <p class="text-xs text-stone-500 mt-1">{stats.posts_published} publicados</p>
+        <p class="font-serif text-3xl mt-1" data-stat="posts_total">
+          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
+        </p>
+        <p class="text-xs text-stone-500 mt-1">
+          <span data-stat="posts_published">…</span> publicados
+        </p>
       </a>
     )}
     {perms.authors !== "none" && (
-      <a href="/authors" class="card p-5 hover:border-stone-900 transition">
+      <a href="/authors" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
         <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Autores</p>
-        <p class="font-serif text-3xl mt-1">{stats.authors}</p>
+        <p class="font-serif text-3xl mt-1" data-stat="authors">
+          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
+        </p>
       </a>
     )}
     {perms.categories !== "none" && (
-      <a href="/categories" class="card p-5 hover:border-stone-900 transition">
+      <a href="/categories" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
         <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Categorías</p>
-        <p class="font-serif text-3xl mt-1">{stats.categories}</p>
+        <p class="font-serif text-3xl mt-1" data-stat="categories">
+          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
+        </p>
       </a>
     )}
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
     {isOwner && (
-      <a href="/subscribers" class="card block p-6 hover:border-stone-900 transition">
+      <a href="/subscribers" data-astro-prefetch class="card block p-6 hover:border-stone-900 transition">
         <p class="text-xs uppercase tracking-[0.12em] text-stone-500 mb-2">Newsletter</p>
         <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
           <p class="text-stone-900">
-            <span class="font-serif text-3xl">{stats.subs_confirmed}</span>
+            <span class="font-serif text-3xl" data-stat="subs_confirmed">
+              <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
+            </span>
             <span class="text-sm text-stone-500 ml-1">confirmados</span>
           </p>
-          {stats.subs_pending > 0 && (
-            <p class="text-stone-700 text-sm">
-              <span class="font-medium">{stats.subs_pending}</span>
-              <span class="text-stone-500 ml-1">pendientes</span>
-            </p>
-          )}
+          <p class="text-stone-700 text-sm" data-pending-row>
+            <span class="font-medium" data-stat="subs_pending">…</span>
+            <span class="text-stone-500 ml-1">pendientes</span>
+          </p>
         </div>
       </a>
     )}
@@ -126,3 +117,64 @@ const stats = {
     </a>
   </div>
 </AppLayout>
+
+<script is:inline>
+  (() => {
+    if (window.__casHomeInit) return;
+    window.__casHomeInit = true;
+
+    const setStat = (key, value) => {
+      document.querySelectorAll(`[data-home-stats] [data-stat="${key}"]`).forEach((el) => {
+        el.textContent = String(value);
+      });
+      // Newsletter card uses data-stat too.
+      document.querySelectorAll(`[data-stat="${key}"]`).forEach((el) => {
+        el.textContent = String(value);
+      });
+    };
+
+    const cacheKey = "cas:home";
+    const TTL = 60_000;
+
+    const apply = (stats) => {
+      Object.entries(stats).forEach(([k, v]) => setStat(k, v));
+      const pending = document.querySelector("[data-pending-row]");
+      if (pending && (!stats.subs_pending || stats.subs_pending === 0)) {
+        pending.classList.add("hidden");
+      } else if (pending) {
+        pending.classList.remove("hidden");
+      }
+    };
+
+    const hydrate = async () => {
+      if (!document.querySelector("[data-home-stats]")) return;
+
+      try {
+        const raw = sessionStorage.getItem(cacheKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Date.now() - parsed.t < TTL) apply(parsed.stats);
+        }
+      } catch {}
+
+      try {
+        const res = await fetch("/api/page-data?type=home", {
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        apply(data.stats);
+        try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), stats: data.stats })); } catch {}
+      } catch {}
+    };
+
+    document.addEventListener("astro:page-load", hydrate);
+    document.addEventListener("astro:after-swap", hydrate);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", hydrate);
+    } else {
+      hydrate();
+    }
+  })();
+</script>

@@ -75,13 +75,16 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const { data: book } = await supabase.from("books").select("*").eq("id", id).maybeSingle();
-if (!book) return Astro.redirect("/books");
-
-const [{ data: authors }, { data: categories }] = await Promise.all([
+// Run all SSR fetches in parallel — single round trip instead of two.
+const [bookRes, authorsRes, categoriesRes] = await Promise.all([
+  supabase.from("books").select("*").eq("id", id).maybeSingle(),
   supabase.from("authors").select("id, name").order("name"),
   supabase.from("categories").select("id, name, kind").order("name"),
 ]);
+const book = bookRes.data;
+const authors = authorsRes.data;
+const categories = categoriesRes.data;
+if (!book) return Astro.redirect("/books");
 
 const authorOptions = [
   { value: "", label: "Sin autor" },
