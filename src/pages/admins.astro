@@ -162,26 +162,34 @@ const RESOURCE_LABELS_JSON = JSON.stringify(RESOURCE_LABEL);
           <button class="btn-danger text-xs">Revocar acceso</button>
         </form>` : "";
 
+      // Encode the original permission state on the card so we can detect
+      // changes client-side without losing it on re-renders.
+      const originalPerms = JSON.stringify(perms);
+
       const permsBlocks = RESOURCES.map((r) => {
         const opts = LEVELS.map(
           (lv) => `<option value="${lv.value}"${perms[r] === lv.value ? " selected" : ""}>${lv.label}</option>`
         ).join("");
         return `
-          <form method="POST" class="flex flex-col">
+          <div class="flex flex-col">
             <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1.5">${escape(labels[r] ?? r)}</label>
-            <input type="hidden" name="_action" value="set_permission" />
-            <input type="hidden" name="profile_id" value="${escape(p.id)}" />
-            <input type="hidden" name="resource" value="${r}" />
-            <select name="level" class="input"${isOwnerRow ? " disabled" : ""} onchange="this.form.submit()">${opts}</select>
-          </form>`;
+            <select name="level_${r}" data-resource="${r}" class="input"${isOwnerRow ? " disabled" : ""}>${opts}</select>
+          </div>`;
       }).join("");
 
       const ownerNote = isOwnerRow
         ? `<p class="text-xs text-stone-400 mt-3 italic">El owner siempre tiene acceso completo a todas las secciones.</p>`
         : "";
 
+      const saveBar = !isOwnerRow ? `
+        <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-stone-100" data-perms-savebar>
+          <span class="text-xs text-stone-500 hidden" data-perms-status>Sin cambios pendientes.</span>
+          <button type="button" class="btn cursor-pointer hidden" data-perms-revert>Descartar</button>
+          <button type="submit" class="btn-primary" disabled data-perms-save>Guardar cambios</button>
+        </div>` : "";
+
       return `
-        <div class="card">
+        <form class="card" data-perms-form data-profile-id="${escape(p.id)}" data-original='${escape(originalPerms)}'>
           <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
             <div class="flex items-start gap-4 min-w-0">
               ${avatar}
@@ -198,7 +206,138 @@ const RESOURCE_LABELS_JSON = JSON.stringify(RESOURCE_LABEL);
           <p class="text-xs text-stone-500 mb-3 uppercase tracking-[0.12em]">Permisos por sección</p>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">${permsBlocks}</div>
           ${ownerNote}
-        </div>`;
+          ${saveBar}
+        </form>`;
+    };
+
+    // ── Detect-changes + save handler ──
+    const decodeOriginal = (form) => {
+      try {
+        const raw = form.dataset.original || "{}";
+        // Astro double-escapes; decode HTML entities back to JSON.
+        const txt = document.createElement("textarea");
+        txt.innerHTML = raw;
+        return JSON.parse(txt.value);
+      } catch {
+        return {};
+      }
+    };
+
+    const collectCurrent = (form) => {
+      const cur = {};
+      form.querySelectorAll("select[data-resource]").forEach((sel) => {
+        cur[sel.dataset.resource] = sel.value;
+      });
+      return cur;
+    };
+
+    const diffPerms = (original, current) => {
+      const changes = {};
+      let count = 0;
+      for (const k of Object.keys(current)) {
+        if (current[k] !== original[k]) {
+          changes[k] = current[k];
+          count++;
+        }
+      }
+      return { changes, count };
+    };
+
+    const updateSaveBar = (form) => {
+      const saveBtn = form.querySelector("[data-perms-save]");
+      const revertBtn = form.querySelector("[data-perms-revert]");
+      const status = form.querySelector("[data-perms-status]");
+      if (!saveBtn) return; // owner row has no savebar
+      const original = decodeOriginal(form);
+      const current = collectCurrent(form);
+      const { count } = diffPerms(original, current);
+      saveBtn.disabled = count === 0;
+      revertBtn?.classList.toggle("hidden", count === 0);
+      if (status) {
+        status.classList.toggle("hidden", count === 0);
+        status.textContent = count === 0
+          ? ""
+          : `${count} ${count === 1 ? "cambio sin guardar" : "cambios sin guardar"}`;
+        status.classList.toggle("text-amber-700", count > 0);
+        status.classList.toggle("font-medium", count > 0);
+      }
+    };
+
+    const submitPerms = async (form) => {
+      const profileId = form.dataset.profileId;
+      const original = decodeOriginal(form);
+      const current = collectCurrent(form);
+      const { changes, count } = diffPerms(original, current);
+      if (count === 0 || !profileId) return;
+
+      const saveBtn = form.querySelector("[data-perms-save]");
+      const revertBtn = form.querySelector("[data-perms-revert]");
+      const status = form.querySelector("[data-perms-status]");
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Guardando…";
+      }
+      try {
+        const res = await fetch("/api/admins/permissions", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ profileId, permissions: changes }),
+        });
+        if (!res.ok) throw new Error("http_" + res.status);
+        // Update original snapshot to current — no more pending changes.
+        form.dataset.original = JSON.stringify(current);
+        if (status) {
+          status.classList.remove("hidden", "text-amber-700");
+          status.classList.add("text-green-700", "font-medium");
+          status.textContent = "Cambios guardados.";
+          setTimeout(() => {
+            status.classList.add("hidden");
+            status.classList.remove("text-green-700", "font-medium");
+          }, 2500);
+        }
+      } catch (err) {
+        if (status) {
+          status.classList.remove("hidden");
+          status.classList.add("text-red-700", "font-medium");
+          status.textContent = "No se pudo guardar. Intenta de nuevo.";
+        }
+      } finally {
+        if (saveBtn) saveBtn.textContent = "Guardar cambios";
+        updateSaveBar(form);
+      }
+    };
+
+    const revertPerms = (form) => {
+      const original = decodeOriginal(form);
+      form.querySelectorAll("select[data-resource]").forEach((sel) => {
+        if (original[sel.dataset.resource] != null) sel.value = original[sel.dataset.resource];
+      });
+      updateSaveBar(form);
+    };
+
+    const wirePermsForm = (form) => {
+      if (form.dataset.casWired) return;
+      form.dataset.casWired = "1";
+      form.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t instanceof HTMLSelectElement && t.dataset.resource) {
+          updateSaveBar(form);
+        }
+      });
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        submitPerms(form);
+      });
+      form.addEventListener("click", (e) => {
+        const t = e.target;
+        if (t instanceof Element && t.closest("[data-perms-revert]")) {
+          e.preventDefault();
+          revertPerms(form);
+        }
+      });
+      // Initialize state.
+      updateSaveBar(form);
     };
 
     const renderPending = (pending) => {
@@ -271,6 +410,9 @@ const RESOURCE_LABELS_JSON = JSON.stringify(RESOURCE_LABEL);
       ).join("");
       skeleton?.classList.add("hidden");
       list.classList.remove("hidden");
+
+      // Wire change-detection + save handler for every card.
+      list.querySelectorAll("[data-perms-form]").forEach(wirePermsForm);
 
       const profileEmails = new Set(profiles.map((p) => p.email.toLowerCase()));
       const pending = (data.allowlist ?? []).filter((a) => !profileEmails.has(a.email.toLowerCase()));
