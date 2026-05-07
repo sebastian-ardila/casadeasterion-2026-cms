@@ -16,6 +16,7 @@ const allItems: Array<{ href: string; label: string; resource?: Resource; ownerO
   { href: "/authors", label: "Autores", resource: "authors" },
   { href: "/categories", label: "Categorías", resource: "categories" },
   { href: "/site", label: "Configuración", resource: "site" },
+  { href: "/subscribers", label: "Suscriptores", ownerOnly: true },
   { href: "/admins", label: "Administradores", ownerOnly: true },
 ];
 
@@ -28,16 +29,64 @@ const items = allItems.filter((item) => {
 const isActive = (href: string) => path === href || (href !== "/" && path.startsWith(href));
 ---
 
-<aside class="w-64 shrink-0 border-r border-stone-200 bg-stone-50 min-h-screen flex flex-col">
-  <div class="px-6 py-8">
-    <p class="font-serif uppercase tracking-[0.18em] text-sm">Casa de Asterión</p>
-    <p class="text-[11px] uppercase tracking-[0.18em] text-stone-500 mt-1">CMS</p>
+{/* Mobile top bar — hidden on md+ */}
+<header class="md:hidden sticky top-0 z-30 flex items-center justify-between gap-3 px-4 h-14 border-b border-stone-200 bg-white">
+  <button
+    type="button"
+    id="sidebar-toggle"
+    aria-controls="cms-sidebar"
+    aria-expanded="false"
+    class="cursor-pointer w-9 h-9 flex items-center justify-center -ml-2 hover:bg-stone-100 transition"
+  >
+    <svg id="sidebar-icon-open" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+    <svg id="sidebar-icon-close" class="hidden" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+  </button>
+  <div class="flex items-center gap-2 min-w-0">
+    <img src="/casadeasterion.webp" alt="" width="28" height="28" class="w-7 h-7 object-contain shrink-0" />
+    <p class="font-serif uppercase tracking-[0.16em] text-xs truncate">Casa de Asterión</p>
+  </div>
+  <div class="w-9" aria-hidden="true"></div>
+</header>
+
+{/* Backdrop for mobile drawer */}
+<div
+  id="sidebar-backdrop"
+  class="md:hidden fixed inset-0 z-30 bg-stone-900/50 hidden"
+  aria-hidden="true"
+></div>
+
+<aside
+  id="cms-sidebar"
+  class="fixed md:sticky top-0 left-0 z-40 md:z-auto h-screen w-64 md:w-60 lg:w-64 shrink-0 border-r border-stone-200 bg-stone-50 flex flex-col -translate-x-full md:translate-x-0 transition-transform duration-200"
+>
+  <div class="px-5 md:px-6 pt-5 md:pt-7 pb-4 border-b border-stone-200/70">
+    <div class="flex items-center gap-3 mb-4">
+      <img src="/casadeasterion.webp" alt="" width="44" height="44" class="w-10 h-10 md:w-11 md:h-11 object-contain shrink-0" />
+      <div class="min-w-0">
+        <p class="font-serif uppercase tracking-[0.18em] text-sm leading-tight">Casa de Asterión</p>
+        <p class="text-[10px] uppercase tracking-[0.18em] text-stone-500 mt-0.5">CMS</p>
+      </div>
+    </div>
+
+    <a
+      href="https://casadeasterionediciones.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="cursor-pointer flex items-center justify-between gap-2 px-3 py-2 border border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 transition group"
+    >
+      <span class="text-xs uppercase tracking-[0.16em]">Ver sitio</span>
+      <svg class="shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M7 17 17 7"/>
+        <path d="M7 7h10v10"/>
+      </svg>
+    </a>
   </div>
 
-  <nav class="flex-1 px-2">
+  <nav class="flex-1 overflow-y-auto px-2 py-3" data-sidebar-nav>
     {items.map((item) => (
       <a
         href={item.href}
+        data-astro-prefetch
         class:list={[
           "nav-link",
           isActive(item.href) && "nav-link-active",
@@ -48,18 +97,105 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     ))}
   </nav>
 
-  <div class="border-t border-stone-200 px-6 py-5 text-xs text-stone-600">
+  <div class="border-t border-stone-200 px-5 py-4 text-xs text-stone-600">
     {user ? (
-      <>
-        <p class="truncate font-medium text-stone-900">{user.full_name ?? user.email}</p>
-        <p class="truncate text-stone-500">{user.email}</p>
-        <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-1">{user.role}</p>
-        <form action="/logout" method="POST" class="mt-3">
-          <button class="text-stone-600 hover:text-stone-900 underline">Cerrar sesión</button>
-        </form>
-      </>
+      <div class="flex items-start gap-3">
+        {user.avatar_url ? (
+          <img
+            src={user.avatar_url}
+            alt=""
+            referrerpolicy="no-referrer"
+            class="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5 border border-stone-200"
+          />
+        ) : (
+          <div class="w-8 h-8 rounded-full bg-stone-200 shrink-0 mt-0.5 flex items-center justify-center text-stone-600 text-xs font-medium">
+            {(user.full_name ?? user.email).slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <div class="min-w-0 flex-1">
+          <p class="truncate font-medium text-stone-900">{user.full_name ?? user.email}</p>
+          <p class="truncate text-stone-500 text-[11px]">{user.email}</p>
+          <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-0.5">{user.role}</p>
+          <form action="/logout" method="POST" class="mt-2">
+            <button class="cursor-pointer text-stone-600 hover:text-stone-900 underline">Cerrar sesión</button>
+          </form>
+        </div>
+      </div>
     ) : (
-      <a href="/login" class="underline">Iniciar sesión</a>
+      <a href="/login" class="cursor-pointer underline">Iniciar sesión</a>
     )}
   </div>
 </aside>
+
+<script is:inline>
+  // The sidebar is persisted between view transitions (transition:persist) so
+  // it never re-mounts. We attach delegated listeners on `document` once, and
+  // re-sync the active link on every astro:after-swap.
+  (() => {
+    if (window.__casSidebarInit) return;
+    window.__casSidebarInit = true;
+
+    const get = () => ({
+      btn: document.getElementById("sidebar-toggle"),
+      sidebar: document.getElementById("cms-sidebar"),
+      backdrop: document.getElementById("sidebar-backdrop"),
+      iconOpen: document.getElementById("sidebar-icon-open"),
+      iconClose: document.getElementById("sidebar-icon-close"),
+    });
+
+    const setOpen = (open) => {
+      const { btn, sidebar, backdrop, iconOpen, iconClose } = get();
+      if (!sidebar || !backdrop || !btn) return;
+      sidebar.classList.toggle("-translate-x-full", !open);
+      backdrop.classList.toggle("hidden", !open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      iconOpen?.classList.toggle("hidden", open);
+      iconClose?.classList.toggle("hidden", !open);
+      document.body.style.overflow = open ? "hidden" : "";
+    };
+
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest("#sidebar-toggle")) {
+        const { sidebar } = get();
+        if (sidebar) setOpen(sidebar.classList.contains("-translate-x-full"));
+        return;
+      }
+      if (t.closest("#sidebar-backdrop")) {
+        setOpen(false);
+        return;
+      }
+      // Close drawer when clicking any link inside the sidebar.
+      if (t.closest("#cms-sidebar a")) {
+        setOpen(false);
+      }
+    });
+
+    window.matchMedia("(min-width: 768px)").addEventListener("change", (e) => {
+      if (e.matches) {
+        const { sidebar, backdrop, btn, iconOpen, iconClose } = get();
+        sidebar?.classList.add("-translate-x-full");
+        backdrop?.classList.add("hidden");
+        document.body.style.overflow = "";
+        btn?.setAttribute("aria-expanded", "false");
+        iconOpen?.classList.remove("hidden");
+        iconClose?.classList.add("hidden");
+      }
+    });
+
+    // Re-sync the active state of nav links on each navigation.
+    const syncActive = () => {
+      const path = window.location.pathname;
+      const isActive = (href) =>
+        href === path || (href !== "/" && path.startsWith(href));
+      document.querySelectorAll("#cms-sidebar [data-sidebar-nav] a").forEach((a) => {
+        const href = a.getAttribute("href") || "";
+        a.classList.toggle("nav-link-active", isActive(href));
+      });
+    };
+    document.addEventListener("astro:page-load", syncActive);
+    document.addEventListener("astro:after-swap", syncActive);
+    syncActive();
+  })();
+</script>

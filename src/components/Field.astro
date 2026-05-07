@@ -7,15 +7,33 @@ interface Props {
   required?: boolean;
   placeholder?: string;
   hint?: string;
+  // Longer description shown beneath the label (in addition to / instead of hint).
+  description?: string;
   rows?: number;
 }
-const { label, name, type = "text", value, required, placeholder, hint, rows } = Astro.props;
+const {
+  label,
+  name,
+  type = "text",
+  value,
+  required,
+  placeholder,
+  hint,
+  description,
+  rows,
+} = Astro.props;
 ---
 
-<label class="block">
-  <span class="label">{label}{required && " *"}</span>
+<div class="block">
+  <label for={`f-${name}`} class="block">
+    <span class="label">{label}{required && <span class="text-stone-400 font-normal"> *</span>}</span>
+  </label>
+  {description && (
+    <p class="text-xs text-stone-500 mt-0 mb-2 leading-relaxed">{description}</p>
+  )}
   {type === "textarea" ? (
     <textarea
+      id={`f-${name}`}
       name={name}
       class="input"
       rows={rows ?? 4}
@@ -25,6 +43,7 @@ const { label, name, type = "text", value, required, placeholder, hint, rows } =
     />
   ) : (
     <input
+      id={`f-${name}`}
       type={type}
       name={name}
       class="input"
@@ -33,5 +52,5 @@ const { label, name, type = "text", value, required, placeholder, hint, rows } =
       placeholder={placeholder}
     />
   )}
-  {hint && <p class="text-xs text-stone-500 mt-1">{hint}</p>}
-</label>
+  {hint && <p class="text-xs text-stone-500 mt-1.5">{hint}</p>}
+</div>

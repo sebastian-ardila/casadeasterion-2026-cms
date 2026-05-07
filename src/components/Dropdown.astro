@@ -1,0 +1,367 @@
+---
+// Custom dropdown that:
+// - syncs to a hidden <input> so server-side form handling stays unchanged
+// - opens a portal-positioned menu fixed to viewport (z-index above everything)
+// - supports keyboard (↑↓ Enter Esc) and click-outside-to-close
+// - degrades gracefully if JS is off (the hidden input is still submitted with `value`)
+
+export interface DropdownOption {
+  value: string;
+  label: string;
+  hint?: string;
+}
+
+interface Props {
+  name: string;
+  value?: string | null;
+  options: DropdownOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  // When true, changing the dropdown auto-submits the parent form.
+  submitOnChange?: boolean;
+  // Optional class on the wrapper button.
+  class?: string;
+  id?: string;
+}
+
+const {
+  name,
+  value,
+  options,
+  placeholder = "Selecciona…",
+  disabled = false,
+  submitOnChange = false,
+  class: extraClass = "",
+  id,
+} = Astro.props;
+
+const current = options.find((o) => o.value === value);
+const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
+---
+
+<div
+  class={`cas-dd relative inline-block w-full ${extraClass}`}
+  data-dropdown
+  data-name={name}
+  data-submit-on-change={submitOnChange ? "1" : "0"}
+>
+  <input type="hidden" name={name} value={value ?? ""} data-dd-input />
+  <button
+    type="button"
+    id={buttonId}
+    class="cas-dd-btn"
+    disabled={disabled}
+    aria-haspopup="listbox"
+    aria-expanded="false"
+    data-dd-button
+  >
+    <span class="cas-dd-label" data-dd-display>
+      {current ? current.label : <span class="text-stone-400">{placeholder}</span>}
+    </span>
+    <svg
+      class="cas-dd-caret"
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+    >
+      <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+
+  <ul
+    role="listbox"
+    aria-labelledby={buttonId}
+    class="cas-dd-menu hidden"
+    data-dd-menu
+  >
+    {options.map((opt) => (
+      <li>
+        <button
+          type="button"
+          role="option"
+          aria-selected={opt.value === value ? "true" : "false"}
+          data-dd-option
+          data-value={opt.value}
+          class:list={[
+            "cas-dd-option",
+            opt.value === value && "cas-dd-option-selected",
+          ]}
+        >
+          <span class="font-medium">{opt.label}</span>
+          {opt.hint && <span class="text-stone-500 text-xs ml-2">{opt.hint}</span>}
+        </button>
+      </li>
+    ))}
+  </ul>
+</div>
+
+<style is:global>
+  /* Plain CSS to avoid Tailwind 4 @apply scoping issues inside component styles. */
+  .cas-dd-btn {
+    width: 100%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d6d3d1; /* stone-300 */
+    background: #fff;
+    color: #1c1917; /* stone-900 */
+    font-size: 0.875rem;
+    text-align: left;
+    transition: border-color 0.15s, background-color 0.15s;
+  }
+  .cas-dd-btn:hover:not(:disabled) {
+    border-color: #78716c; /* stone-500 */
+  }
+  .cas-dd-btn:focus-visible {
+    outline: none;
+    border-color: #1c1917;
+    box-shadow: 0 0 0 1px #1c1917;
+  }
+  .cas-dd-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #fafaf9; /* stone-50 */
+  }
+  .cas-dd-btn[aria-expanded="true"] {
+    border-color: #1c1917;
+  }
+  .cas-dd-label {
+    flex: 1 1 0%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cas-dd-caret {
+    flex-shrink: 0;
+    color: #78716c;
+    transition: transform 0.15s;
+  }
+  .cas-dd-btn[aria-expanded="true"] .cas-dd-caret {
+    transform: rotate(180deg);
+  }
+
+  /* Menu floats above all other UI. Position is set via JS at open time. */
+  .cas-dd-menu {
+    position: fixed;
+    z-index: 9999;
+    max-height: 18rem;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d6d3d1; /* stone-300 */
+    box-shadow: 0 12px 32px -8px rgba(28, 25, 23, 0.18), 0 4px 12px -4px rgba(28, 25, 23, 0.1);
+    padding: 4px;
+    min-width: 12rem;
+  }
+  .cas-dd-menu li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .cas-dd-option {
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: #1c1917;
+    background: transparent;
+    border: 0;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.1s;
+  }
+  .cas-dd-option:hover,
+  .cas-dd-option:focus {
+    background: #f5f5f4; /* stone-100 */
+    outline: none;
+  }
+  .cas-dd-option-selected,
+  .cas-dd-option-selected:hover,
+  .cas-dd-option-selected:focus {
+    background: #1c1917; /* stone-900 */
+    color: #fff;
+  }
+</style>
+
+<script is:inline>
+  // Single global controller for all .cas-dd dropdowns. Idempotent so
+  // hot-reloads / multiple imports don't double-bind.
+  (() => {
+    if (window.__casDdInit) return;
+    window.__casDdInit = true;
+
+    let openDd = null;
+
+    const closeOpen = () => {
+      if (!openDd) return;
+      const { menu, button } = openDd;
+      menu.classList.add("hidden");
+      button.setAttribute("aria-expanded", "false");
+      openDd = null;
+    };
+
+    const positionMenu = (button, menu) => {
+      const rect = button.getBoundingClientRect();
+      const menuWidth = Math.max(rect.width, 200);
+      menu.style.minWidth = rect.width + "px";
+      menu.style.width = menuWidth + "px";
+      menu.style.left = rect.left + "px";
+
+      // Decide above-or-below based on remaining space.
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      // Show menu briefly to measure, then place it.
+      menu.style.top = "0px";
+      menu.classList.remove("hidden");
+      const menuHeight = Math.min(menu.scrollHeight, 18 * 16);
+      if (spaceBelow >= menuHeight + 8 || spaceBelow >= spaceAbove) {
+        menu.style.top = rect.bottom + 4 + "px";
+      } else {
+        menu.style.top = Math.max(8, rect.top - menuHeight - 4) + "px";
+      }
+      // Clamp horizontally so it doesn't overflow viewport.
+      const right = parseFloat(menu.style.left) + menuWidth;
+      if (right > window.innerWidth - 8) {
+        menu.style.left = Math.max(8, window.innerWidth - menuWidth - 8) + "px";
+      }
+    };
+
+    const openMenu = (root) => {
+      if (openDd && openDd.root === root) {
+        closeOpen();
+        return;
+      }
+      closeOpen();
+      const button = root.querySelector("[data-dd-button]");
+      const menu = root.querySelector("[data-dd-menu]");
+      if (!button || !menu) return;
+      positionMenu(button, menu);
+      button.setAttribute("aria-expanded", "true");
+      openDd = { root, button, menu };
+      // Focus selected item if any
+      const selected = menu.querySelector('[aria-selected="true"]');
+      if (selected) selected.focus();
+      else {
+        const first = menu.querySelector("[data-dd-option]");
+        if (first) first.focus();
+      }
+    };
+
+    const setValue = (root, value, label) => {
+      const input = root.querySelector("[data-dd-input]");
+      const display = root.querySelector("[data-dd-display]");
+      if (!input || !display) return;
+      const previousValue = input.value;
+      input.value = value;
+      display.textContent = label;
+      // Update aria-selected on options
+      root.querySelectorAll("[data-dd-option]").forEach((o) => {
+        const isSel = o.dataset.value === value;
+        o.setAttribute("aria-selected", isSel ? "true" : "false");
+        o.classList.toggle("cas-dd-option-selected", isSel);
+      });
+      // Fire change event so other code listening can react.
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      if (root.dataset.submitOnChange === "1" && previousValue !== value) {
+        const form = root.closest("form");
+        if (form) form.requestSubmit();
+      }
+    };
+
+    document.addEventListener("click", (e) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+
+      // Click on a button inside a dropdown
+      const button = target.closest("[data-dd-button]");
+      if (button) {
+        const root = button.closest("[data-dropdown]");
+        if (root && !button.disabled) {
+          e.preventDefault();
+          openMenu(root);
+        }
+        return;
+      }
+
+      // Click on an option
+      const option = target.closest("[data-dd-option]");
+      if (option && openDd) {
+        const root = option.closest("[data-dropdown]");
+        if (root) {
+          setValue(root, option.dataset.value || "", option.textContent?.trim() || "");
+          closeOpen();
+        }
+        return;
+      }
+
+      // Click outside any dropdown → close
+      if (!target.closest("[data-dropdown]")) {
+        closeOpen();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (!openDd) {
+        // Open with Enter/Space when button focused
+        const target = e.target;
+        if (
+          target instanceof HTMLElement &&
+          target.matches("[data-dd-button]") &&
+          (e.key === "Enter" || e.key === " " || e.key === "ArrowDown")
+        ) {
+          e.preventDefault();
+          const root = target.closest("[data-dropdown]");
+          if (root) openMenu(root);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        const btn = openDd.button;
+        closeOpen();
+        btn.focus();
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const opts = Array.from(openDd.menu.querySelectorAll("[data-dd-option]"));
+        if (opts.length === 0) return;
+        const focused = document.activeElement;
+        const idx = opts.indexOf(focused);
+        let next;
+        if (e.key === "ArrowDown") next = idx < 0 ? 0 : (idx + 1) % opts.length;
+        else next = idx <= 0 ? opts.length - 1 : idx - 1;
+        opts[next].focus();
+        return;
+      }
+      if (e.key === "Enter" || e.key === " ") {
+        const target = e.target;
+        if (target instanceof HTMLElement && target.matches("[data-dd-option]")) {
+          e.preventDefault();
+          const root = target.closest("[data-dropdown]");
+          if (root) {
+            setValue(root, target.dataset.value || "", target.textContent?.trim() || "");
+            closeOpen();
+            const btn = root.querySelector("[data-dd-button]");
+            btn?.focus();
+          }
+        }
+      }
+    });
+
+    // Reposition or close on scroll/resize so the menu doesn't drift.
+    window.addEventListener(
+      "scroll",
+      () => {
+        if (openDd) closeOpen();
+      },
+      true
+    );
+    window.addEventListener("resize", () => closeOpen());
+  })();
+</script>

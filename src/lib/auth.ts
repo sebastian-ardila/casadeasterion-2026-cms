@@ -23,7 +23,7 @@ export async function loadCurrentUser(ctx: APIContext): Promise<App.Locals["user
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, email, full_name, role")
+    .select("id, email, full_name, avatar_url, role")
     .eq("id", user.id)
     .maybeSingle();
 

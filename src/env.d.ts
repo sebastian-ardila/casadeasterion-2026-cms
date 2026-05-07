@@ -20,6 +20,7 @@ declare namespace App {
       id: string;
       email: string;
       full_name: string | null;
+      avatar_url: string | null;
       role: "owner" | "admin" | "editor" | "viewer";
     } | null;
   }

@@ -6,6 +6,10 @@ export default defineConfig({
   output: "server",
   adapter: awsAmplify(),
   server: { port: 4322, host: "localhost" },
+  // Prefetch links on hover so navigations feel instant. Combined with
+  // <ClientRouter /> (view transitions) in AppLayout, the sidebar/listpanel
+  // persist between pages and only the <main> content swaps in.
+  prefetch: { prefetchAll: false, defaultStrategy: "hover" },
   // Astro 5 ships a same-origin CSRF check for SSR POSTs that compares
   // request.url's host against the Origin header. Behind CloudFront → Lambda
   // the inner Astro server only sees localhost:3000 as request.url, so the

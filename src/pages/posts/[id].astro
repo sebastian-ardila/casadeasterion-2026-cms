@@ -1,6 +1,8 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
@@ -73,12 +75,29 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   supabase.from("authors").select("id, name").order("name"),
   supabase.from("categories").select("id, name").order("name"),
 ]);
+
+const authorOptions = [
+  { value: "", label: "Sin autor" },
+  ...(authors ?? []).map((a) => ({ value: a.id, label: a.name })),
+];
+const categoryOptions = [
+  { value: "", label: "Sin categoría" },
+  ...(categories ?? []).map((c) => ({ value: c.id, label: c.name })),
+];
+const statusOptions = [
+  { value: "draft", label: "Borrador", hint: "no visible al público" },
+  { value: "published", label: "Publicado", hint: "dispara rebuild" },
+];
 ---
 
-<AppLayout title={post.title} resource="posts" activeId={post.id}>
+<AppLayout title={post.title} resource="posts" activeId={post.id} breadcrumbLabel={post.title}>
 
-  <h1 class="font-serif text-3xl mb-2">{post.title}</h1>
-  <p class="text-stone-500 text-sm mb-8">/{post.slug} · actualizado {new Date(post.updated_at).toLocaleString("es-CO")}</p>
+  <BackToList href="/posts" label="Artículos" />
+
+  <header class="mb-8">
+    <h1 class="font-serif text-3xl md:text-4xl mb-2 leading-tight">{post.title}</h1>
+    <p class="text-stone-500 text-xs">/{post.slug} · actualizado {new Date(post.updated_at).toLocaleString("es-CO")}</p>
+  </header>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
@@ -88,53 +107,69 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   )}
 
   <form method="POST" class="space-y-6 max-w-5xl">
-    <Field label="Título" name="title" value={post.title} required />
-    <Field label="Slug" name="slug" value={post.slug} required />
-    <Field label="Subtítulo" name="subtitle" value={post.subtitle} />
-    <Field label="Resumen" name="excerpt" type="textarea" rows={3} value={post.excerpt} />
 
-    <ImageUpload name="cover_image_url" value={post.cover_image_url} label="Imagen de portada" bucket="covers" />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad del artículo</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra el artículo en el sitio.</p>
+      </div>
+      <Field label="Título" name="title" value={post.title} required description="El encabezado principal que verán los lectores." />
+      <Field label="Slug" name="slug" value={post.slug} required description="Identificador único en la URL: /articulos/<slug>. Solo minúsculas, números y guiones." />
+      <Field label="Subtítulo" name="subtitle" value={post.subtitle} description="Aparece debajo del título en la página del artículo. Opcional." />
+      <Field label="Resumen (excerpt)" name="excerpt" type="textarea" rows={3} value={post.excerpt} description="Texto corto que se muestra en tarjetas de listado y en redes sociales." />
+    </section>
 
-    <GalleryUpload name="gallery_urls" value={post.gallery_urls} label="Galería de imágenes" bucket="content" hint="Imágenes adicionales del artículo (aparte de la portada)." />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Imagen y galería</h2>
+        <p class="card-section-desc">Visuales del artículo. Las imágenes se convierten automáticamente a WebP.</p>
+      </div>
+      <ImageUpload name="cover_image_url" value={post.cover_image_url} label="Imagen de portada" bucket="covers" />
+      <GalleryUpload name="gallery_urls" value={post.gallery_urls} label="Galería de imágenes" bucket="content" hint="Imágenes adicionales del artículo (aparte de la portada). Arrastra para reordenar." />
+    </section>
 
-    <div class="grid grid-cols-2 gap-4">
-      <label class="block">
-        <span class="label">Autor</span>
-        <select name="author_id" class="input">
-          <option value="">—</option>
-          {authors?.map((a) => (
-            <option value={a.id} selected={a.id === post.author_id}>{a.name}</option>
-          ))}
-        </select>
-      </label>
-      <label class="block">
-        <span class="label">Categoría</span>
-        <select name="category_id" class="input">
-          <option value="">—</option>
-          {categories?.map((c) => (
-            <option value={c.id} selected={c.id === post.category_id}>{c.name}</option>
-          ))}
-        </select>
-      </label>
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Clasificación</h2>
+        <p class="card-section-desc">Asocia el artículo a un autor y a una categoría del menú.</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <span class="label">Autor</span>
+          <Dropdown name="author_id" value={post.author_id ?? ""} options={authorOptions} placeholder="Sin autor" />
+        </div>
+        <div>
+          <span class="label">Categoría</span>
+          <Dropdown name="category_id" value={post.category_id ?? ""} options={categoryOptions} placeholder="Sin categoría" />
+        </div>
+      </div>
+    </section>
 
-    <MarkdownEditor name="content_md" value={post.content_md} label="Contenido" required />
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Contenido</h2>
+        <p class="card-section-desc">Markdown con barra de herramientas. Pega o arrastra imágenes para subirlas en el momento.</p>
+      </div>
+      <MarkdownEditor name="content_md" value={post.content_md} label="" required />
+    </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <Field label="Tiempo (min)" name="reading_time_minutes" type="number" value={post.reading_time_minutes} />
-      <Field label="Tags" name="tags" value={post.tags?.join(", ")} hint="Separados por coma" />
-      <label class="block">
-        <span class="label">Estado</span>
-        <select name="status" class="input">
-          <option value="draft" selected={post.status === "draft"}>Borrador</option>
-          <option value="published" selected={post.status === "published"}>Publicado</option>
-        </select>
-      </label>
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Metadatos y estado</h2>
+        <p class="card-section-desc">Información complementaria para SEO y redes, y si el artículo es visible.</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <Field label="Tiempo (min)" name="reading_time_minutes" type="number" value={post.reading_time_minutes} description="Vacío = se calcula del contenido." />
+        <Field label="Tags" name="tags" value={post.tags?.join(", ")} description="Etiquetas internas, separadas por coma." />
+        <div>
+          <span class="label">Estado</span>
+          <Dropdown name="status" value={post.status} options={statusOptions} />
+        </div>
+      </div>
+      <Field label="Meta description (SEO)" name="meta_description" type="textarea" rows={2} value={post.meta_description} description="Descripción que aparecerá en buscadores y al compartir el enlace. Máx. 160 caracteres recomendado." />
+    </section>
 
-    <Field label="Meta description" name="meta_description" type="textarea" rows={2} value={post.meta_description} />
-
-    <div class="flex justify-between pt-4 border-t border-stone-200">
+    <div class="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t border-stone-200">
       <button type="submit" class="btn-primary">Guardar</button>
       <a href="/posts" class="btn">Cancelar</a>
     </div>
@@ -142,7 +177,7 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
 
   <form
     method="POST"
-    class="mt-12 pt-6 border-t border-red-200"
+    class="mt-12 pt-6 border-t border-red-200 max-w-5xl"
     onsubmit="return confirm('¿Borrar este artículo? No se puede deshacer.')"
   >
     <input type="hidden" name="_action" value="delete" />

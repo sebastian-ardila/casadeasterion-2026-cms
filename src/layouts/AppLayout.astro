@@ -1,9 +1,11 @@
 ---
 import "~/styles/global.css";
+import { ClientRouter } from "astro:transitions";
 import Sidebar from "~/components/Sidebar.astro";
 import ListPanel from "~/components/ListPanel.astro";
 import BuildStatusBanner from "~/components/BuildStatusBanner.astro";
 import FormGuards from "~/components/FormGuards.astro";
+import MobileBreadcrumb from "~/components/MobileBreadcrumb.astro";
 import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
 
 const user = Astro.locals.user;
@@ -13,33 +15,77 @@ interface Props {
   title?: string;
   resource?: Extract<Resource, "posts" | "books" | "authors">;
   activeId?: string | null;
+  breadcrumbLabel?: string;
 }
-const { title = "CMS", resource, activeId } = Astro.props;
+const { title = "CMS", resource, activeId, breadcrumbLabel } = Astro.props;
 const showListPanel = !!resource && !!permissions && permissions[resource] !== "none";
+const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
 ---
 
 <!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex,nofollow" />
     <title>{title} · Casa de Asterión CMS</title>
-    <link rel="icon" href="/favicon.svg" />
+    <link rel="icon" href="/casadeasterion.webp" type="image/webp" />
+    <ClientRouter />
   </head>
-  <body class="min-h-screen flex">
-    <Sidebar user={user} permissions={permissions} />
-    {showListPanel && (
-      <ListPanel
-        resource={resource!}
-        activeId={activeId}
-        permission={permissions![resource!]}
-      />
-    )}
-    <main class="flex-1 min-w-0 px-10 py-10 max-w-[1100px]">
-      <slot />
-    </main>
-    <BuildStatusBanner />
+  <body class="min-h-screen md:flex">
+    <Sidebar user={user} permissions={permissions} transition:persist="cms-sidebar" />
+    <MobileBreadcrumb currentLabel={breadcrumbLabel} />
+    <div class="md:flex md:flex-1 md:min-w-0">
+      {showListPanel && (
+        <ListPanel
+          resource={resource!}
+          activeId={activeId}
+          permission={permissions![resource!]}
+          hideOnMobile={isDetailRoute}
+          transition:persist={`list-panel-${resource}`}
+        />
+      )}
+      <main
+        class:list={[
+          "flex-1 min-w-0 px-5 md:px-8 lg:px-10 py-6 md:py-10 max-w-[1100px]",
+          showListPanel && !isDetailRoute && "hidden md:block",
+        ]}
+      >
+        <slot />
+      </main>
+    </div>
+    <BuildStatusBanner transition:persist="build-status" />
     <FormGuards />
+
+    {/* Top progress bar shown during view transitions. */}
+    <div
+      id="route-progress"
+      class="fixed top-0 left-0 right-0 h-0.5 bg-stone-900 origin-left z-[60] pointer-events-none scale-x-0 transition-transform duration-300"
+    ></div>
+
+    <script is:inline>
+      (() => {
+        if (window.__casNavInit) return;
+        window.__casNavInit = true;
+        const bar = document.getElementById("route-progress");
+        if (!bar) return;
+        let timeout;
+        const start = () => {
+          clearTimeout(timeout);
+          bar.style.transition = "transform 0.3s ease-out";
+          bar.style.transform = "scaleX(0.7)";
+        };
+        const done = () => {
+          clearTimeout(timeout);
+          bar.style.transform = "scaleX(1)";
+          timeout = setTimeout(() => {
+            bar.style.transition = "none";
+            bar.style.transform = "scaleX(0)";
+          }, 200);
+        };
+        document.addEventListener("astro:before-preparation", start);
+        document.addEventListener("astro:page-load", done);
+      })();
+    </script>
   </body>
 </html>

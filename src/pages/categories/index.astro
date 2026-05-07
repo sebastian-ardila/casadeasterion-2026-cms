@@ -1,6 +1,7 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, slugify } from "~/lib/forms";
@@ -56,95 +57,162 @@ const { data: categories } = await supabase
   .select("*")
   .order("sort_order")
   .order("name");
+
+const kindOptions = [
+  { value: "philosophy", label: "Filosofía", hint: "ensayo, pensamiento" },
+  { value: "poetry", label: "Poesía", hint: "verso, antología" },
+  { value: "book", label: "Libro", hint: "para libros del catálogo" },
+  { value: "other", label: "Otro", hint: "narrativa, varios" },
+];
+
+const kindMeta: Record<string, { label: string; emoji: string; color: string }> = {
+  philosophy: { label: "Filosofía", emoji: "✦", color: "bg-indigo-50 text-indigo-900 border-indigo-200" },
+  poetry: { label: "Poesía", emoji: "❀", color: "bg-rose-50 text-rose-900 border-rose-200" },
+  book: { label: "Libro", emoji: "❑", color: "bg-amber-50 text-amber-900 border-amber-200" },
+  other: { label: "Otro", emoji: "◇", color: "bg-stone-100 text-stone-700 border-stone-200" },
+};
 ---
 
 <AppLayout title="Categorías">
-  <h1 class="font-serif text-3xl mb-2">Categorías</h1>
-  <p class="text-stone-500 mb-8">Alimentan los menús "Filosofía" y "Poesía", y agrupan posts y libros.</p>
+  <div class="flex items-start justify-between gap-4 mb-6">
+    <div class="min-w-0 flex-1">
+      <h1 class="font-serif text-3xl md:text-4xl mb-2">Categorías</h1>
+      <p class="text-stone-500 max-w-2xl text-sm md:text-base">
+        Las categorías agrupan los artículos y libros por tema. Las de tipo <em>Filosofía</em> y <em>Poesía</em> alimentan los menús del navbar; las de tipo <em>Libro</em> sirven para clasificar el catálogo.
+      </p>
+    </div>
+    {canEdit && (
+      <a
+        href="#new-category"
+        class="hidden sm:inline-flex btn-primary shrink-0"
+      >
+        + Nueva
+      </a>
+    )}
+  </div>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
   {saved && (
-    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado.</p>
+    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Cambios guardados.</p>
   )}
 
-  {/* Existing categories */}
-  <div class="space-y-4 mb-12">
-    {categories?.map((c) => (
-      <form method="POST" class="border border-stone-200 bg-white p-5 grid grid-cols-12 gap-3 items-end">
-        <input type="hidden" name="_action" value="update" />
-        <input type="hidden" name="id" value={c.id} />
-        <div class="col-span-3">
-          <Field label="Nombre" name="name" value={c.name} required />
-        </div>
-        <div class="col-span-3">
-          <Field label="Slug" name="slug" value={c.slug} required />
-        </div>
-        <div class="col-span-2">
-          <label class="block">
-            <span class="label">Tipo</span>
-            <select name="kind" class="input">
-              {["philosophy","poetry","book","other"].map((k) => (
-                <option value={k} selected={c.kind === k}>{k}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div class="col-span-1">
-          <Field label="Orden" name="sort_order" type="number" value={c.sort_order} />
-        </div>
-        <div class="col-span-3 flex gap-2 justify-end">
-          {canEdit && (
-            <>
-              <button type="submit" class="btn">Guardar</button>
-              <button
-                type="submit"
-                formnovalidate
-                name="_action"
-                value="delete"
-                class="btn-danger"
-                onclick={`return confirm('¿Borrar la categoría \"${c.name}\"?')`}
-              >Borrar</button>
-            </>
-          )}
-        </div>
-        <div class="col-span-12">
-          <Field label="Descripción" name="description" type="textarea" rows={2} value={c.description} />
-        </div>
-      </form>
-    ))}
+  <div class="space-y-4 mb-12 max-w-5xl">
+    {(categories ?? []).length === 0 && (
+      <div class="border border-dashed border-stone-300 bg-white text-center py-14 px-6">
+        <div class="text-4xl mb-3 text-stone-300">◇</div>
+        <p class="text-stone-700 font-medium mb-1">Aún no hay categorías</p>
+        <p class="text-xs text-stone-500">Crea la primera abajo para empezar a clasificar contenido.</p>
+      </div>
+    )}
+
+    {categories?.map((c) => {
+      const meta = kindMeta[c.kind] ?? kindMeta.other;
+      return (
+        <details class="group bg-white border border-stone-200 hover:border-stone-300 transition open:border-stone-900 open:shadow-sm">
+          <summary class="cursor-pointer list-none flex items-center gap-3 px-4 sm:px-5 py-4 select-none">
+            <span class={`shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full border text-base ${meta.color}`}>
+              {meta.emoji}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-baseline gap-2 min-w-0">
+                <p class="font-serif text-lg leading-tight truncate">{c.name}</p>
+                <span class="text-xs text-stone-400 shrink-0 hidden sm:inline">/{c.slug}</span>
+              </div>
+              <div class="flex items-center gap-2 text-[11px] text-stone-500 mt-0.5">
+                <span class="uppercase tracking-[0.1em]">{meta.label}</span>
+                <span class="text-stone-300">·</span>
+                <span>orden {c.sort_order ?? 0}</span>
+                {c.description && (
+                  <>
+                    <span class="text-stone-300 hidden sm:inline">·</span>
+                    <span class="hidden sm:inline truncate">{c.description}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <svg class="shrink-0 text-stone-400 group-open:rotate-180 transition-transform" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </summary>
+
+          <form method="POST" class="border-t border-stone-200">
+            <input type="hidden" name="_action" value="update" />
+            <input type="hidden" name="id" value={c.id} />
+
+            <div class="px-4 sm:px-5 py-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
+              <div class="lg:col-span-5">
+                <Field label="Nombre" name="name" value={c.name} required description="Como se muestra en el menú y los listados." />
+              </div>
+              <div class="lg:col-span-4">
+                <Field label="Slug" name="slug" value={c.slug} required description="Solo minúsculas, números y guiones." />
+              </div>
+              <div class="lg:col-span-3">
+                <Field label="Orden" name="sort_order" type="number" value={c.sort_order} description="Menor = primero. Ej: 10, 20, 30." />
+              </div>
+
+              <div class="lg:col-span-6">
+                <span class="label">Tipo</span>
+                <p class="text-xs text-stone-500 mt-0 mb-2 leading-relaxed">Determina dónde aparece la categoría en el sitio público.</p>
+                <Dropdown name="kind" value={c.kind} options={kindOptions} />
+              </div>
+              <div class="lg:col-span-12">
+                <Field label="Descripción" name="description" type="textarea" rows={2} value={c.description} description="Texto opcional que puede aparecer en la cabecera de la sección y en meta tags SEO." />
+              </div>
+            </div>
+
+            {canEdit && (
+              <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 px-4 sm:px-5 py-3 bg-stone-50 border-t border-stone-200">
+                <button
+                  type="submit"
+                  formnovalidate
+                  name="_action"
+                  value="delete"
+                  class="btn-danger sm:mr-auto"
+                  onclick={`return confirm('¿Borrar la categoría \"${c.name}\"? Los artículos y libros asociados quedarán sin categoría.')`}
+                >Borrar</button>
+                <button type="submit" class="btn-primary">Guardar cambios</button>
+              </div>
+            )}
+          </form>
+        </details>
+      );
+    })}
   </div>
 
-  {/* New category */}
   {canEdit && (
-  <form method="POST" class="border border-stone-300 border-dashed p-5 grid grid-cols-12 gap-3 items-end">
-    <h2 class="col-span-12 font-serif text-xl">Nueva categoría</h2>
-    <div class="col-span-3">
-      <Field label="Nombre" name="name" required />
+  <form method="POST" id="new-category" class="bg-white border-2 border-dashed border-stone-300 max-w-5xl scroll-mt-24">
+    <div class="px-4 sm:px-5 py-5 border-b border-dashed border-stone-300 flex items-center gap-3">
+      <span class="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full bg-stone-100 text-stone-500 border border-stone-200 text-lg">+</span>
+      <div>
+        <h2 class="font-serif text-lg leading-tight">Nueva categoría</h2>
+        <p class="text-xs text-stone-500">Agrégala para empezar a clasificar artículos y libros.</p>
+      </div>
     </div>
-    <div class="col-span-3">
-      <Field label="Slug" name="slug" hint="Auto si vacío" />
-    </div>
-    <div class="col-span-2">
-      <label class="block">
+
+    <div class="px-4 sm:px-5 py-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
+      <div class="lg:col-span-5">
+        <Field label="Nombre" name="name" required description="Como se mostrará al público." />
+      </div>
+      <div class="lg:col-span-4">
+        <Field label="Slug" name="slug" description="Auto-generado del nombre si lo dejas vacío." />
+      </div>
+      <div class="lg:col-span-3">
+        <Field label="Orden" name="sort_order" type="number" description="Menor = primero." />
+      </div>
+      <div class="lg:col-span-6">
         <span class="label">Tipo</span>
-        <select name="kind" class="input" required>
-          <option value="philosophy">philosophy</option>
-          <option value="poetry">poetry</option>
-          <option value="book">book</option>
-          <option value="other">other</option>
-        </select>
-      </label>
+        <p class="text-xs text-stone-500 mt-0 mb-2 leading-relaxed">Determina dónde aparece.</p>
+        <Dropdown name="kind" value="philosophy" options={kindOptions} />
+      </div>
+      <div class="lg:col-span-12">
+        <Field label="Descripción" name="description" type="textarea" rows={2} description="Opcional. Se muestra en la cabecera de la sección." />
+      </div>
     </div>
-    <div class="col-span-1">
-      <Field label="Orden" name="sort_order" type="number" />
-    </div>
-    <div class="col-span-3 flex gap-2 justify-end">
-      <button type="submit" class="btn-primary">Crear</button>
-    </div>
-    <div class="col-span-12">
-      <Field label="Descripción" name="description" type="textarea" rows={2} />
+
+    <div class="flex justify-end px-4 sm:px-5 py-3 bg-stone-50 border-t border-dashed border-stone-300">
+      <button type="submit" class="btn-primary w-full sm:w-auto">Crear categoría</button>
     </div>
   </form>
   )}

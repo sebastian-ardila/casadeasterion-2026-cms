@@ -1,6 +1,7 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import { requirePermission } from "~/lib/auth";
@@ -44,27 +45,53 @@ if (Astro.request.method === "POST") {
 ---
 
 <AppLayout title="Nuevo autor" resource="authors">
-  <h1 class="font-serif text-3xl mb-8">Nuevo autor</h1>
+  <BackToList href="/authors" label="Autores" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nuevo autor</h1>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
   <form method="POST" class="space-y-6 max-w-3xl">
-    <Field label="Nombre" name="name" required />
-    <Field label="Slug" name="slug" hint="Se genera del nombre si lo dejas vacío." />
 
-    <ImageUpload name="photo_url" label="Foto" bucket="authors" hint="Cuadrada, mínimo 600×600px." />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se nombra al autor en el sitio.</p>
+      </div>
+      <Field label="Nombre" name="name" required description="Nombre completo." />
+      <Field label="Slug" name="slug" description="Se autogenera del nombre si lo dejas vacío." />
+    </section>
 
-    <MarkdownEditor name="bio_md" label="Biografía" />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Foto</h2>
+        <p class="card-section-desc">Imagen cuadrada, mínimo 600×600px. Se convierte a WebP.</p>
+      </div>
+      <ImageUpload name="photo_url" label="Foto" bucket="authors" />
+    </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <Field label="Web" name="link_web" type="url" />
-      <Field label="Twitter" name="link_twitter" type="url" />
-      <Field label="Instagram" name="link_instagram" type="url" />
-    </div>
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Biografía</h2>
+        <p class="card-section-desc">Texto introductorio. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="bio_md" label="" />
+    </section>
 
-    <div class="flex gap-3 pt-4">
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Enlaces</h2>
+        <p class="card-section-desc">Páginas externas vinculadas al autor (opcional).</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <Field label="Web" name="link_web" type="url" description="Sitio personal." />
+        <Field label="Twitter" name="link_twitter" type="url" description="URL del perfil." />
+        <Field label="Instagram" name="link_instagram" type="url" description="URL del perfil." />
+      </div>
+    </section>
+
+    <div class="flex flex-col sm:flex-row gap-3 pt-4">
       <button type="submit" class="btn-primary">Crear autor</button>
       <a href="/authors" class="btn">Cancelar</a>
     </div>

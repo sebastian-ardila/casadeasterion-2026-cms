@@ -1,80 +1,44 @@
 ---
-import { getSupabaseServerClient } from "~/lib/supabase-server";
 import type { Resource, Level } from "~/lib/auth";
 
 interface Props {
   resource: Extract<Resource, "posts" | "books" | "authors">;
   activeId?: string | null;
   permission: Level;
+  // When true, hide the list panel on mobile (used when the user is
+  // viewing or editing a single item — the content takes the full width).
+  hideOnMobile?: boolean;
 }
-const { resource, activeId, permission } = Astro.props;
+const { resource, activeId, permission, hideOnMobile = false } = Astro.props;
 const canEdit = permission === "edit";
 
-const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
-
-type Item = {
-  id: string;
-  title: string;
-  subtitle?: string | null;
-  status?: string | null;
-  href: string;
+const headerByResource = {
+  posts: { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
+  books: { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" },
+  authors: { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
 };
-
-let items: Item[] = [];
-let header: { title: string; newHref: string; newLabel: string };
-
-if (resource === "posts") {
-  const { data } = await supabase
-    .from("posts")
-    .select("id, title, slug, status, updated_at, author_id, authors(name)")
-    .order("updated_at", { ascending: false });
-  items = (data ?? []).map((p: any) => ({
-    id: p.id,
-    title: p.title,
-    subtitle: p.authors?.name ?? p.slug,
-    status: p.status,
-    href: `/posts/${p.id}`,
-  }));
-  header = { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" };
-} else if (resource === "books") {
-  const { data } = await supabase
-    .from("books")
-    .select("id, title, slug, status, updated_at, authors(name)")
-    .order("updated_at", { ascending: false });
-  items = (data ?? []).map((b: any) => ({
-    id: b.id,
-    title: b.title,
-    subtitle: b.authors?.name ?? b.slug,
-    status: b.status,
-    href: `/books/${b.id}`,
-  }));
-  header = { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" };
-} else {
-  const { data } = await supabase
-    .from("authors")
-    .select("id, name, slug")
-    .order("name");
-  items = (data ?? []).map((a: any) => ({
-    id: a.id,
-    title: a.name,
-    subtitle: `/${a.slug}`,
-    href: `/authors/${a.id}`,
-  }));
-  header = { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" };
-}
+const header = headerByResource[resource];
 
 // Treat /new as a virtual active row at the top.
 const isNew = Astro.url.pathname.endsWith("/new");
 ---
 
-<aside class="w-80 shrink-0 border-r border-stone-200 bg-white min-h-screen flex flex-col">
+<aside
+  class:list={[
+    "list-panel w-full md:w-72 lg:w-80 shrink-0 md:border-r border-stone-200 bg-white md:min-h-screen flex flex-col",
+    hideOnMobile && "hidden md:flex",
+  ]}
+  data-list-panel={resource}
+  data-active-id={activeId ?? ""}
+>
   <div class="px-5 py-5 border-b border-stone-200 flex items-center justify-between gap-3">
     <h2 class="font-serif text-lg">{header.title}</h2>
     {canEdit && (
       <a
         href={header.newHref}
+        data-astro-prefetch
         class:list={[
-          "text-xs px-2.5 py-1.5 border transition",
+          "cursor-pointer text-xs px-2.5 py-1.5 border transition",
           isNew
             ? "border-stone-900 bg-stone-900 text-white"
             : "border-stone-300 hover:border-stone-900",
@@ -85,49 +49,243 @@ const isNew = Astro.url.pathname.endsWith("/new");
     )}
   </div>
 
-  <nav class="flex-1 overflow-y-auto">
-    {items.length === 0 ? (
-      <p class="text-sm text-stone-500 px-5 py-6">
-        Aún no hay {header.title.toLowerCase()}.
-      </p>
-    ) : (
-      <ul>
-        {items.map((it) => {
-          const active = it.id === activeId;
-          return (
-            <li>
-              <a
-                href={it.href}
-                class:list={[
-                  "block px-5 py-3 border-b border-stone-100 transition",
-                  active
-                    ? "bg-stone-100 border-l-2 border-l-stone-900"
-                    : "hover:bg-stone-50",
-                ]}
-              >
-                <div class="flex items-start justify-between gap-2">
-                  <p class="font-medium text-sm text-stone-900 line-clamp-2 flex-1">
-                    {it.title}
-                  </p>
-                  {it.status && (
-                    <span class:list={[
-                      "shrink-0 text-[10px] uppercase tracking-[0.1em] px-1.5 py-0.5 mt-0.5",
-                      it.status === "published"
-                        ? "bg-green-100 text-green-900"
-                        : "bg-stone-200 text-stone-600",
-                    ]}>
-                      {it.status === "published" ? "pub" : "borr"}
-                    </span>
-                  )}
-                </div>
-                {it.subtitle && (
-                  <p class="text-xs text-stone-500 mt-0.5 truncate">{it.subtitle}</p>
-                )}
-              </a>
-            </li>
-          );
-        })}
-      </ul>
-    )}
+  <nav class="flex-1 overflow-y-auto" data-list-nav>
+    {/* Skeleton placeholders shown until JS replaces them with real data. */}
+    <ul data-list-skeleton>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <li class="px-5 py-3 border-b border-stone-100" style={`opacity: ${1 - i * 0.12}`}>
+          <div class="h-3 bg-stone-200 rounded w-3/4 mb-2 animate-pulse"></div>
+          <div class="h-2.5 bg-stone-100 rounded w-1/2 animate-pulse"></div>
+        </li>
+      ))}
+    </ul>
+
+    <p class="text-sm text-stone-500 px-5 py-6 hidden" data-list-empty>
+      Aún no hay {header.title.toLowerCase()}.
+    </p>
+
+    <p class="text-sm text-red-700 px-5 py-6 hidden" data-list-error>
+      No se pudieron cargar los datos.
+    </p>
+
+    <ul class="hidden" data-list-items></ul>
   </nav>
 </aside>
+
+<style is:global>
+  /* Status pills inside the dynamically-rendered list. */
+  .lp-status {
+    display: inline-block;
+    flex-shrink: 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 2px 6px;
+    margin-top: 2px;
+  }
+  .lp-status-pub {
+    background: #dcfce7;
+    color: #14532d;
+  }
+  .lp-status-draft {
+    background: #e7e5e4;
+    color: #57534e;
+  }
+  .lp-link {
+    display: block;
+    padding: 12px 20px;
+    border-bottom: 1px solid #f5f5f4;
+    transition: background-color 0.1s;
+  }
+  .lp-link:hover {
+    background: #fafaf9;
+  }
+  .lp-link-active {
+    background: #f5f5f4;
+    border-left: 2px solid #1c1917;
+  }
+  .lp-title {
+    font-weight: 500;
+    font-size: 14px;
+    color: #1c1917;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1 1 0%;
+  }
+  .lp-sub {
+    font-size: 12px;
+    color: #78716c;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lp-row-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+</style>
+
+<script is:inline>
+  // Idempotent global controller: each <aside data-list-panel> is hydrated by
+  // fetching /api/list?resource=<r>. Results are cached in sessionStorage so
+  // navigating back is instant.
+  (() => {
+    if (window.__casListInit) return;
+    window.__casListInit = true;
+
+    const cacheKey = (r) => `cas:list:${r}`;
+    const CACHE_TTL = 60_000; // 1 min
+
+    const escape = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+    // Derive the active id from the current URL (more reliable than the SSR
+    // dataset attr, since the panel can be persisted across view transitions).
+    const currentActiveId = (resource) => {
+      const path = window.location.pathname;
+      const m = path.match(new RegExp(`^/${resource}/([^/]+)$`));
+      if (!m) return "";
+      const seg = m[1];
+      // /:resource/new is not an item id.
+      return seg === "new" ? "" : seg;
+    };
+
+    const renderItems = (panel, items) => {
+      const skeleton = panel.querySelector("[data-list-skeleton]");
+      const empty = panel.querySelector("[data-list-empty]");
+      const errEl = panel.querySelector("[data-list-error]");
+      const list = panel.querySelector("[data-list-items]");
+      const resource = panel.dataset.listPanel;
+      const activeId = currentActiveId(resource);
+
+      skeleton?.classList.add("hidden");
+      errEl?.classList.add("hidden");
+
+      if (!items || items.length === 0) {
+        empty?.classList.remove("hidden");
+        list?.classList.add("hidden");
+        return;
+      }
+
+      empty?.classList.add("hidden");
+      list.classList.remove("hidden");
+      list.innerHTML = items
+        .map((it) => {
+          const active = it.id === activeId;
+          const cls = "lp-link" + (active ? " lp-link-active" : "");
+          const status = it.status
+            ? `<span class="lp-status ${it.status === "published" ? "lp-status-pub" : "lp-status-draft"}">${it.status === "published" ? "pub" : "borr"}</span>`
+            : "";
+          return `
+            <li>
+              <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch>
+                <div class="lp-row-top">
+                  <p class="lp-title">${escape(it.title)}</p>
+                  ${status}
+                </div>
+                ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
+              </a>
+            </li>`;
+        })
+        .join("");
+    };
+
+    const showError = (panel) => {
+      panel.querySelector("[data-list-skeleton]")?.classList.add("hidden");
+      panel.querySelector("[data-list-error]")?.classList.remove("hidden");
+    };
+
+    const hydrate = async (panel) => {
+      const resource = panel.dataset.listPanel;
+      if (!resource) return;
+
+      // Hydrate from cache if fresh.
+      try {
+        const raw = sessionStorage.getItem(cacheKey(resource));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Date.now() - parsed.t < CACHE_TTL) {
+            renderItems(panel, parsed.items);
+          }
+        }
+      } catch {}
+
+      // Always refetch in the background to keep things fresh.
+      try {
+        const res = await fetch(`/api/list?resource=${encodeURIComponent(resource)}`, {
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
+        });
+        if (!res.ok) {
+          showError(panel);
+          return;
+        }
+        const data = await res.json();
+        renderItems(panel, data.items);
+        try {
+          sessionStorage.setItem(
+            cacheKey(resource),
+            JSON.stringify({ t: Date.now(), items: data.items })
+          );
+        } catch {}
+      } catch (err) {
+        // Network error: only show error if we never rendered anything.
+        if (panel.querySelector("[data-list-items]")?.classList.contains("hidden")) {
+          showError(panel);
+        }
+      }
+    };
+
+    const hydrateAll = () => {
+      document.querySelectorAll("[data-list-panel]").forEach((panel) => {
+        // Only hydrate once per page load; activeId update is handled below.
+        if (!panel.dataset.hydrated) {
+          panel.dataset.hydrated = "1";
+          hydrate(panel);
+        } else {
+          // Re-render with the new activeId from cache (no refetch needed).
+          const resource = panel.dataset.listPanel;
+          try {
+            const raw = sessionStorage.getItem(cacheKey(resource));
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              renderItems(panel, parsed.items);
+            }
+          } catch {}
+        }
+      });
+    };
+
+    // Initial run.
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", hydrateAll);
+    } else {
+      hydrateAll();
+    }
+
+    // Re-hydrate after Astro view transitions navigate.
+    document.addEventListener("astro:after-swap", hydrateAll);
+
+    // Invalidate cache when a form succeeds (server redirects with ?saved/?published).
+    // This pattern detects the redirect by reading the URL on landing.
+    document.addEventListener("astro:page-load", () => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("saved") || url.searchParams.has("published")) {
+        ["posts", "books", "authors"].forEach((r) => {
+          try {
+            sessionStorage.removeItem(cacheKey(r));
+          } catch {}
+        });
+      }
+    });
+  })();
+</script>

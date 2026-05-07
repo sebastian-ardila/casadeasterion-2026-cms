@@ -1,5 +1,6 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
+import Dropdown from "~/components/Dropdown.astro";
 import { requireOwner, RESOURCES, RESOURCE_LABEL, type Resource, type Level } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq } from "~/lib/forms";
@@ -57,7 +58,7 @@ if (Astro.request.method === "POST") {
 
 const { data: profiles } = await supabase
   .from("profiles")
-  .select("id, email, full_name, role")
+  .select("id, email, full_name, avatar_url, role")
   .in("role", ["owner", "admin"])
   .order("role")
   .order("email");
@@ -87,10 +88,19 @@ for (const row of permRows ?? []) {
 
 const profileEmails = new Set((profiles ?? []).map((p) => p.email.toLowerCase()));
 const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email.toLowerCase()));
+
+const levelOptions = [
+  { value: "none", label: "Sin acceso" },
+  { value: "view", label: "Ver" },
+  { value: "edit", label: "Editar" },
+];
+
+const initials = (s: string | null | undefined, fallback: string) =>
+  ((s ?? fallback).trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?").toUpperCase();
 ---
 
 <AppLayout title="Administradores">
-  <h1 class="font-serif text-3xl mb-2">Administradores</h1>
+  <h1 class="font-serif text-3xl md:text-4xl mb-2">Administradores</h1>
   <p class="text-stone-500 mb-8">Quién puede entrar al CMS y qué puede tocar.</p>
 
   {formError && (
@@ -101,20 +111,34 @@ const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email
   )}
 
   <h2 class="font-serif text-xl mt-2 mb-4">Activos</h2>
-  <div class="space-y-6 mb-12">
+  <div class="space-y-5 mb-12 max-w-5xl">
     {(profiles ?? []).map((p) => {
       const isSelf = p.id === owner.id;
       const isOwnerRow = p.role === "owner";
       const perms = permsByProfile.get(p.id)!;
       return (
-        <div class="border border-stone-200 bg-white p-5">
-          <div class="flex items-start justify-between mb-4">
-            <div>
-              <p class="font-medium">{p.full_name ?? p.email}</p>
-              <p class="text-xs text-stone-500">{p.email}</p>
-              <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-1">
-                {p.role}{isSelf ? " · tú" : ""}
-              </p>
+        <div class="card">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+            <div class="flex items-start gap-4 min-w-0">
+              {p.avatar_url ? (
+                <img
+                  src={p.avatar_url}
+                  alt=""
+                  referrerpolicy="no-referrer"
+                  class="w-12 h-12 rounded-full object-cover shrink-0 border border-stone-200"
+                />
+              ) : (
+                <div class="w-12 h-12 rounded-full bg-stone-200 shrink-0 flex items-center justify-center text-stone-700 text-sm font-medium">
+                  {initials(p.full_name, p.email)}
+                </div>
+              )}
+              <div class="min-w-0">
+                <p class="font-medium text-stone-900 truncate">{p.full_name ?? p.email}</p>
+                <p class="text-xs text-stone-500 truncate">{p.email}</p>
+                <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-1">
+                  {p.role === "owner" ? "Owner" : "Admin"}{isSelf ? " · tú" : ""}
+                </p>
+              </div>
             </div>
             {!isOwnerRow && !isSelf && (
               <form method="POST" onsubmit={`return confirm('¿Revocar acceso de ${p.email}?')`}>
@@ -125,28 +149,29 @@ const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email
             )}
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+          <p class="text-xs text-stone-500 mb-3 uppercase tracking-[0.12em]">Permisos por sección</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {RESOURCES.map((r) => (
               <form method="POST" class="flex flex-col">
-                <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1">
+                <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1.5">
                   {RESOURCE_LABEL[r]}
                 </label>
                 <input type="hidden" name="_action" value="set_permission" />
                 <input type="hidden" name="profile_id" value={p.id} />
                 <input type="hidden" name="resource" value={r} />
-                <select
+                <Dropdown
                   name="level"
-                  class="input"
+                  value={perms[r]}
+                  options={levelOptions}
                   disabled={isOwnerRow}
-                  onchange="this.form.submit()"
-                >
-                  <option value="none" selected={perms[r] === "none"}>sin acceso</option>
-                  <option value="view" selected={perms[r] === "view"}>ver</option>
-                  <option value="edit" selected={perms[r] === "edit"}>editar</option>
-                </select>
+                  submitOnChange
+                />
               </form>
             ))}
           </div>
+          {isOwnerRow && (
+            <p class="text-xs text-stone-400 mt-3 italic">El owner siempre tiene acceso completo a todas las secciones.</p>
+          )}
         </div>
       );
     })}
@@ -154,8 +179,11 @@ const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email
 
   {pendingEmails.length > 0 && (
     <>
-      <h2 class="font-serif text-xl mb-4">Pre-aprobados (sin haberse logueado aún)</h2>
-      <div class="border border-stone-200 bg-white mb-12">
+      <h2 class="font-serif text-xl mb-4">Pre-aprobados</h2>
+      <p class="text-sm text-stone-500 mb-4 max-w-2xl">
+        Estos correos pueden iniciar sesión en el CMS, pero aún no se han logueado por primera vez. Cuando lo hagan aparecerán arriba.
+      </p>
+      <div class="card mb-12 max-w-5xl p-0 overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-600">
             <tr>
@@ -175,7 +203,7 @@ const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email
                   <form method="POST" onsubmit={`return confirm('¿Quitar ${e.email} de la lista?')`}>
                     <input type="hidden" name="_action" value="remove_admin" />
                     <input type="hidden" name="email" value={e.email} />
-                    <button class="text-xs text-red-700 hover:underline">Quitar</button>
+                    <button class="cursor-pointer text-xs text-red-700 hover:underline">Quitar</button>
                   </form>
                 </td>
               </tr>
@@ -187,25 +215,28 @@ const pendingEmails = (allowlist ?? []).filter((a) => !profileEmails.has(a.email
   )}
 
   <h2 class="font-serif text-xl mb-4">Pre-aprobar nuevo email</h2>
-  <form method="POST" class="border border-stone-300 border-dashed p-5 grid grid-cols-12 gap-3 items-end max-w-3xl">
+  <form method="POST" class="card border-dashed border-2 max-w-3xl space-y-4">
+    <div>
+      <h3 class="card-section-title text-base">Agregar a la allowlist</h3>
+      <p class="card-section-desc">El nuevo admin entra con todos los permisos en "sin acceso". Una vez se loguee por primera vez, podrás darle permisos por sección desde la lista de arriba.</p>
+    </div>
     <input type="hidden" name="_action" value="add_email" />
-    <div class="col-span-5">
-      <label class="block">
-        <span class="label">Email</span>
-        <input class="input" type="email" name="email" placeholder="alguien@dominio.com" required />
-      </label>
+    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+      <div class="sm:col-span-5">
+        <label class="block">
+          <span class="label">Email de Google</span>
+          <input class="input" type="email" name="email" placeholder="alguien@dominio.com" required />
+        </label>
+      </div>
+      <div class="sm:col-span-5">
+        <label class="block">
+          <span class="label">Nota (opcional)</span>
+          <input class="input" type="text" name="note" placeholder="Rol o quién es esta persona" />
+        </label>
+      </div>
+      <div class="sm:col-span-2 flex justify-end">
+        <button class="btn-primary w-full sm:w-auto">Agregar</button>
+      </div>
     </div>
-    <div class="col-span-5">
-      <label class="block">
-        <span class="label">Nota (opcional)</span>
-        <input class="input" type="text" name="note" placeholder="rol o quién es" />
-      </label>
-    </div>
-    <div class="col-span-2 flex justify-end">
-      <button class="btn-primary">Agregar</button>
-    </div>
-    <p class="col-span-12 text-xs text-stone-500">
-      El nuevo admin entra con todos los permisos en <em>sin acceso</em>. Una vez se loguee por primera vez, podrás darle permisos por sección desde la lista de arriba.
-    </p>
   </form>
 </AppLayout>

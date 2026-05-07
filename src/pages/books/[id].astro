@@ -1,6 +1,8 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
@@ -58,7 +60,6 @@ if (Astro.request.method === "POST") {
       gallery_urls: jsonStringArray(fd, "gallery_urls"),
     };
 
-    // If transitioning to published and no date set, fill it.
     const { data: existing } = await supabase
       .from("books").select("published_at, status").eq("id", id).single();
     if (newStatus === "published" && !existing?.published_at) {
@@ -81,12 +82,41 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   supabase.from("authors").select("id, name").order("name"),
   supabase.from("categories").select("id, name, kind").order("name"),
 ]);
+
+const authorOptions = [
+  { value: "", label: "Sin autor" },
+  ...(authors ?? []).map((a) => ({ value: a.id, label: a.name })),
+];
+const categoryOptions = [
+  { value: "", label: "Sin categoría" },
+  ...(categories ?? []).map((c) => ({ value: c.id, label: c.name, hint: c.kind })),
+];
+const formatOptions = [
+  { value: "", label: "Sin especificar" },
+  { value: "paperback", label: "Tapa blanda" },
+  { value: "hardcover", label: "Tapa dura" },
+  { value: "ebook", label: "Ebook" },
+  { value: "other", label: "Otro" },
+];
+const currencyOptions = [
+  { value: "COP", label: "COP — Peso colombiano" },
+  { value: "USD", label: "USD — Dólar" },
+  { value: "EUR", label: "EUR — Euro" },
+];
+const statusOptions = [
+  { value: "draft", label: "Borrador", hint: "no visible al público" },
+  { value: "published", label: "Publicado", hint: "dispara rebuild" },
+];
 ---
 
-<AppLayout title={book.title} resource="books" activeId={book.id}>
+<AppLayout title={book.title} resource="books" activeId={book.id} breadcrumbLabel={book.title}>
 
-  <h1 class="font-serif text-3xl mb-2">{book.title}</h1>
-  <p class="text-stone-500 text-sm mb-8">/{book.slug} · actualizado {new Date(book.updated_at).toLocaleString("es-CO")}</p>
+  <BackToList href="/books" label="Libros" />
+
+  <header class="mb-8">
+    <h1 class="font-serif text-3xl md:text-4xl mb-2 leading-tight">{book.title}</h1>
+    <p class="text-stone-500 text-xs">/{book.slug} · actualizado {new Date(book.updated_at).toLocaleString("es-CO")}</p>
+  </header>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
@@ -96,83 +126,101 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   )}
 
   <form method="POST" class="space-y-6 max-w-3xl">
-    <Field label="Título" name="title" value={book.title} required />
-    <Field label="Slug" name="slug" value={book.slug} required />
-    <Field label="Subtítulo" name="subtitle" value={book.subtitle} />
 
-    <ImageUpload name="cover_image_url" value={book.cover_image_url} label="Portada" bucket="covers" />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad del libro</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra en el catálogo.</p>
+      </div>
+      <Field label="Título" name="title" value={book.title} required description="Título principal de la obra." />
+      <Field label="Slug" name="slug" value={book.slug} required description="Identificador único en la URL: /catalogo/<slug>." />
+      <Field label="Subtítulo" name="subtitle" value={book.subtitle} description="Subtítulo opcional. Aparece debajo del título." />
+    </section>
 
-    <GalleryUpload name="gallery_urls" value={book.gallery_urls} label="Galería del libro" bucket="content" hint="Páginas interiores, contraportada, ilustraciones, etc." />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Portada y galería</h2>
+        <p class="card-section-desc">Imágenes del libro. Se convierten automáticamente a WebP.</p>
+      </div>
+      <ImageUpload name="cover_image_url" value={book.cover_image_url} label="Portada" bucket="covers" />
+      <GalleryUpload name="gallery_urls" value={book.gallery_urls} label="Galería del libro" bucket="content" hint="Páginas interiores, contraportada, ilustraciones, etc." />
+    </section>
 
-    <div class="grid grid-cols-2 gap-4">
-      <label class="block">
-        <span class="label">Autor</span>
-        <select name="author_id" class="input">
-          <option value="">—</option>
-          {authors?.map((a) => (
-            <option value={a.id} selected={a.id === book.author_id}>{a.name}</option>
-          ))}
-        </select>
-      </label>
-      <label class="block">
-        <span class="label">Categoría</span>
-        <select name="category_id" class="input">
-          <option value="">—</option>
-          {categories?.map((c) => (
-            <option value={c.id} selected={c.id === book.category_id}>{c.name} ({c.kind})</option>
-          ))}
-        </select>
-      </label>
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Clasificación</h2>
+        <p class="card-section-desc">Asocia el libro a un autor y a una categoría del menú.</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <span class="label">Autor</span>
+          <Dropdown name="author_id" value={book.author_id ?? ""} options={authorOptions} placeholder="Sin autor" />
+        </div>
+        <div>
+          <span class="label">Categoría</span>
+          <Dropdown name="category_id" value={book.category_id ?? ""} options={categoryOptions} placeholder="Sin categoría" />
+        </div>
+      </div>
+    </section>
 
-    <MarkdownEditor name="description_md" value={book.description_md} label="Descripción" />
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Descripción</h2>
+        <p class="card-section-desc">Sinopsis o descripción larga del libro. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="description_md" value={book.description_md} label="" />
+    </section>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <Field label="ISBN" name="isbn" value={book.isbn} hint="10 o 13 dígitos. Acepta guiones." />
-      <Field label="Páginas" name="pages" type="number" value={book.pages} />
-      <label class="block">
-        <span class="label">Formato</span>
-        <select name="format" class="input">
-          <option value="">—</option>
-          {["paperback","hardcover","ebook","other"].map((f) => (
-            <option value={f} selected={book.format === f}>{f}</option>
-          ))}
-        </select>
-      </label>
-      <Field label="Publicado" name="publication_date" type="date" value={book.publication_date} />
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Detalles editoriales</h2>
+        <p class="card-section-desc">Datos físicos y comerciales que aparecen en la ficha.</p>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Field label="ISBN" name="isbn" value={book.isbn} description="10 o 13 dígitos. Acepta guiones." />
+        <Field label="Páginas" name="pages" type="number" value={book.pages} description="Número total de páginas." />
+        <div>
+          <span class="label">Formato</span>
+          <Dropdown name="format" value={book.format ?? ""} options={formatOptions} placeholder="Sin especificar" />
+        </div>
+        <Field label="Publicado" name="publication_date" type="date" value={book.publication_date} description="Fecha de publicación impresa." />
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Field label="Precio" name="price_amount" type="number" value={book.price_amount} description="Precio sugerido." />
+        <div>
+          <span class="label">Moneda</span>
+          <Dropdown name="price_currency" value={book.price_currency ?? "COP"} options={currencyOptions} />
+        </div>
+        <Field label="Tags" name="tags" value={book.tags?.join(", ")} description="Etiquetas, separadas por coma." />
+      </div>
+    </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <Field label="Precio" name="price_amount" type="number" value={book.price_amount} />
-      <label class="block">
-        <span class="label">Moneda</span>
-        <select name="price_currency" class="input">
-          {["COP","USD","EUR"].map((c) => (
-            <option value={c} selected={book.price_currency === c}>{c}</option>
-          ))}
-        </select>
-      </label>
-      <Field label="Tags" name="tags" value={book.tags?.join(", ")} hint="Separados por coma" />
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Compra por WhatsApp</h2>
+        <p class="card-section-desc">Mensaje específico para este libro al hacer clic en "Comprar". Si lo dejas vacío, se usa la plantilla global.</p>
+      </div>
+      <Field
+        label="Mensaje WhatsApp (opcional)"
+        name="whatsapp_message_override"
+        type="textarea"
+        rows={3}
+        value={book.whatsapp_message_override}
+        description="Variables disponibles: {{title}}, {{author}}, {{isbn}}, {{slug}}."
+      />
+    </section>
 
-    <Field
-      label="Mensaje WhatsApp custom"
-      name="whatsapp_message_override"
-      type="textarea"
-      rows={3}
-      value={book.whatsapp_message_override}
-      hint="Si vacío, usa la plantilla global. Variables: {{title}}, {{author}}, {{isbn}}, {{slug}}."
-    />
+    <section class="card">
+      <div class="mb-4">
+        <h2 class="card-section-title">Estado de publicación</h2>
+        <p class="card-section-desc">Borrador queda oculto. Publicado dispara un rebuild del sitio público.</p>
+      </div>
+      <div class="max-w-xs">
+        <Dropdown name="status" value={book.status} options={statusOptions} />
+      </div>
+    </section>
 
-    <label class="block">
-      <span class="label">Estado</span>
-      <select name="status" class="input max-w-xs">
-        <option value="draft" selected={book.status === "draft"}>Borrador</option>
-        <option value="published" selected={book.status === "published"}>Publicado</option>
-      </select>
-    </label>
-
-    <div class="flex justify-between pt-4 border-t border-stone-200">
+    <div class="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t border-stone-200">
       <button type="submit" class="btn-primary">Guardar cambios</button>
       <a href="/books" class="btn">Cancelar</a>
     </div>
@@ -180,7 +228,7 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
 
   <form
     method="POST"
-    class="mt-12 pt-6 border-t border-red-200"
+    class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
     onsubmit="return confirm('¿Seguro que quieres borrar este libro? Esta acción es permanente.')"
   >
     <input type="hidden" name="_action" value="delete" />

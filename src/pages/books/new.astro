@@ -1,6 +1,8 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
@@ -66,89 +68,136 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   supabase.from("authors").select("id, name").order("name"),
   supabase.from("categories").select("id, name, kind").order("name"),
 ]);
+
+const authorOptions = [
+  { value: "", label: "Sin autor" },
+  ...(authors ?? []).map((a) => ({ value: a.id, label: a.name })),
+];
+const categoryOptions = [
+  { value: "", label: "Sin categoría" },
+  ...(categories ?? []).map((c) => ({ value: c.id, label: c.name, hint: c.kind })),
+];
+const formatOptions = [
+  { value: "", label: "Sin especificar" },
+  { value: "paperback", label: "Tapa blanda" },
+  { value: "hardcover", label: "Tapa dura" },
+  { value: "ebook", label: "Ebook" },
+  { value: "other", label: "Otro" },
+];
+const currencyOptions = [
+  { value: "COP", label: "COP — Peso colombiano" },
+  { value: "USD", label: "USD — Dólar" },
+  { value: "EUR", label: "EUR — Euro" },
+];
+const statusOptions = [
+  { value: "draft", label: "Borrador", hint: "no visible al público" },
+  { value: "published", label: "Publicado", hint: "dispara rebuild" },
+];
 ---
 
 <AppLayout title="Nuevo libro" resource="books">
-  <h1 class="font-serif text-3xl mb-8">Nuevo libro</h1>
+  <BackToList href="/books" label="Libros" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nuevo libro</h1>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
   <form method="POST" class="space-y-6 max-w-3xl">
-    <Field label="Título" name="title" required />
-    <Field label="Slug" name="slug" hint="Se genera automáticamente del título si lo dejas vacío." />
-    <Field label="Subtítulo" name="subtitle" />
 
-    <ImageUpload name="cover_image_url" label="Portada" bucket="covers" />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad del libro</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra en el catálogo.</p>
+      </div>
+      <Field label="Título" name="title" required description="Título principal de la obra." />
+      <Field label="Slug" name="slug" description="Se autogenera del título si lo dejas vacío." />
+      <Field label="Subtítulo" name="subtitle" description="Subtítulo opcional. Aparece debajo del título." />
+    </section>
 
-    <GalleryUpload name="gallery_urls" label="Galería del libro" bucket="content" hint="Páginas interiores, contraportada, ilustraciones, etc." />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Portada y galería</h2>
+        <p class="card-section-desc">Imágenes del libro. Se convierten automáticamente a WebP.</p>
+      </div>
+      <ImageUpload name="cover_image_url" label="Portada" bucket="covers" />
+      <GalleryUpload name="gallery_urls" label="Galería del libro" bucket="content" hint="Páginas interiores, contraportada, ilustraciones, etc." />
+    </section>
 
-    <div class="grid grid-cols-2 gap-4">
-      <label class="block">
-        <span class="label">Autor</span>
-        <select name="author_id" class="input">
-          <option value="">—</option>
-          {authors?.map((a) => <option value={a.id}>{a.name}</option>)}
-        </select>
-      </label>
-      <label class="block">
-        <span class="label">Categoría</span>
-        <select name="category_id" class="input">
-          <option value="">—</option>
-          {categories?.map((c) => <option value={c.id}>{c.name} ({c.kind})</option>)}
-        </select>
-      </label>
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Clasificación</h2>
+        <p class="card-section-desc">Asocia el libro a un autor y a una categoría del menú.</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <span class="label">Autor</span>
+          <Dropdown name="author_id" options={authorOptions} placeholder="Sin autor" />
+        </div>
+        <div>
+          <span class="label">Categoría</span>
+          <Dropdown name="category_id" options={categoryOptions} placeholder="Sin categoría" />
+        </div>
+      </div>
+    </section>
 
-    <MarkdownEditor name="description_md" label="Descripción" />
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Descripción</h2>
+        <p class="card-section-desc">Sinopsis del libro. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="description_md" label="" />
+    </section>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <Field label="ISBN" name="isbn" hint="10 o 13 dígitos. Acepta guiones." />
-      <Field label="Páginas" name="pages" type="number" />
-      <label class="block">
-        <span class="label">Formato</span>
-        <select name="format" class="input">
-          <option value="">—</option>
-          <option value="paperback">Tapa blanda</option>
-          <option value="hardcover">Tapa dura</option>
-          <option value="ebook">Ebook</option>
-          <option value="other">Otro</option>
-        </select>
-      </label>
-      <Field label="Publicado" name="publication_date" type="date" />
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Detalles editoriales</h2>
+        <p class="card-section-desc">Datos físicos y comerciales.</p>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Field label="ISBN" name="isbn" description="10 o 13 dígitos. Acepta guiones." />
+        <Field label="Páginas" name="pages" type="number" description="Total de páginas." />
+        <div>
+          <span class="label">Formato</span>
+          <Dropdown name="format" options={formatOptions} placeholder="Sin especificar" />
+        </div>
+        <Field label="Publicado" name="publication_date" type="date" description="Fecha de impresión." />
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Field label="Precio" name="price_amount" type="number" description="Precio sugerido." />
+        <div>
+          <span class="label">Moneda</span>
+          <Dropdown name="price_currency" value="COP" options={currencyOptions} />
+        </div>
+        <Field label="Tags" name="tags" description="Separados por coma." />
+      </div>
+    </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <Field label="Precio" name="price_amount" type="number" />
-      <label class="block">
-        <span class="label">Moneda</span>
-        <select name="price_currency" class="input">
-          <option value="COP" selected>COP</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-        </select>
-      </label>
-      <Field label="Tags" name="tags" hint="Separados por coma" />
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Compra por WhatsApp</h2>
+        <p class="card-section-desc">Mensaje específico para este libro. Si lo dejas vacío, se usa la plantilla global.</p>
+      </div>
+      <Field
+        label="Mensaje WhatsApp (opcional)"
+        name="whatsapp_message_override"
+        type="textarea"
+        rows={3}
+        description="Variables disponibles: {{title}}, {{author}}, {{isbn}}, {{slug}}."
+      />
+    </section>
 
-    <Field
-      label="Mensaje WhatsApp custom"
-      name="whatsapp_message_override"
-      type="textarea"
-      rows={3}
-      hint="Si vacío, usa la plantilla global. Variables: {{title}}, {{author}}, {{isbn}}, {{slug}}."
-    />
+    <section class="card">
+      <div class="mb-4">
+        <h2 class="card-section-title">Estado de publicación</h2>
+        <p class="card-section-desc">Borrador queda oculto. Publicado dispara un rebuild del sitio público.</p>
+      </div>
+      <div class="max-w-xs">
+        <Dropdown name="status" value="draft" options={statusOptions} />
+      </div>
+    </section>
 
-    <label class="block">
-      <span class="label">Estado</span>
-      <select name="status" class="input max-w-xs">
-        <option value="draft" selected>Borrador</option>
-        <option value="published">Publicado</option>
-      </select>
-    </label>
-
-    <div class="flex gap-3 pt-4">
+    <div class="flex flex-col sm:flex-row gap-3 pt-4">
       <button type="submit" class="btn-primary">Crear libro</button>
       <a href="/books" class="btn">Cancelar</a>
     </div>

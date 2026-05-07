@@ -1,6 +1,8 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
@@ -57,59 +59,93 @@ const [{ data: authors }, { data: categories }] = await Promise.all([
   supabase.from("authors").select("id, name").order("name"),
   supabase.from("categories").select("id, name, kind").order("name"),
 ]);
+
+const authorOptions = [
+  { value: "", label: "Sin autor" },
+  ...(authors ?? []).map((a) => ({ value: a.id, label: a.name })),
+];
+const categoryOptions = [
+  { value: "", label: "Sin categoría" },
+  ...(categories ?? []).map((c) => ({ value: c.id, label: c.name })),
+];
+const statusOptions = [
+  { value: "draft", label: "Borrador", hint: "no visible al público" },
+  { value: "published", label: "Publicado", hint: "dispara rebuild" },
+];
 ---
 
 <AppLayout title="Nuevo artículo" resource="posts">
-  <h1 class="font-serif text-3xl mb-8">Nuevo artículo</h1>
+  <BackToList href="/posts" label="Artículos" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nuevo artículo</h1>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
   <form method="POST" class="space-y-6 max-w-5xl">
-    <Field label="Título" name="title" required />
-    <Field label="Slug" name="slug" hint="Se genera del título si lo dejas vacío." />
-    <Field label="Subtítulo" name="subtitle" />
-    <Field label="Resumen (excerpt)" name="excerpt" type="textarea" rows={3} hint="Aparece en tarjetas de listados." />
 
-    <ImageUpload name="cover_image_url" label="Imagen de portada" bucket="covers" />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad del artículo</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra el artículo en el sitio.</p>
+      </div>
+      <Field label="Título" name="title" required description="El encabezado principal que verán los lectores." />
+      <Field label="Slug" name="slug" description="Se autogenera del título si lo dejas vacío. Aparece en la URL: /articulos/<slug>." />
+      <Field label="Subtítulo" name="subtitle" description="Aparece debajo del título en la página del artículo. Opcional." />
+      <Field label="Resumen (excerpt)" name="excerpt" type="textarea" rows={3} description="Texto corto que se muestra en tarjetas de listado y al compartir en redes." />
+    </section>
 
-    <GalleryUpload name="gallery_urls" label="Galería de imágenes" bucket="content" hint="Imágenes adicionales del artículo (aparte de la portada)." />
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Imagen y galería</h2>
+        <p class="card-section-desc">Las imágenes se convierten automáticamente a WebP al subirlas.</p>
+      </div>
+      <ImageUpload name="cover_image_url" label="Imagen de portada" bucket="covers" />
+      <GalleryUpload name="gallery_urls" label="Galería de imágenes" bucket="content" hint="Imágenes adicionales del artículo (aparte de la portada)." />
+    </section>
 
-    <div class="grid grid-cols-2 gap-4">
-      <label class="block">
-        <span class="label">Autor</span>
-        <select name="author_id" class="input">
-          <option value="">—</option>
-          {authors?.map((a) => <option value={a.id}>{a.name}</option>)}
-        </select>
-      </label>
-      <label class="block">
-        <span class="label">Categoría</span>
-        <select name="category_id" class="input">
-          <option value="">—</option>
-          {categories?.map((c) => <option value={c.id}>{c.name}</option>)}
-        </select>
-      </label>
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Clasificación</h2>
+        <p class="card-section-desc">Asocia el artículo a un autor y a una categoría del menú.</p>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <span class="label">Autor</span>
+          <Dropdown name="author_id" options={authorOptions} placeholder="Sin autor" />
+        </div>
+        <div>
+          <span class="label">Categoría</span>
+          <Dropdown name="category_id" options={categoryOptions} placeholder="Sin categoría" />
+        </div>
+      </div>
+    </section>
 
-    <MarkdownEditor name="content_md" label="Contenido" required />
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Contenido</h2>
+        <p class="card-section-desc">Markdown con barra de herramientas. Pega o arrastra imágenes para subirlas.</p>
+      </div>
+      <MarkdownEditor name="content_md" label="" required />
+    </section>
 
-    <div class="grid grid-cols-3 gap-4">
-      <Field label="Tiempo de lectura (min)" name="reading_time_minutes" type="number" hint="Vacío = se calcula del contenido." />
-      <Field label="Tags" name="tags" hint="Separados por coma" />
-      <label class="block">
-        <span class="label">Estado</span>
-        <select name="status" class="input">
-          <option value="draft" selected>Borrador</option>
-          <option value="published">Publicado</option>
-        </select>
-      </label>
-    </div>
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Metadatos y estado</h2>
+        <p class="card-section-desc">Información complementaria para SEO y si el artículo es visible al público.</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <Field label="Tiempo (min)" name="reading_time_minutes" type="number" description="Vacío = se calcula del contenido." />
+        <Field label="Tags" name="tags" description="Etiquetas, separadas por coma." />
+        <div>
+          <span class="label">Estado</span>
+          <Dropdown name="status" value="draft" options={statusOptions} />
+        </div>
+      </div>
+      <Field label="Meta description (SEO)" name="meta_description" type="textarea" rows={2} description="Aparece en buscadores y al compartir. Máx. 160 caracteres recomendado." />
+    </section>
 
-    <Field label="Meta description (SEO)" name="meta_description" type="textarea" rows={2} />
-
-    <div class="flex gap-3 pt-4">
+    <div class="flex flex-col sm:flex-row gap-3 pt-4">
       <button type="submit" class="btn-primary">Crear artículo</button>
       <a href="/posts" class="btn">Cancelar</a>
     </div>
