@@ -6,6 +6,7 @@ import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
+import AiSuggest from "~/components/AiSuggest.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray } from "~/lib/forms";
@@ -55,6 +56,9 @@ if (Astro.request.method === "POST") {
       price_amount: num(fd, "price_amount"),
       price_currency: str(fd, "price_currency") ?? "COP",
       whatsapp_message_override: str(fd, "whatsapp_message_override"),
+      keywords: parseTags(fd, "keywords"),
+      canonical_url: str(fd, "canonical_url"),
+      cover_image_alt: str(fd, "cover_image_alt"),
       publication_date: str(fd, "publication_date"),
       status: newStatus,
       tags: parseTags(fd, "tags"),
@@ -224,6 +228,17 @@ const statusOptions = [
         value={book.whatsapp_message_override}
         description="Variables disponibles: {{title}}, {{author}}, {{isbn}}, {{slug}}."
       />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO y redes sociales</h2>
+        <p class="card-section-desc">Cómo aparece en Google y al compartir.</p>
+      </div>
+      <AiSuggest kind="book" contentField="description_md" />
+      <Field label="Palabras clave (SEO)" name="keywords" value={book.keywords?.join(", ")} description="Términos por los que esperas que la gente encuentre el libro. Separadas por coma." />
+      <Field label="Texto alt de la portada" name="cover_image_alt" value={book.cover_image_alt} description="Descripción de la portada para lectores de pantalla y SEO. Vacío = se usa el título." />
+      <Field label="URL canónica" name="canonical_url" type="url" value={book.canonical_url} description="Si la ficha del libro existe en otro lugar (Goodreads, Amazon, etc.) y quieres apuntar ahí como original." />
     </section>
 
     <section class="card">

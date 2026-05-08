@@ -73,6 +73,10 @@
     @apply inline-flex items-center justify-center cursor-pointer px-4 py-2 text-sm font-medium border border-red-300 text-red-700 bg-white hover:bg-red-50 hover:border-red-500 transition;
   }
 
+  .btn-ai {
+    @apply inline-flex items-center justify-center cursor-pointer px-4 py-2 text-sm font-medium bg-violet-700 text-white hover:bg-violet-800 transition disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
   .label {
     @apply block text-xs uppercase tracking-[0.12em] font-semibold text-stone-700 mb-1.5;
   }

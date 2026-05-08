@@ -4,6 +4,7 @@ import Field from "~/components/Field.astro";
 import Dropdown from "~/components/Dropdown.astro";
 import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import AiSuggest from "~/components/AiSuggest.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
 import { requirePermission } from "~/lib/auth";
@@ -43,6 +44,9 @@ if (Astro.request.method === "POST") {
         reading_time_minutes: num(fd, "reading_time_minutes") ?? reading,
         meta_description: str(fd, "meta_description"),
         tags: parseTags(fd, "tags"),
+        keywords: parseTags(fd, "keywords"),
+        canonical_url: str(fd, "canonical_url"),
+        cover_image_alt: str(fd, "cover_image_alt"),
         gallery_urls: jsonStringArray(fd, "gallery_urls"),
       })
       .select("id")
@@ -137,17 +141,28 @@ const statusOptions = [
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Metadatos y estado</h2>
-        <p class="card-section-desc">Información complementaria para SEO y si el artículo es visible al público.</p>
+        <p class="card-section-desc">Información complementaria y si el artículo es visible al público.</p>
       </div>
       <div class="grid sm:grid-cols-3 gap-4">
         <Field label="Tiempo (min)" name="reading_time_minutes" type="number" description="Vacío = se calcula del contenido." />
-        <Field label="Tags" name="tags" description="Etiquetas, separadas por coma." />
+        <Field label="Tags" name="tags" description="Etiquetas internas para organización en el CMS." />
         <div>
           <span class="label">Estado</span>
           <Dropdown name="status" value="draft" options={statusOptions} />
         </div>
       </div>
-      <Field label="Meta description (SEO)" name="meta_description" type="textarea" rows={2} description="Aparece en buscadores y al compartir. Máx. 160 caracteres recomendado." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO y redes sociales</h2>
+        <p class="card-section-desc">Cómo aparece en Google y al compartir.</p>
+      </div>
+      <AiSuggest kind="post" contentField="content_md" />
+      <Field label="Meta description" name="meta_description" type="textarea" rows={2} description="Aparece en buscadores y al compartir. 140-160 caracteres recomendado. Vacío = usa el resumen." />
+      <Field label="Palabras clave (SEO)" name="keywords" description="Términos por los que esperas que la gente encuentre este artículo. Separadas por coma." />
+      <Field label="Texto alt de la imagen de portada" name="cover_image_alt" description="Descripción de la imagen para lectores de pantalla y SEO." />
+      <Field label="URL canónica" name="canonical_url" type="url" description="Solo si publicaste el mismo contenido en otro lado. Apunta a la versión original." />
     </section>
 
     <div class="flex flex-col sm:flex-row gap-3 pt-4">

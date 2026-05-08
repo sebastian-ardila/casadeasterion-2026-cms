@@ -43,10 +43,10 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
     <link rel="icon" href="/casadeasterion.webp" type="image/webp" />
     <ClientRouter />
   </head>
-  <body class="min-h-screen md:flex">
+  <body class="min-h-screen md:flex md:h-screen md:overflow-hidden">
     <Sidebar user={user} permissions={permissions} transition:persist="cms-sidebar" />
     <MobileBreadcrumb currentLabel={breadcrumbLabel} />
-    <div class="md:flex md:flex-1 md:min-w-0">
+    <div class="md:flex md:flex-1 md:min-w-0 md:h-screen md:overflow-hidden">
       {showListPanel && (
         <ListPanel
           resource={resource!}
@@ -58,7 +58,7 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
       )}
       <main
         class:list={[
-          "flex-1 min-w-0 px-5 md:px-8 lg:px-10 py-6 md:py-10 max-w-[1100px]",
+          "flex-1 min-w-0 px-5 md:px-8 lg:px-10 py-6 md:py-10 max-w-[1100px] md:h-screen md:overflow-y-auto",
           showListPanel && !isDetailRoute && "hidden md:block",
         ]}
       >

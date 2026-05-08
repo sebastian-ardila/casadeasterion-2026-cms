@@ -12,12 +12,15 @@
     "typecheck": "astro check"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.63",
     "@aws-sdk/client-amplify": "^3.1044.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.4",
+    "ai": "^6.0.176",
     "astro": "^5.7.5",
     "astro-aws-amplify": "^0.2.4",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",

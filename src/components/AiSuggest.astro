@@ -1,0 +1,184 @@
+---
+interface Props {
+  kind: "post" | "book" | "author";
+  /** Form field name that holds the primary content (markdown). */
+  contentField: string;
+  /** Optional: form field name that holds the title (defaults to "title" or "name"). */
+  titleField?: string;
+}
+const { kind, contentField, titleField } = Astro.props;
+const defaultTitleField = kind === "author" ? "name" : "title";
+const id = `ai-suggest-${Math.random().toString(36).slice(2, 8)}`;
+---
+
+<div
+  class="flex flex-col gap-2"
+  data-ai-suggest={id}
+  data-ai-kind={kind}
+  data-ai-content-field={contentField}
+  data-ai-title-field={titleField ?? defaultTitleField}
+>
+  <button
+    type="button"
+    data-ai-trigger
+    class="btn-ai gap-2 self-start"
+  >
+    <svg data-ai-icon-default width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+    </svg>
+    <svg data-ai-icon-spin class="hidden animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+    </svg>
+    <span data-ai-label>Sugerir con IA</span>
+  </button>
+  <p class="text-xs m-0 hidden" data-ai-status></p>
+</div>
+
+<script type="module" define:vars={{ id }}>
+  const wrapper = document.querySelector(`[data-ai-suggest="${id}"]`);
+  if (wrapper) {
+    const trigger = wrapper.querySelector("[data-ai-trigger]");
+    const label = wrapper.querySelector("[data-ai-label]");
+    const status = wrapper.querySelector("[data-ai-status]");
+    const iconDefault = wrapper.querySelector("[data-ai-icon-default]");
+    const iconSpin = wrapper.querySelector("[data-ai-icon-spin]");
+    const kind = wrapper.dataset.aiKind;
+    const contentFieldName = wrapper.dataset.aiContentField;
+    const titleFieldName = wrapper.dataset.aiTitleField;
+
+    const FIELD_LABELS = {
+      excerpt: "resumen",
+      meta_description: "meta description",
+      tags: "tags",
+      keywords: "palabras clave",
+      cover_image_alt: "alt de portada",
+    };
+
+    const showStatus = (msg, kind = "info") => {
+      status.textContent = msg;
+      status.classList.remove("hidden");
+      status.style.color =
+        kind === "error" ? "#b91c1c" : kind === "success" ? "#166534" : "#57534e";
+    };
+
+    const findForm = () => wrapper.closest("form");
+
+    const readField = (form, name) => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (!el) return "";
+      return typeof el.value === "string" ? el.value : "";
+    };
+
+    const writeField = (form, name, value) => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (!el || typeof value !== "string") return false;
+      el.value = value;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    };
+
+    const writeArrayField = (form, name, arr) => {
+      if (!Array.isArray(arr)) return false;
+      return writeField(form, name, arr.join(", "));
+    };
+
+    // Lock the entire form (except this AiSuggest block) while the AI runs.
+    // Restores the original disabled state of each control so we don't
+    // accidentally enable inputs that were disabled for permission reasons.
+    const lockForm = (form) => {
+      const overlay = document.createElement("div");
+      overlay.dataset.aiOverlay = "1";
+      overlay.className =
+        "absolute inset-0 bg-stone-50/40 backdrop-blur-[1px] z-10 cursor-wait";
+      const positionedAncestor = form.style.position;
+      if (!positionedAncestor) form.style.position = "relative";
+      form.appendChild(overlay);
+
+      const controls = form.querySelectorAll("input, textarea, select, button");
+      const previous = [];
+      controls.forEach((c) => {
+        if (wrapper.contains(c)) return;
+        previous.push([c, c.disabled]);
+        c.disabled = true;
+      });
+      form.dataset.aiLocked = "1";
+
+      return () => {
+        previous.forEach(([c, was]) => {
+          c.disabled = was;
+        });
+        overlay.remove();
+        if (!positionedAncestor) form.style.removeProperty("position");
+        delete form.dataset.aiLocked;
+      };
+    };
+
+    const setBusy = (busy) => {
+      trigger.disabled = busy;
+      label.textContent = busy ? "Generando…" : "Sugerir con IA";
+      iconDefault.classList.toggle("hidden", busy);
+      iconSpin.classList.toggle("hidden", !busy);
+    };
+
+    trigger.addEventListener("click", async () => {
+      const form = findForm();
+      if (!form) return;
+
+      const title = readField(form, titleFieldName).trim();
+      const content = readField(form, contentFieldName).trim();
+
+      if (!title || content.length < 40) {
+        showStatus("Necesito título y unos 40+ caracteres de contenido.", "error");
+        return;
+      }
+
+      setBusy(true);
+      showStatus("Pensando…", "info");
+      const unlock = lockForm(form);
+
+      try {
+        const subtitle = readField(form, "subtitle");
+        const res = await fetch("/api/ai/generate-metadata", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind,
+            title,
+            content,
+            subtitle: subtitle || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showStatus(data.message ?? data.error ?? "Error al generar.", "error");
+          return;
+        }
+        const m = data.data ?? {};
+        const filled = [];
+
+        const tryWrite = (key, writer) => {
+          if (!(key in m)) return;
+          if (writer()) filled.push(FIELD_LABELS[key] ?? key);
+        };
+
+        tryWrite("excerpt", () => writeField(form, "excerpt", m.excerpt));
+        tryWrite("meta_description", () => writeField(form, "meta_description", m.meta_description));
+        tryWrite("tags", () => writeArrayField(form, "tags", m.tags));
+        tryWrite("keywords", () => writeArrayField(form, "keywords", m.keywords));
+        tryWrite("cover_image_alt", () => writeField(form, "cover_image_alt", m.cover_image_alt));
+
+        if (filled.length) {
+          showStatus(`Listo: ${filled.join(", ")}. Revisa antes de guardar.`, "success");
+        } else {
+          showStatus("La IA no devolvió campos aplicables.", "error");
+        }
+      } catch (err) {
+        showStatus("Error de red al llamar a la IA.", "error");
+      } finally {
+        unlock();
+        setBusy(false);
+      }
+    });
+  }
+</script>

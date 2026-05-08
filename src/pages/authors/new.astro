@@ -3,10 +3,11 @@ import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
 import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import AiSuggest from "~/components/AiSuggest.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
-import { str, strReq, slugify } from "~/lib/forms";
+import { str, strReq, slugify, tags as parseTags } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
 
 const guard = await requirePermission(Astro, "authors", "edit");
@@ -33,6 +34,7 @@ if (Astro.request.method === "POST") {
           web: str(fd, "link_web") ?? "",
           instagram: str(fd, "link_instagram") ?? "",
         },
+        keywords: parseTags(fd, "keywords"),
       })
       .select("id")
       .single();
@@ -89,6 +91,15 @@ if (Astro.request.method === "POST") {
         <Field label="Twitter" name="link_twitter" type="url" description="URL del perfil." />
         <Field label="Instagram" name="link_instagram" type="url" description="URL del perfil." />
       </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO</h2>
+        <p class="card-section-desc">Términos para que la ficha del autor aparezca en buscadores.</p>
+      </div>
+      <AiSuggest kind="author" contentField="bio_md" />
+      <Field label="Palabras clave (SEO)" name="keywords" description="Separadas por coma." />
     </section>
 
     <div class="flex flex-col sm:flex-row gap-3 pt-4">

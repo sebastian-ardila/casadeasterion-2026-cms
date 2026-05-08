@@ -1,9 +1,10 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
-import { str, strReq } from "~/lib/forms";
+import { str, strReq, tags as parseTags } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
 
 // SSR: only auth gate + POST handling. Fields hydrate from /api/page-data?type=site.
@@ -34,6 +35,10 @@ if (Astro.request.method === "POST") {
           twitter: str(fd, "social_twitter") ?? "",
         } as never,
       },
+      { key: "default_keywords",      value: parseTags(fd, "default_keywords") as never },
+      { key: "twitter_handle",        value: (str(fd, "twitter_handle") ?? "") as never },
+      { key: "og_image_default",      value: (str(fd, "og_image_default") ?? "") as never },
+      { key: "organization_logo_url", value: (str(fd, "organization_logo_url") ?? "") as never },
     ];
 
     const { error } = await supabase
@@ -109,6 +114,19 @@ if (Astro.request.method === "POST") {
       </div>
     </section>
 
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO global y schema.org</h2>
+        <p class="card-section-desc">Defaults que se inyectan en cada página del sitio público cuando un artículo, libro o autor no define los suyos. También alimenta el JSON-LD Organization que Google muestra en los resultados.</p>
+      </div>
+      <Field label="Palabras clave globales" name="default_keywords" description="Términos generales que describen la editorial. Se usan como fallback cuando un post/libro no define los suyos. Separadas por coma." />
+      <Field label="Handle de Twitter / X" name="twitter_handle" description="Con la @ inicial (ej: @casadeasterion). Aparece en los Twitter Cards al compartir." />
+      <ImageUpload name="og_image_default" label="Imagen por defecto al compartir (Open Graph)" bucket="covers" />
+      <p class="text-xs text-stone-500 -mt-3">Se usa cuando un artículo o libro no tiene portada propia. Recomendado: 1200×630px.</p>
+      <ImageUpload name="organization_logo_url" label="Logo de la editorial (JSON-LD Organization)" bucket="covers" />
+      <p class="text-xs text-stone-500 -mt-3">Logo cuadrado o casi cuadrado. Lo lee Google para mostrar en el knowledge panel.</p>
+    </section>
+
     {canEdit && (
       <div class="flex gap-3 pt-4 border-t border-stone-200">
         <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
@@ -143,6 +161,30 @@ if (Astro.request.method === "POST") {
       set("social_facebook", social.facebook ?? "");
       set("social_instagram", social.instagram ?? "");
       set("social_twitter", social.twitter ?? "");
+      const kws = Array.isArray(cfg.default_keywords) ? cfg.default_keywords.join(", ") : (cfg.default_keywords ?? "");
+      set("default_keywords", kws);
+      set("twitter_handle", cfg.twitter_handle ?? "");
+      // ImageUpload renders a hidden input + a sibling <img>/<div> preview.
+      // Set the hidden value AND swap the preview to keep them in sync.
+      const setImage = (name, value) => {
+        const hidden = form.querySelector(`input[type="hidden"][name="${name}"]`);
+        if (!hidden) return;
+        const url = typeof value === "string" ? value : "";
+        hidden.value = url;
+        const wrapper = hidden.closest("[data-image-upload]");
+        if (!wrapper) return;
+        const preview = wrapper.querySelector('[id$="-preview"]');
+        if (!preview) return;
+        if (url) {
+          if (preview.tagName === "IMG") {
+            preview.src = url;
+          } else {
+            preview.outerHTML = `<img id="${preview.id}" src="${url}" alt="" class="w-32 h-32 object-cover bg-stone-100 border border-stone-200"/>`;
+          }
+        }
+      };
+      setImage("og_image_default", cfg.og_image_default ?? "");
+      setImage("organization_logo_url", cfg.organization_logo_url ?? "");
       // Enable submit once data is loaded.
       const btn = form.querySelector("[data-submit-btn]");
       if (btn) btn.disabled = false;
