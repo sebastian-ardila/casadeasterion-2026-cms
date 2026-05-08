@@ -185,11 +185,10 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         setOpen(false);
         return;
       }
-      // Logout button: clear the session client-side first, then hit the
-      // server, then hard-navigate to /login. We can't rely on the form-based
-      // POST because Astro's ClientRouter intercepts it but the auth cookies
-      // change isn't reflected in any client-side state, leading to a UI that
-      // looks logged-in until the next full reload.
+      // Logout button: delegate to window.casLogout (registered by the
+      // module script below). We can't import("@supabase/ssr") from this
+      // is:inline block because module specifiers aren't resolvable in the
+      // browser without a bundler.
       if (t.closest("#cms-logout-btn")) {
         e.preventDefault();
         const btn = t.closest("#cms-logout-btn");
@@ -197,37 +196,13 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
           btn.disabled = true;
           btn.style.opacity = "0.6";
         }
-        (async () => {
-          try {
-            const mod = await import("@supabase/ssr");
-            const supabase = mod.createBrowserClient(
-              import.meta.env.PUBLIC_SUPABASE_URL,
-              import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
-            );
-            await supabase.auth.signOut();
-          } catch (err) {
-            // Continue anyway — server endpoint also clears cookies.
-          }
-          try {
-            await fetch("/logout", { method: "POST", credentials: "same-origin" });
-          } catch {}
-          // Wipe any per-user data the CMS cached in sessionStorage so the
-          // next account that logs in here doesn't see leftover stats / lists.
-          try {
-            const keys = [];
-            for (let i = 0; i < sessionStorage.length; i++) {
-              const k = sessionStorage.key(i);
-              if (k && (k.startsWith("cas:") || k.startsWith("cas_") || k.startsWith("cda_"))) {
-                keys.push(k);
-              }
-            }
-            keys.forEach((k) => sessionStorage.removeItem(k));
-          } catch {}
-          // Hard navigate so persisted components (sidebar, build status bar,
-          // toast stack, etc.) are torn down and the new state is fully read
-          // from the server. Avoids any stale client-side caches.
-          window.location.href = "/login";
-        })();
+        if (typeof window.casLogout === "function") {
+          window.casLogout();
+        } else {
+          // Fallback if the module script hasn't booted yet.
+          fetch("/logout", { method: "POST", credentials: "same-origin" })
+            .finally(() => { window.location.href = "/login"; });
+        }
         return;
       }
       // Close drawer when clicking any link inside the sidebar.
@@ -272,4 +247,52 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     document.addEventListener("astro:after-swap", syncActive);
     syncActive();
   })();
+</script>
+
+<script>
+  // Bundled module — Astro processes this so the @supabase/ssr import
+  // resolves at build time. Exposes window.casLogout so the inline
+  // delegated handler above can call it without importing anything.
+  import { createBrowserClient } from "@supabase/ssr";
+
+  declare global {
+    interface Window {
+      casLogout?: () => Promise<void> | void;
+    }
+  }
+
+  const url = import.meta.env.PUBLIC_SUPABASE_URL;
+  const key = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+
+  window.casLogout = async () => {
+    // 1. Tear down the client-side Supabase session (clears localStorage).
+    try {
+      if (url && key) {
+        const supabase = createBrowserClient(url, key);
+        await supabase.auth.signOut({ scope: "local" });
+      }
+    } catch {
+      // ignore — the server-side logout below also clears auth cookies
+    }
+    // 2. Clear server-side session cookies.
+    try {
+      await fetch("/logout", { method: "POST", credentials: "same-origin" });
+    } catch {}
+    // 3. Wipe any per-user data the CMS cached in sessionStorage so the
+    //    next account that logs in here doesn't see leftover stats / lists.
+    try {
+      const keys: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && (k.startsWith("cas:") || k.startsWith("cas_") || k.startsWith("cda_"))) {
+          keys.push(k);
+        }
+      }
+      keys.forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
+    // 4. Hard navigate so persisted components (sidebar, build status bar,
+    //    toast stack, etc.) are torn down and the new state is fully read
+    //    from the server.
+    window.location.href = "/login";
+  };
 </script>
