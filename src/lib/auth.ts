@@ -4,10 +4,10 @@ import { getSupabaseServerClient } from "./supabase-server";
 
 export type AdminUser = NonNullable<App.Locals["user"]>;
 
-export type Resource = "posts" | "books" | "authors" | "categories" | "site";
+export type Resource = "posts" | "books" | "authors" | "categories" | "site" | "subscribers" | "admins";
 export type Level = "none" | "view" | "edit";
 
-export const RESOURCES: Resource[] = ["posts", "books", "authors", "categories", "site"];
+export const RESOURCES: Resource[] = ["posts", "books", "authors", "categories", "site", "subscribers", "admins"];
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
   posts: "Artículos",
@@ -15,6 +15,8 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   authors: "Autores",
   categories: "Categorías",
   site: "Configuración",
+  subscribers: "Suscriptores",
+  admins: "Administradores",
 };
 
 // ---------------------------------------------------------------------------
@@ -153,7 +155,8 @@ export async function getAllPermissions(
   if (cached) return cached;
 
   const out: Record<Resource, Level> = {
-    posts: "none", books: "none", authors: "none", categories: "none", site: "none",
+    posts: "none", books: "none", authors: "none", categories: "none",
+    site: "none", subscribers: "none", admins: "none",
   };
   if (user.role === "owner") {
     for (const r of RESOURCES) out[r] = "edit";

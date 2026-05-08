@@ -23,6 +23,20 @@
     font-size: 0.875rem;
   }
 
+  /* iOS Safari (and a few mobile Chromes) auto-zoom into any focused input
+     whose computed font-size is less than 16px. Force 16px on mobile so the
+     viewport stays put when the user taps a field; keep the smaller desktop
+     sizing unchanged. The !important is necessary because every form field
+     in the CMS uses utility classes like text-sm / text-[13px] that would
+     otherwise win the cascade. */
+  @media (max-width: 767px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]),
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+
   /* Every actionable element should show the click cursor when enabled. */
   button:not(:disabled),
   a[href],

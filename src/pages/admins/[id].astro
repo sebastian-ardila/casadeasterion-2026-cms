@@ -1,14 +1,16 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import BackToList from "~/components/BackToList.astro";
-import { requireOwner, RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import { requirePermission, RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { strReq } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
 
-const guard = await requireOwner(Astro);
+const guard = await requirePermission(Astro, "admins", "view");
 if (guard instanceof Response) return guard;
-const owner = guard;
+const owner = guard.user;
+const isOwner = owner.role === "owner";
+const canEdit = guard.permission === "edit";
 
 const { id } = Astro.params;
 if (!id) return Astro.redirect("/admins");
@@ -17,6 +19,7 @@ const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
 
 if (Astro.request.method === "POST") {
+  if (!canEdit) return Astro.redirect("/?error=no_permission&section=admins");
   try {
     const fd = await Astro.request.formData();
     const action = strReq(fd, "_action");
@@ -142,13 +145,13 @@ const LEVELS: { value: Level; label: string }[] = [
       </p>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {RESOURCES.map((r) => (
         <div class="flex flex-col">
           <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1.5">
             {RESOURCE_LABEL[r]}
           </label>
-          <select name={`level_${r}`} data-resource={r} class="input" disabled={isOwnerRow}>
+          <select name={`level_${r}`} data-resource={r} class="input" disabled={isOwnerRow || !canEdit}>
             {LEVELS.map((lv) => (
               <option value={lv.value} selected={perms[r] === lv.value}>{lv.label}</option>
             ))}
@@ -157,43 +160,52 @@ const LEVELS: { value: Level; label: string }[] = [
       ))}
     </div>
 
-    {!isOwnerRow && (
+    {!isOwnerRow && canEdit && (
       <div class="flex items-center justify-end gap-3 mt-5 pt-5 border-t border-stone-100" data-perms-savebar>
         <span class="text-xs text-stone-500 hidden" data-perms-status>Sin cambios pendientes.</span>
         <button type="button" class="btn cursor-pointer hidden" data-perms-revert>Descartar</button>
         <button type="submit" class="btn-primary" disabled data-perms-save>Guardar cambios</button>
       </div>
     )}
+
+    {!canEdit && (
+      <p class="text-xs text-stone-500 mt-5 italic">Solo lectura — no tienes permiso de editar.</p>
+    )}
   </form>
 
-  {/* Danger zone — revoke or fully delete. Hidden for owner + self. */}
-  {!isOwnerRow && !isSelf && (
+  {/* Danger zone — revoke (anyone with edit) or fully delete (owner only).
+      Hidden for owner row and for the logged-in user editing themselves. */}
+  {!isOwnerRow && !isSelf && (canEdit || isOwner) && (
     <section class="mt-12 pt-6 border-t border-red-200 max-w-3xl">
       <p class="text-sm text-stone-600 mb-1">Zona de peligro</p>
       <p class="text-xs text-stone-500 mb-4 max-w-2xl">
         Revocar el acceso quita al usuario del CMS pero conserva sus datos
         (perfil, permisos previos) por si quieres restaurarle el acceso luego.
-        Eliminar borra todo del usuario sin posibilidad de recuperar.
+        {isOwner && " Eliminar borra todo del usuario sin posibilidad de recuperar."}
       </p>
       <div class="flex flex-col sm:flex-row gap-3">
-        <form
-          method="POST"
-          class="inline-block"
-          onsubmit={`return confirm('¿Revocar acceso de ${profile.email}? Podrás restaurarlo desde la lista de revocados.')`}
-        >
-          <input type="hidden" name="_action" value="remove_admin" />
-          <input type="hidden" name="email" value={profile.email} />
-          <button type="submit" class="btn-danger w-full sm:w-auto">Revocar acceso</button>
-        </form>
-        <button
-          type="button"
-          class="btn-danger w-full sm:w-auto"
-          data-delete-user
-          data-profile-id={profile.id}
-          data-profile-email={profile.email}
-        >
-          Eliminar usuario completamente
-        </button>
+        {canEdit && (
+          <form
+            method="POST"
+            class="inline-block"
+            onsubmit={`return confirm('¿Revocar acceso de ${profile.email}? Podrás restaurarlo desde la lista de revocados.')`}
+          >
+            <input type="hidden" name="_action" value="remove_admin" />
+            <input type="hidden" name="email" value={profile.email} />
+            <button type="submit" class="btn-danger w-full sm:w-auto">Revocar acceso</button>
+          </form>
+        )}
+        {isOwner && (
+          <button
+            type="button"
+            class="btn-danger w-full sm:w-auto"
+            data-delete-user
+            data-profile-id={profile.id}
+            data-profile-email={profile.email}
+          >
+            Eliminar usuario completamente
+          </button>
+        )}
       </div>
     </section>
   )}

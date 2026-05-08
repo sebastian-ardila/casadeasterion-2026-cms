@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requireOwner, RESOURCES, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import { requirePermission, RESOURCES, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 const json = (body: unknown, status = 200) =>
@@ -11,7 +11,7 @@ const json = (body: unknown, status = 200) =>
 const VALID_LEVELS = new Set<Level>(["none", "view", "edit"]);
 
 export const POST: APIRoute = async (ctx) => {
-  const guard = await requireOwner(ctx);
+  const guard = await requirePermission(ctx, "admins", "edit");
   if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
 
   let body: unknown;
@@ -25,6 +25,22 @@ export const POST: APIRoute = async (ctx) => {
   const permissions = (body as { permissions?: unknown }).permissions;
   if (typeof profileId !== "string" || !profileId) {
     return json({ error: "invalid_profile_id" }, 400);
+  }
+
+  // Safeguards: a non-owner admin with edit on "admins" still cannot
+  // tweak themselves or the owner. Without these checks an admin could
+  // unilaterally elevate their own permissions or strip the owner.
+  if (profileId === guard.user.id) {
+    return json({ error: "cannot_edit_self" }, 403);
+  }
+  const supabaseCheck = getSupabaseServerClient(ctx.request, ctx.cookies);
+  const { data: targetProfile } = await supabaseCheck
+    .from("profiles")
+    .select("role")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (targetProfile?.role === "owner") {
+    return json({ error: "cannot_edit_owner" }, 403);
   }
   if (!permissions || typeof permissions !== "object") {
     return json({ error: "invalid_permissions" }, 400);

@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requireOwner } from "~/lib/auth";
+import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 const json = (body: unknown, status = 200) =>
@@ -9,7 +9,7 @@ const json = (body: unknown, status = 200) =>
   });
 
 export const POST: APIRoute = async (ctx) => {
-  const guard = await requireOwner(ctx);
+  const guard = await requirePermission(ctx, "subscribers", "edit");
   if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
 
   let body: unknown;
@@ -34,7 +34,7 @@ export const POST: APIRoute = async (ctx) => {
 };
 
 export const GET: APIRoute = async (ctx) => {
-  const guard = await requireOwner(ctx);
+  const guard = await requirePermission(ctx, "subscribers", "view");
   if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
 
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);

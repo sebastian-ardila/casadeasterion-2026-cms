@@ -1,18 +1,20 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Dropdown from "~/components/Dropdown.astro";
-import { requireOwner } from "~/lib/auth";
+import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { strReq } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
 
 // SSR: only auth + POST handling. The list itself loads client-side.
-const guard = await requireOwner(Astro);
+const guard = await requirePermission(Astro, "subscribers", "view");
 if (guard instanceof Response) return guard;
+const canEdit = guard.permission === "edit";
 
 let formError: string | null = null;
 
 if (Astro.request.method === "POST") {
+  if (!canEdit) return Astro.redirect("/?error=no_permission&section=subscribers");
   const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
   try {
     const fd = await Astro.request.formData();
@@ -57,6 +59,7 @@ const filterOptions = [
   <p class="text-stone-500 mb-8">Lista de personas que se han registrado al newsletter del sitio.</p>
 
   {/* Master switch: hides/shows the subscribe form + links on the public site. */}
+  {canEdit && (
   <div class="card mb-8 max-w-3xl flex items-start gap-4 p-5" data-subscribe-toggle>
     <div class="shrink-0 mt-0.5">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="text-stone-700">
@@ -84,6 +87,7 @@ const filterOptions = [
       <span class="cas-switch-thumb"></span>
     </button>
   </div>
+  )}
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
@@ -113,7 +117,7 @@ const filterOptions = [
     </div>
   </form>
 
-  <div class="card p-0 overflow-x-auto max-w-5xl" data-subs-root data-filter={filter}>
+  <div class="card p-0 overflow-x-auto max-w-5xl" data-subs-root data-filter={filter} data-can-edit={canEdit ? "1" : "0"}>
     {/* Skeleton rows */}
     <div data-subs-skeleton class="divide-y divide-stone-100">
       {Array.from({ length: 4 }).map(() => (
@@ -303,14 +307,22 @@ const filterOptions = [
       return { label: "pendiente", cls: "bg-amber-100 text-amber-900" };
     };
 
-    const renderRow = (s) => {
+    const renderRow = (s, canEdit) => {
       const st = statusOf(s);
-      const unsubBtn = !s.unsubscribed_at
-        ? `<form method="POST" class="inline-block mr-3" onsubmit="return confirm('¿Marcar a ${escape(s.email)} como dado de baja?')">
-             <input type="hidden" name="_action" value="unsubscribe" />
-             <input type="hidden" name="id" value="${escape(s.id)}" />
-             <button class="cursor-pointer text-xs text-stone-700 hover:underline">Dar de baja</button>
-           </form>` : "";
+      let actions = "";
+      if (canEdit) {
+        const unsubBtn = !s.unsubscribed_at
+          ? `<form method="POST" class="inline-block mr-3" onsubmit="return confirm('¿Marcar a ${escape(s.email)} como dado de baja?')">
+               <input type="hidden" name="_action" value="unsubscribe" />
+               <input type="hidden" name="id" value="${escape(s.id)}" />
+               <button class="cursor-pointer text-xs text-stone-700 hover:underline">Dar de baja</button>
+             </form>` : "";
+        actions = `${unsubBtn}<form method="POST" class="inline-block" onsubmit="return confirm('¿Borrar definitivamente a ${escape(s.email)}? No se puede deshacer.')">
+            <input type="hidden" name="_action" value="delete" />
+            <input type="hidden" name="id" value="${escape(s.id)}" />
+            <button class="cursor-pointer text-xs text-red-700 hover:underline">Borrar</button>
+          </form>`;
+      }
       return `
         <tr class="border-t border-stone-100">
           <td class="px-4 py-3 font-medium text-stone-900">${escape(s.email)}</td>
@@ -319,14 +331,7 @@ const filterOptions = [
           </td>
           <td class="px-4 py-3 text-stone-600 text-xs">${escape(s.source ?? "—")}</td>
           <td class="px-4 py-3 text-stone-500 text-xs whitespace-nowrap">${fmtDate(s.created_at)}</td>
-          <td class="px-4 py-3 text-right whitespace-nowrap">
-            ${unsubBtn}
-            <form method="POST" class="inline-block" onsubmit="return confirm('¿Borrar definitivamente a ${escape(s.email)}? No se puede deshacer.')">
-              <input type="hidden" name="_action" value="delete" />
-              <input type="hidden" name="id" value="${escape(s.id)}" />
-              <button class="cursor-pointer text-xs text-red-700 hover:underline">Borrar</button>
-            </form>
-          </td>
+          <td class="px-4 py-3 text-right whitespace-nowrap">${actions}</td>
         </tr>`;
     };
 
@@ -367,7 +372,8 @@ const filterOptions = [
       }
       empty?.classList.add("hidden");
       table.classList.remove("hidden");
-      tbody.innerHTML = items.map(renderRow).join("");
+      const canEdit = root.dataset.canEdit === "1";
+      tbody.innerHTML = items.map((s) => renderRow(s, canEdit)).join("");
     };
 
     const showError = () => {

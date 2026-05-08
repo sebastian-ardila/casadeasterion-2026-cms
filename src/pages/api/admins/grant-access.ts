@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requireOwner, invalidateAuthCache } from "~/lib/auth";
+import { requirePermission, invalidateAuthCache } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 const json = (body: unknown, status = 200) =>
@@ -13,7 +13,7 @@ const json = (body: unknown, status = 200) =>
 // promote the existing profile to 'admin' AND seed full edit permissions
 // the moment the row lands in admin_emails.
 export const POST: APIRoute = async (ctx) => {
-  const guard = await requireOwner(ctx);
+  const guard = await requirePermission(ctx, "admins", "edit");
   if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
 
   let body: unknown;
@@ -31,7 +31,7 @@ export const POST: APIRoute = async (ctx) => {
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);
   const { error } = await supabase
     .from("admin_emails")
-    .insert({ email: email.trim().toLowerCase(), added_by: guard.id, note: "re-granted" });
+    .insert({ email: email.trim().toLowerCase(), added_by: guard.user.id, note: "re-granted" });
   if (error) return json({ error: error.message }, 500);
 
   if (typeof profileId === "string") invalidateAuthCache(ctx, profileId);

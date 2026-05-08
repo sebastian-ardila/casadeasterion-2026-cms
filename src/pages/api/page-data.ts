@@ -88,7 +88,7 @@ export const GET: APIRoute = async (ctx) => {
   }
 
   if (type === "admins") {
-    const guard = await requireOwner(ctx);
+    const guard = await requirePermission(ctx, "admins", "view");
     if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
     const [
       { data: profiles },
@@ -108,13 +108,13 @@ export const GET: APIRoute = async (ctx) => {
       profiles: profiles ?? [],
       allowlist: allowlist ?? [],
       permRows: permRows ?? [],
-      ownerId: guard.id,
-      ownerEmail: guard.email,
+      ownerId: guard.user.id,
+      ownerEmail: guard.user.email,
     });
   }
 
   if (type === "subscribers") {
-    const guard = await requireOwner(ctx);
+    const guard = await requirePermission(ctx, "subscribers", "view");
     if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
     const filter = (url.searchParams.get("filter") ?? "all").toLowerCase();
     let q = supabase

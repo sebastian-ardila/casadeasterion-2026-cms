@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requirePermission, requireOwner, type Resource } from "~/lib/auth";
+import { requirePermission, type Resource } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 type Item = {
@@ -16,10 +16,7 @@ type Item = {
   reorderable?: boolean;
 };
 
-// "admins" isn't a Resource (it has no permission level — only the owner
-// sees this section), but it follows the same shape so the ListPanel can
-// render it identically to the rest.
-type ListResource = Resource | "admins";
+type ListResource = Resource;
 const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins"]);
 
 const KIND_EMOJI: Record<string, string> = {
@@ -46,24 +43,12 @@ export const GET: APIRoute = async (ctx) => {
     });
   }
 
-  // Auth gate: admins is owner-only, everything else uses per-resource
-  // view permission.
-  if (resource === "admins") {
-    const owner = await requireOwner(ctx);
-    if (owner instanceof Response) {
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
-    }
-  } else {
-    const guard = await requirePermission(ctx, resource, "view");
-    if (guard instanceof Response) {
-      return new Response(JSON.stringify({ error: "unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
-    }
+  const guard = await requirePermission(ctx, resource, "view");
+  if (guard instanceof Response) {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
   }
 
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);
