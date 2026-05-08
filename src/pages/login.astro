@@ -127,16 +127,25 @@ const friendlyReason = reason ? (FRIENDLY_REASON[reason] ?? reason) : null;
         }, 12000);
 
         try {
-          // `prompt: select_account` forces Google to show its account
-          // picker instead of silently re-using the existing
-          // accounts.google.com session cookie. Without it, signing out of
-          // the CMS only clears Supabase's storage — Google's own cookie
-          // is still set, so the next click would auto-login as the same
-          // user (especially noticeable on mobile, where users can't
-          // easily clear cookies between attempts).
+          // `prompt=select_account consent` forces both prompts in order:
+          //  1. account picker (so signing out of the CMS does not silently
+          //     auto-login as the same Google account on the next click —
+          //     the CMS signOut can't touch accounts.google.com's cookie),
+          //  2. consent screen (required the first time a user authorizes
+          //     this app).
+          //
+          // Sending only `select_account` triggered a 400 the first time a
+          // Workspace account (e.g. user@empresa.com) tried to sign in:
+          // Google jumped from the picker to the consent screen with
+          // `authuser=unknown` and choked. Including `consent` keeps the
+          // authuser context alive across both screens. Mobile is most
+          // affected because there's no second tab to fall back on.
           const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo, queryParams: { prompt: "select_account" } },
+            options: {
+              redirectTo,
+              queryParams: { prompt: "select_account consent" },
+            },
           });
           if (error) {
             console.error("[login] signInWithOAuth error:", error);
