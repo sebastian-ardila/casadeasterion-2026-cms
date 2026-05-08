@@ -27,6 +27,9 @@ interface Props {
   // Optional class on the wrapper button.
   class?: string;
   id?: string;
+  /** Force-show or hide the search input. Default: auto-show when there are 8+ options. */
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }
 
 const {
@@ -38,10 +41,13 @@ const {
   submitOnChange = false,
   class: extraClass = "",
   id,
+  searchable,
+  searchPlaceholder = "Buscar…",
 } = Astro.props;
 
 const current = options.find((o) => o.value === value);
 const buttonId = id ?? `dd-${name}-${Math.random().toString(36).slice(2, 8)}`;
+const showSearch = searchable ?? options.length >= 8;
 
 const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>`;
 ---
@@ -96,14 +102,32 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
     </svg>
   </button>
 
-  <ul
+  <div
     role="listbox"
     aria-labelledby={buttonId}
     class="cas-dd-menu hidden"
     data-dd-menu
+    data-has-search={showSearch ? "1" : "0"}
   >
+    {showSearch && (
+      <div class="cas-dd-search-wrap">
+        <svg class="cas-dd-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/>
+          <path d="m21 21-4.3-4.3"/>
+        </svg>
+        <input
+          type="text"
+          class="cas-dd-search"
+          data-dd-search
+          placeholder={searchPlaceholder}
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+    )}
+    <ul class="cas-dd-options" data-dd-options>
     {options.map((opt) => (
-      <li>
+      <li data-dd-search-text={`${opt.label} ${opt.hint ?? ""}`.toLowerCase()}>
         <button
           type="button"
           role="option"
@@ -139,7 +163,9 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
         </button>
       </li>
     ))}
-  </ul>
+    <li class="cas-dd-empty hidden" data-dd-empty>Sin resultados.</li>
+    </ul>
+  </div>
 </div>
 
 <style is:global>
@@ -191,23 +217,66 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
     transform: rotate(180deg);
   }
 
-  /* Menu floats above all other UI. Position is set via JS at open time. */
+  /* Menu floats above all other UI. Position is set via JS at open time.
+     The menu wrapper itself doesn't scroll — only the inner options list
+     does. That keeps the optional search input pinned at the top. */
   .cas-dd-menu {
     position: fixed;
     z-index: 9999;
-    max-height: 18rem;
-    overflow-y: auto;
+    max-height: 22rem;
+    display: flex;
+    flex-direction: column;
     background: #fff;
     border: 1px solid #d6d3d1; /* stone-300 */
     box-shadow: 0 12px 32px -8px rgba(28, 25, 23, 0.18), 0 4px 12px -4px rgba(28, 25, 23, 0.1);
-    padding: 4px;
     min-width: 14rem;
+    overflow: hidden;
+  }
+  .cas-dd-options {
+    flex: 1 1 0%;
+    overflow-y: auto;
+    padding: 4px;
+    margin: 0;
+    list-style: none;
   }
   .cas-dd-menu li {
     list-style: none;
     margin: 0;
     padding: 0;
   }
+  .cas-dd-search-wrap {
+    position: relative;
+    flex-shrink: 0;
+    border-bottom: 1px solid #e7e5e4; /* stone-200 */
+    background: #fafaf9; /* stone-50 */
+  }
+  .cas-dd-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #a8a29e; /* stone-400 */
+    pointer-events: none;
+  }
+  .cas-dd-search {
+    width: 100%;
+    padding: 0.55rem 0.75rem 0.55rem 2rem;
+    border: 0;
+    background: transparent;
+    font-size: 0.875rem;
+    color: #1c1917;
+    outline: none;
+  }
+  .cas-dd-search::placeholder {
+    color: #a8a29e;
+  }
+  .cas-dd-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #78716c;
+  }
+  .cas-dd-empty.hidden { display: none; }
   .cas-dd-option {
     width: 100%;
     cursor: pointer;
@@ -317,7 +386,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       // Show menu briefly to measure, then place it.
       menu.style.top = "0px";
       menu.classList.remove("hidden");
-      const menuHeight = Math.min(menu.scrollHeight, 18 * 16);
+      const menuHeight = Math.min(menu.scrollHeight, 22 * 16);
       if (spaceBelow >= menuHeight + 8 || spaceBelow >= spaceAbove) {
         menu.style.top = rect.bottom + 4 + "px";
       } else {
@@ -341,14 +410,39 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       if (!button || !menu) return;
       positionMenu(button, menu);
       button.setAttribute("aria-expanded", "true");
-      openDd = { root, button, menu };
-      // Focus selected item if any
-      const selected = menu.querySelector('[aria-selected="true"]');
-      if (selected) selected.focus();
-      else {
-        const first = menu.querySelector("[data-dd-option]");
-        if (first) first.focus();
+      const search = menu.querySelector("[data-dd-search]");
+      // Reset any previous filter so the next open shows everything.
+      if (search) {
+        search.value = "";
+        applyFilter(menu, "");
       }
+      openDd = { root, button, menu, search };
+      // When there's a search input, focus it (so user can type immediately).
+      // Otherwise focus the selected/first option for keyboard navigation.
+      if (search) {
+        search.focus();
+      } else {
+        const selected = menu.querySelector('[aria-selected="true"]');
+        if (selected) selected.focus();
+        else {
+          const first = menu.querySelector("[data-dd-option]");
+          if (first) first.focus();
+        }
+      }
+    };
+
+    const applyFilter = (menu, query) => {
+      const q = query.trim().toLowerCase();
+      const items = menu.querySelectorAll("[data-dd-search-text]");
+      let visible = 0;
+      items.forEach((li) => {
+        const text = li.dataset.searchText || "";
+        const match = !q || text.includes(q);
+        li.classList.toggle("hidden", !match);
+        if (match) visible++;
+      });
+      const empty = menu.querySelector("[data-dd-empty]");
+      if (empty) empty.classList.toggle("hidden", visible !== 0);
     };
 
     const PERSON_FALLBACK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="9" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>';
@@ -451,9 +545,16 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
-        const opts = Array.from(openDd.menu.querySelectorAll("[data-dd-option]"));
+        // Only consider visible options (filtered list).
+        const opts = Array.from(openDd.menu.querySelectorAll("[data-dd-option]"))
+          .filter((o) => !o.closest("li").classList.contains("hidden"));
         if (opts.length === 0) return;
         const focused = document.activeElement;
+        // If focus is on the search input, hop to first/last option.
+        if (focused === openDd.search) {
+          opts[e.key === "ArrowDown" ? 0 : opts.length - 1].focus();
+          return;
+        }
         const idx = opts.indexOf(focused);
         let next;
         if (e.key === "ArrowDown") next = idx < 0 ? 0 : (idx + 1) % opts.length;
@@ -461,8 +562,30 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
         opts[next].focus();
         return;
       }
-      if (e.key === "Enter" || e.key === " ") {
+      if (e.key === "Enter") {
         const target = e.target;
+        // Pressing Enter inside the search input selects the first visible option.
+        if (target === openDd.search) {
+          e.preventDefault();
+          const firstVisible = openDd.menu.querySelector(
+            "li:not(.hidden) [data-dd-option]",
+          );
+          if (firstVisible instanceof HTMLElement) {
+            const root = firstVisible.closest("[data-dropdown]");
+            if (root) {
+              setValue(root, {
+                value: firstVisible.dataset.value || "",
+                label: firstVisible.dataset.label || firstVisible.textContent?.trim() || "",
+                image: firstVisible.dataset.image || "",
+                iconStyle: firstVisible.dataset.iconStyle || "none",
+              });
+              closeOpen();
+              const btn = root.querySelector("[data-dd-button]");
+              btn?.focus();
+            }
+          }
+          return;
+        }
         if (target instanceof HTMLElement && target.matches("[data-dd-option]")) {
           e.preventDefault();
           const root = target.closest("[data-dropdown]");
@@ -478,17 +601,42 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
             btn?.focus();
           }
         }
+        return;
+      }
+      if (e.key === " ") {
+        const target = e.target;
+        // Don't intercept Space when typing in the search input.
+        if (target === openDd.search) return;
+        if (target instanceof HTMLElement && target.matches("[data-dd-option]")) {
+          e.preventDefault();
+          target.click();
+        }
       }
     });
 
     // Reposition or close on scroll/resize so the menu doesn't drift.
+    // Critical: ignore scroll events that originate INSIDE the open menu
+    // (the inner options list is scrollable, and closing on its own scroll
+    // would make the menu unusable for long lists).
     window.addEventListener(
       "scroll",
-      () => {
-        if (openDd) closeOpen();
+      (e) => {
+        if (!openDd) return;
+        const tgt = e.target;
+        if (tgt instanceof Node && openDd.menu.contains(tgt)) return;
+        closeOpen();
       },
-      true
+      true,
     );
     window.addEventListener("resize", () => closeOpen());
+
+    // Live filter as the user types in the search input.
+    document.addEventListener("input", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement)) return;
+      if (!t.matches("[data-dd-search]")) return;
+      const menu = t.closest("[data-dd-menu]");
+      if (menu) applyFilter(menu, t.value);
+    });
   })();
 </script>
