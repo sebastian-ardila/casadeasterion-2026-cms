@@ -56,6 +56,35 @@ const filterOptions = [
   <h1 class="font-serif text-3xl md:text-4xl mb-2">Suscriptores</h1>
   <p class="text-stone-500 mb-8">Lista de personas que se han registrado al newsletter del sitio.</p>
 
+  {/* Master switch: hides/shows the subscribe form + links on the public site. */}
+  <div class="card mb-8 max-w-3xl flex items-start gap-4 p-5" data-subscribe-toggle>
+    <div class="shrink-0 mt-0.5">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="text-stone-700">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+        <polyline points="22,6 12,13 2,6"/>
+      </svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="font-medium text-stone-900 text-sm">Suscripciones públicas</p>
+      <p class="text-xs text-stone-500 mt-0.5" data-toggle-status>
+        Cargando estado…
+      </p>
+      <p class="text-[11px] text-stone-400 mt-2">
+        Cuando está activado, el sitio público muestra el formulario y los botones "Suscribirse". Apagarlo los oculta sin perder los suscriptores existentes.
+      </p>
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked="false"
+      class="cas-switch shrink-0 mt-1 cursor-pointer"
+      data-toggle-button
+      disabled
+    >
+      <span class="cas-switch-thumb"></span>
+    </button>
+  </div>
+
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
@@ -117,9 +146,142 @@ const filterOptions = [
   </div>
 
   <p class="text-xs text-stone-400 mt-6 max-w-2xl">
-    El newsletter usa doble opt-in: cuando alguien se registra, recibe un email de confirmación. Solo los confirmados deberían recibir correos.
+    Las suscripciones se confirman al instante con Google OAuth — Google verifica que el email es real y autorizado por el dueño.
   </p>
 </AppLayout>
+
+<style is:global>
+  /* Toggle switch (used by the subscribe-enabled control) */
+  .cas-switch {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border-radius: 9999px;
+    background: #d6d3d1; /* stone-300 — off */
+    border: 0;
+    padding: 0;
+    transition: background 0.18s ease;
+  }
+  .cas-switch:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .cas-switch[aria-checked="true"] {
+    background: #059669; /* emerald-600 — on */
+  }
+  .cas-switch-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .cas-switch[aria-checked="true"] .cas-switch-thumb {
+    transform: translateX(18px);
+  }
+  .cas-switch.cas-switch-saving {
+    opacity: 0.7;
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    if (window.__casSubscribeToggleInit) return;
+    window.__casSubscribeToggleInit = true;
+
+    const els = () => ({
+      root: document.querySelector("[data-subscribe-toggle]"),
+      btn: document.querySelector("[data-toggle-button]"),
+      status: document.querySelector("[data-toggle-status]"),
+    });
+
+    const setUI = (enabled, isLoading = false) => {
+      const { btn, status } = els();
+      if (!btn || !status) return;
+      btn.setAttribute("aria-checked", enabled ? "true" : "false");
+      btn.disabled = isLoading;
+      btn.classList.toggle("cas-switch-saving", isLoading);
+      status.textContent = enabled
+        ? "Activadas — el formulario es visible al público."
+        : "Desactivadas — el formulario y los botones están ocultos.";
+      status.classList.toggle("text-emerald-700", enabled);
+      status.classList.toggle("text-stone-500", !enabled);
+    };
+
+    const fetchInitial = async () => {
+      try {
+        const res = await fetch("/api/subscribe-toggle", {
+          credentials: "same-origin",
+          headers: { accept: "application/json" },
+        });
+        if (!res.ok) throw new Error("http_" + res.status);
+        const data = await res.json();
+        setUI(data.enabled !== false, false);
+      } catch {
+        const { status, btn } = els();
+        if (status) status.textContent = "No se pudo leer el estado.";
+        if (btn) btn.disabled = true;
+      }
+    };
+
+    const setEnabled = async (enabled) => {
+      setUI(enabled, true);
+      try {
+        const res = await fetch("/api/subscribe-toggle", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ enabled }),
+        });
+        if (!res.ok) throw new Error("http_" + res.status);
+        setUI(enabled, false);
+        if (typeof window.casToast === "function") {
+          window.casToast({
+            type: "success",
+            message: enabled ? "Suscripciones activadas." : "Suscripciones desactivadas.",
+          });
+        }
+        if (typeof window.casBuildPending === "function") {
+          window.casBuildPending();
+        }
+      } catch {
+        // revert UI
+        setUI(!enabled, false);
+        if (typeof window.casToast === "function") {
+          window.casToast({ type: "error", message: "No se pudo cambiar el estado." });
+        }
+      }
+    };
+
+    const wire = () => {
+      const { btn } = els();
+      if (!btn || btn.dataset.casWired) return;
+      btn.dataset.casWired = "1";
+      btn.addEventListener("click", () => {
+        const cur = btn.getAttribute("aria-checked") === "true";
+        setEnabled(!cur);
+      });
+    };
+
+    const init = () => {
+      if (!document.querySelector("[data-subscribe-toggle]")) return;
+      wire();
+      fetchInitial();
+    };
+
+    document.addEventListener("astro:page-load", init);
+    document.addEventListener("astro:after-swap", init);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+</script>
 
 <script is:inline>
   (() => {
