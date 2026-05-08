@@ -1,0 +1,240 @@
+---
+// Lightweight, ephemeral notifications confirming a user action (save, create,
+// delete, reorder…). Disconnected from the Amplify build state — for that,
+// see BuildStatusBar.astro.
+//
+// Stack of up to 3 toasts in the bottom-left corner. New toasts push older
+// ones up; the oldest fades out when a 4th arrives. Auto-dismiss after 2.5s.
+//
+// Two ways to trigger:
+//   1. URL: any page handler can redirect with
+//        ?saved=1&action=created|updated|deleted&entity=post|book|author|category|site
+//      The script reads the URL on astro:page-load, dispatches a toast,
+//      and cleans the params.
+//   2. JS: call window.casToast({ type, message }) directly. Used by
+//      client-side mutations like the categories reorder that don't
+//      navigate.
+---
+
+<div
+  id="cas-toasts"
+  class="fixed bottom-6 left-6 z-[55] flex flex-col gap-2 pointer-events-none w-[320px] max-w-[calc(100vw-2rem)]"
+  aria-live="polite"
+></div>
+
+<template id="cas-toast-template">
+  <div class="cas-act-toast" role="status">
+    <span class="cas-act-icon shrink-0 w-7 h-7 rounded-full flex items-center justify-center" aria-hidden="true">
+      <svg data-icon="success" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <svg data-icon="delete" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"></path>
+        <path d="M10 11v6M14 11v6"></path>
+      </svg>
+      <svg data-icon="error" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </span>
+    <p class="cas-act-msg flex-1 min-w-0 text-[13px] font-medium text-stone-900 truncate">Mensaje</p>
+    <button type="button" class="cas-act-close shrink-0 cursor-pointer w-5 h-5 rounded-full text-stone-300 hover:text-stone-700 flex items-center justify-center transition" aria-label="Cerrar">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+</template>
+
+<style is:global>
+  #cas-toasts > * { pointer-events: auto; }
+
+  .cas-act-toast {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: saturate(180%) blur(8px);
+    -webkit-backdrop-filter: saturate(180%) blur(8px);
+    border: 1px solid #e7e5e4;
+    border-left-width: 3px;
+    box-shadow:
+      0 12px 28px -10px rgba(28, 25, 23, 0.18),
+      0 3px 8px -3px rgba(28, 25, 23, 0.08);
+    transform: translateX(-12px);
+    opacity: 0;
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 220ms ease-out,
+      max-height 240ms ease,
+      margin 240ms ease,
+      padding 240ms ease;
+    max-height: 80px;
+  }
+  .cas-act-toast.cas-act-toast-in {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  .cas-act-toast.cas-act-toast-out {
+    opacity: 0;
+    transform: translateX(-12px);
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+    border-width: 0 0 0 3px;
+  }
+
+  /* Variants */
+  .cas-act-toast[data-type="success"] {
+    border-left-color: #059669;
+  }
+  .cas-act-toast[data-type="success"] .cas-act-icon {
+    background: #d1fae5;
+    color: #065f46;
+  }
+  .cas-act-toast[data-type="delete"] {
+    border-left-color: #57534e;
+  }
+  .cas-act-toast[data-type="delete"] .cas-act-icon {
+    background: #f5f5f4;
+    color: #44403c;
+  }
+  .cas-act-toast[data-type="error"] {
+    border-left-color: #dc2626;
+  }
+  .cas-act-toast[data-type="error"] .cas-act-icon {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    if (window.__casActionToastInit) return;
+    window.__casActionToastInit = true;
+
+    const STACK_MAX = 3;
+    const AUTO_DISMISS_MS = 2500;
+    const ANIM_OUT_MS = 240;
+
+    // Spanish gender for entities so we render correct verb endings:
+    //   "Artículo guardado" vs "Categoría guardada".
+    const ENTITY = {
+      post:     { name: "Artículo",     gender: "m" },
+      book:     { name: "Libro",        gender: "m" },
+      author:   { name: "Autor",        gender: "m" },
+      category: { name: "Categoría",    gender: "f" },
+      site:     { name: "Configuración", gender: "f" },
+    };
+    const VERB = {
+      m: { created: "creado",  updated: "guardado",  deleted: "eliminado",  reorder: "guardado" },
+      f: { created: "creada",  updated: "guardada",  deleted: "eliminada",  reorder: "guardado" },
+    };
+    const ACTION_TO_TYPE = {
+      created: "success",
+      updated: "success",
+      deleted: "delete",
+      reorder: "success",
+    };
+
+    const buildMessage = (action, entity) => {
+      const ent = ENTITY[entity];
+      if (!ent) return "Cambios guardados.";
+      const v = VERB[ent.gender][action];
+      if (!v) return `${ent.name}: cambios aplicados.`;
+      // Special case: "Configuración guardada" sounds odd → "actualizada".
+      if (entity === "site" && action === "updated") {
+        return `${ent.name} actualizada.`;
+      }
+      return `${ent.name} ${v}.`;
+    };
+
+    const dismiss = (node) => {
+      if (node.dataset.dismissing) return;
+      node.dataset.dismissing = "1";
+      node.classList.remove("cas-act-toast-in");
+      node.classList.add("cas-act-toast-out");
+      setTimeout(() => node.remove(), ANIM_OUT_MS);
+    };
+
+    // Trim oldest toasts when stack exceeds STACK_MAX.
+    const enforceMax = () => {
+      const stack = document.getElementById("cas-toasts");
+      if (!stack) return;
+      const toasts = Array.from(stack.querySelectorAll(".cas-act-toast"))
+        .filter((t) => !t.dataset.dismissing);
+      // Newest at TOP (we prepend), so oldest is at the bottom.
+      while (toasts.length > STACK_MAX) {
+        const oldest = toasts.pop();
+        if (oldest) dismiss(oldest);
+      }
+    };
+
+    const show = ({ type = "success", message } = {}) => {
+      if (!message) return;
+      const stack = document.getElementById("cas-toasts");
+      const tpl = document.getElementById("cas-toast-template");
+      if (!stack || !tpl) return;
+
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      node.dataset.type = type;
+      node.querySelector(".cas-act-msg").textContent = message;
+      // Show only the icon for this type.
+      node.querySelectorAll("[data-icon]").forEach((svg) => {
+        svg.classList.toggle("hidden", svg.getAttribute("data-icon") !== type);
+      });
+      // Wire close.
+      node.querySelector(".cas-act-close").addEventListener("click", () => dismiss(node));
+      // Newest on top: prepend, animate in.
+      stack.prepend(node);
+      requestAnimationFrame(() => node.classList.add("cas-act-toast-in"));
+      // Auto-dismiss.
+      setTimeout(() => dismiss(node), AUTO_DISMISS_MS);
+      // Trim.
+      enforceMax();
+    };
+
+    // Public API for client-side mutations.
+    window.casToast = show;
+
+    // URL-driven dispatch on every navigation. Reads:
+    //   ?saved=1&action=...&entity=...&publish=1
+    const evaluateUrl = () => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("saved") !== "1") return;
+      const action = url.searchParams.get("action") || "updated";
+      const entity = url.searchParams.get("entity") || "";
+      const publish = url.searchParams.get("publish") === "1";
+      const customMsg = url.searchParams.get("msg");
+
+      // Clean URL before doing anything else (avoids double-fires on
+      // accidental refresh).
+      url.searchParams.delete("saved");
+      url.searchParams.delete("action");
+      url.searchParams.delete("entity");
+      url.searchParams.delete("publish");
+      url.searchParams.delete("msg");
+      window.history.replaceState({}, "", url.toString());
+
+      show({
+        type: ACTION_TO_TYPE[action] || "success",
+        message: customMsg || buildMessage(action, entity),
+      });
+
+      if (publish && typeof window.casBuildPending === "function") {
+        window.casBuildPending();
+      }
+    };
+
+    document.addEventListener("astro:page-load", evaluateUrl);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", evaluateUrl);
+    } else {
+      evaluateUrl();
+    }
+  })();
+</script>

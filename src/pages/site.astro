@@ -12,7 +12,6 @@ if (guard instanceof Response) return guard;
 const canEdit = guard.permission === "edit";
 
 let formError: string | null = null;
-const saved = Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   if (!canEdit) return Astro.redirect("/?error=no_permission&section=site");
@@ -42,7 +41,7 @@ if (Astro.request.method === "POST") {
       .upsert(rows, { onConflict: "key" });
     if (error) throw error;
 
-    return Astro.redirect("/site?published=1&item=" + encodeURIComponent("Configuración del sitio"));
+    return Astro.redirect("/site?saved=1&action=updated&entity=site&publish=1");
   } catch (err) {
     formError = friendlyError(err);
   }
@@ -64,9 +63,6 @@ if (Astro.request.method === "POST") {
   )}
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
-  )}
-  {saved && (
-    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado. Se disparará un rebuild del sitio público.</p>
   )}
 
   <form method="POST" class="space-y-6 max-w-3xl" data-site-form>
@@ -177,7 +173,7 @@ if (Astro.request.method === "POST") {
 
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
-      if (url.searchParams.has("published")) {
+      if (url.searchParams.has("saved")) {
         try { sessionStorage.removeItem(cacheKey); } catch {}
       }
       hydrate();

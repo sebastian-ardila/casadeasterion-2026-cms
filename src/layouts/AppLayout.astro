@@ -3,7 +3,8 @@ import "~/styles/global.css";
 import { ClientRouter } from "astro:transitions";
 import Sidebar from "~/components/Sidebar.astro";
 import ListPanel from "~/components/ListPanel.astro";
-import BuildStatusBanner from "~/components/BuildStatusBanner.astro";
+import ActionToasts from "~/components/ActionToasts.astro";
+import BuildStatusBar from "~/components/BuildStatusBar.astro";
 import FormGuards from "~/components/FormGuards.astro";
 import MobileBreadcrumb from "~/components/MobileBreadcrumb.astro";
 import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
@@ -54,7 +55,8 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
         <slot />
       </main>
     </div>
-    <BuildStatusBanner transition:persist="build-status" />
+    <ActionToasts transition:persist="action-toasts" />
+    <BuildStatusBar transition:persist="build-status-bar" />
     <FormGuards />
 
     {/* Top progress bar shown during view transitions. */}

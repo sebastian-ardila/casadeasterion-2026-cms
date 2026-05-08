@@ -37,8 +37,7 @@ if (Astro.request.method === "POST") {
       .select("id")
       .single();
     if (error) throw error;
-    const label = encodeURIComponent("Autor: " + name);
-    return Astro.redirect(`/authors/${data.id}?published=1&item=${label}`);
+    return Astro.redirect(`/authors/${data.id}?saved=1&action=created&entity=author&publish=1`);
   } catch (err) {
     formError = friendlyError(err);
   }

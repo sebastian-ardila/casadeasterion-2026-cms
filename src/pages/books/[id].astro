@@ -21,7 +21,6 @@ if (!id) return Astro.redirect("/books");
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
-const justSaved = Astro.url.searchParams.get("saved") === "1" || Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   if (!canEdit) return Astro.redirect("/?error=no_permission&section=books");
@@ -34,7 +33,7 @@ if (Astro.request.method === "POST") {
       const wasPublished = existingRow?.status === "published";
       const { error } = await supabase.from("books").delete().eq("id", id);
       if (error) throw error;
-      return Astro.redirect(`/books${wasPublished ? "?published=1" : ""}`);
+      return Astro.redirect(`/books?saved=1&action=deleted&entity=book${wasPublished ? "&publish=1" : ""}`);
     }
 
     const newStatus = str(fd, "status") ?? "draft";
@@ -71,8 +70,7 @@ if (Astro.request.method === "POST") {
     const { error } = await supabase.from("books").update(update).eq("id", id);
     if (error) throw error;
     const triggersRebuild = newStatus === "published" || existing?.status === "published";
-    const label = encodeURIComponent("Libro: " + String(update.title));
-    return Astro.redirect(`/books/${id}${triggersRebuild ? `?published=1&item=${label}` : "?saved=1"}`);
+    return Astro.redirect(`/books/${id}?saved=1&action=updated&entity=book${triggersRebuild ? "&publish=1" : ""}`);
   } catch (err) {
     formError = friendlyError(err);
   }
@@ -140,9 +138,6 @@ const statusOptions = [
   )}
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
-  )}
-  {justSaved && (
-    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado.</p>
   )}
 
   <form method="POST" class="space-y-6 max-w-3xl">

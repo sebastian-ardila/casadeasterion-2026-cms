@@ -11,7 +11,6 @@ const guard = await requireOwner(Astro);
 if (guard instanceof Response) return guard;
 
 let formError: string | null = null;
-let saved: string | null = null;
 
 if (Astro.request.method === "POST") {
   const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
@@ -23,7 +22,9 @@ if (Astro.request.method === "POST") {
       const id = strReq(fd, "id");
       const { error } = await supabase.from("subscribers").delete().eq("id", id);
       if (error) throw error;
-      saved = "Suscriptor eliminado.";
+      // No publish — subscribers don't affect the public site.
+      const filter = Astro.url.searchParams.get("status") ?? "all";
+      return Astro.redirect(`/subscribers?status=${filter}&saved=1&msg=${encodeURIComponent("Suscriptor eliminado.")}`);
     } else if (action === "unsubscribe") {
       const id = strReq(fd, "id");
       const { error } = await supabase
@@ -31,7 +32,8 @@ if (Astro.request.method === "POST") {
         .update({ unsubscribed_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
-      saved = "Suscriptor marcado como dado de baja.";
+      const filter = Astro.url.searchParams.get("status") ?? "all";
+      return Astro.redirect(`/subscribers?status=${filter}&saved=1&msg=${encodeURIComponent("Suscriptor dado de baja.")}`);
     } else {
       throw new Error("acción desconocida");
     }
@@ -56,9 +58,6 @@ const filterOptions = [
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
-  )}
-  {saved && (
-    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">{saved}</p>
   )}
 
   {/* Stats — populated by JS */}

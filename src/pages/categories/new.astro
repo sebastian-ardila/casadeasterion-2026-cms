@@ -40,8 +40,7 @@ if (Astro.request.method === "POST") {
       .select("id")
       .single();
     if (error) throw error;
-    const label = encodeURIComponent("Categoría: " + name);
-    return Astro.redirect(`/categories/${data.id}?published=1&item=${label}`);
+    return Astro.redirect(`/categories/${data.id}?saved=1&action=created&entity=category&publish=1`);
   } catch (err) {
     formError = friendlyError(err);
   }

@@ -17,7 +17,6 @@ if (!id) return Astro.redirect("/categories");
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
-const justSaved = Astro.url.searchParams.get("saved") === "1" || Astro.url.searchParams.get("published") === "1";
 
 if (Astro.request.method === "POST") {
   if (!canEdit) return Astro.redirect("/?error=no_permission&section=categories");
@@ -28,7 +27,7 @@ if (Astro.request.method === "POST") {
     if (action === "delete") {
       const { error } = await supabase.from("categories").delete().eq("id", id);
       if (error) throw error;
-      return Astro.redirect(`/categories?published=1&item=${encodeURIComponent("Categoría eliminada")}`);
+      return Astro.redirect(`/categories?saved=1&action=deleted&entity=category&publish=1`);
     }
 
     const name = strReq(fd, "name");
@@ -43,8 +42,7 @@ if (Astro.request.method === "POST") {
       })
       .eq("id", id);
     if (error) throw error;
-    const label = encodeURIComponent("Categoría: " + name);
-    return Astro.redirect(`/categories/${id}?published=1&item=${label}`);
+    return Astro.redirect(`/categories/${id}?saved=1&action=updated&entity=category&publish=1`);
   } catch (err) {
     formError = friendlyError(err);
   }
@@ -80,9 +78,6 @@ const kindOptions = [
   )}
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
-  )}
-  {justSaved && (
-    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">Guardado.</p>
   )}
 
   <form method="POST" class="space-y-6 max-w-3xl">

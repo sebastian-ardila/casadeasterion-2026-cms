@@ -26,12 +26,13 @@ export const GET: APIRoute = async (ctx) => {
 
   const since = Number(ctx.url.searchParams.get("since") ?? "0");
   const appId = import.meta.env.PUBLIC_SITE_AMPLIFY_APP_ID;
+  const accessKeyId = import.meta.env.AMPLIFY_READER_ACCESS_KEY_ID;
+  const secretKey = import.meta.env.AMPLIFY_READER_SECRET_ACCESS_KEY;
 
-  if (!appId) {
-    return new Response(JSON.stringify({ error: "no_app_configured" }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+  // No Amplify wiring (typical in local dev). Tell the client to stop
+  // polling instead of returning 500 forever.
+  if (!appId || !accessKeyId || !secretKey) {
+    return Response.json({ phase: "unavailable", reason: "no_amplify_configured" });
   }
 
   try {
@@ -67,12 +68,13 @@ export const GET: APIRoute = async (ctx) => {
       endTime: job.endTime?.toISOString(),
     });
   } catch (err) {
-    return new Response(JSON.stringify({
-      error: "amplify_query_failed",
+    // Non-fatal — the client polls again in 3-5s. Don't return 500 here
+    // because it makes the status bar look broken in dev tools; treat
+    // transient AWS errors as "unavailable" and let the polling continue.
+    return Response.json({
+      phase: "unavailable",
+      reason: "amplify_query_failed",
       message: err instanceof Error ? err.message : String(err),
-    }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
     });
   }
 };

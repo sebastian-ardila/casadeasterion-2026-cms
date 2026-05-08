@@ -11,7 +11,6 @@ if (guard instanceof Response) return guard;
 const owner = guard;
 
 let formError: string | null = null;
-let saved: string | null = null;
 
 if (Astro.request.method === "POST") {
   const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
@@ -20,6 +19,7 @@ if (Astro.request.method === "POST") {
     const action = strReq(fd, "_action");
 
     if (action === "set_permission") {
+      // Legacy no-JS fallback. The primary path is /api/admins/permissions.
       const profileId = strReq(fd, "profile_id");
       const resource = strReq(fd, "resource");
       const level = strReq(fd, "level");
@@ -29,10 +29,8 @@ if (Astro.request.method === "POST") {
         .from("admin_permissions")
         .upsert({ profile_id: profileId, resource, level }, { onConflict: "profile_id,resource" });
       if (error) throw error;
-      // Bust the in-memory permissions cache for this admin so the change
-      // is visible immediately on subsequent navigations.
       invalidateAuthCache(Astro, profileId);
-      saved = "Permiso actualizado.";
+      return Astro.redirect(`/admins?saved=1&msg=${encodeURIComponent("Permiso actualizado.")}`);
     } else if (action === "add_email") {
       const email = strReq(fd, "email").trim().toLowerCase();
       const note = str(fd, "note");
@@ -41,7 +39,7 @@ if (Astro.request.method === "POST") {
         .from("admin_emails")
         .insert({ email, note, added_by: owner.id });
       if (error) throw error;
-      saved = `Email pre-aprobado: ${email}`;
+      return Astro.redirect(`/admins?saved=1&msg=${encodeURIComponent(`Email pre-aprobado: ${email}`)}`);
     } else if (action === "remove_admin") {
       const email = strReq(fd, "email").toLowerCase();
       if (email === owner.email.toLowerCase()) throw new Error("no puedes quitarte a ti mismo");
@@ -50,7 +48,7 @@ if (Astro.request.method === "POST") {
         .delete()
         .eq("email", email);
       if (error) throw error;
-      saved = `Acceso revocado: ${email}`;
+      return Astro.redirect(`/admins?saved=1&action=deleted&msg=${encodeURIComponent(`Acceso revocado: ${email}`)}`);
     } else {
       throw new Error("acción desconocida");
     }
@@ -69,9 +67,6 @@ const RESOURCE_LABELS_JSON = JSON.stringify(RESOURCE_LABEL);
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
-  )}
-  {saved && (
-    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">{saved}</p>
   )}
 
   <div data-admins-root data-resource-labels={RESOURCE_LABELS_JSON}>

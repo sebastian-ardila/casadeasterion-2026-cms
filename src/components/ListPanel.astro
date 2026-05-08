@@ -174,21 +174,25 @@ const isNew = Astro.url.pathname.endsWith("/new");
   .lp-thumb-emoji-book       { background: #fffbeb; border-color: #fef3c7; color: #92400e; }
   .lp-thumb-emoji-other      { background: #f5f5f4; border-color: #e7e5e4; color: #44403c; }
 
-  /* Reorder controls — only rendered for resources where reorderable=true */
+  /* ── Reorder controls (categories) ── */
   .lp-link.lp-link-reorderable {
     padding-right: 0;
+    position: relative;
   }
   .lp-link-body {
     flex: 1 1 0%;
     min-width: 0;
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    gap: 10px;
   }
+  /* Grip — larger touch target, more visible affordance */
   .lp-grip {
     flex-shrink: 0;
-    width: 22px;
-    margin: -4px 0 -4px -4px;
+    width: 24px;
+    align-self: stretch;
+    margin: -12px 0 -12px -16px;
+    padding-left: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -196,38 +200,48 @@ const isNew = Astro.url.pathname.endsWith("/new");
     cursor: grab;
     touch-action: none;
     user-select: none;
-    border-radius: 3px;
     transition: color 0.15s, background 0.15s;
   }
-  .lp-grip:hover { color: #57534e; background: #f5f5f4; }
+  .lp-link:hover .lp-grip { color: #78716c; }
+  .lp-grip:hover { color: #1c1917 !important; background: #fafaf9; }
   .lp-grip:active { cursor: grabbing; }
+
+  /* Up/down arrows — visible-on-hover in desktop, always in mobile */
   .lp-arrows {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     border-left: 1px solid #f5f5f4;
     align-self: stretch;
-    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .lp-link:hover .lp-arrows,
+  .lp-link:focus-within .lp-arrows {
+    opacity: 1;
+  }
+  @media (max-width: 767px) {
+    .lp-arrows { opacity: 1; }
   }
   .lp-arrow {
-    width: 28px;
+    width: 30px;
     flex: 1 1 0%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #a8a29e;
+    color: #78716c;
     background: transparent;
     border: 0;
     padding: 0;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.12s, color 0.12s;
   }
   .lp-arrow:hover:not(:disabled) {
-    background: #fafaf9;
-    color: #1c1917;
+    background: #1c1917;
+    color: #fff;
   }
   .lp-arrow:disabled {
-    opacity: 0.25;
+    opacity: 0.18;
     cursor: not-allowed;
   }
   .lp-arrow + .lp-arrow {
@@ -235,10 +249,53 @@ const isNew = Astro.url.pathname.endsWith("/new");
   }
 
   /* Drag/drop visual indicators */
-  .lp-link.lp-dragging { opacity: 0.4; }
-  .lp-link.lp-drop-above { box-shadow: 0 -2px 0 0 #1c1917 inset; }
-  .lp-link.lp-drop-below { box-shadow: 0 2px 0 0 #1c1917 inset; }
-  .lp-link.lp-saving { background: #fafaf9; }
+  .lp-link.lp-dragging {
+    opacity: 0.35;
+    transform: scale(0.98);
+  }
+  .lp-link {
+    transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 0.1s, opacity 0.15s;
+  }
+  /* Drop indicator: glowing horizontal bar above/below the target row */
+  .lp-link.lp-drop-above::before,
+  .lp-link.lp-drop-below::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    height: 3px;
+    background: #1c1917;
+    border-radius: 2px;
+    box-shadow: 0 0 12px rgba(28, 25, 23, 0.45);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .lp-link.lp-drop-above::before { top: -2px; }
+  .lp-link.lp-drop-below::after  { bottom: -2px; }
+
+  /* Whole-list "saving" overlay */
+  [data-list-panel].lp-saving-list {
+    position: relative;
+  }
+  [data-list-panel].lp-saving-list::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .lp-save-spinner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #1c1917;
+  }
+  .lp-save-spinner svg {
+    animation: lp-spin 1s linear infinite;
+  }
+  @keyframes lp-spin { to { transform: rotate(360deg); } }
 </style>
 
 <script is:inline>
@@ -283,12 +340,39 @@ const isNew = Astro.url.pathname.endsWith("/new");
       });
     };
 
+    // FLIP animation helper: snapshots positions, runs `mutate()` to alter
+    // the DOM, then animates each row from its old position to its new one.
+    const flipAnimate = (list, mutate) => {
+      const items = Array.from(list.querySelectorAll("li"));
+      const before = new Map();
+      items.forEach((li) => before.set(li, li.getBoundingClientRect().top));
+
+      mutate();
+
+      items.forEach((li) => {
+        const oldTop = before.get(li);
+        if (oldTop == null) return;
+        const newTop = li.getBoundingClientRect().top;
+        const dy = oldTop - newTop;
+        if (Math.abs(dy) < 1) return;
+        const link = li.querySelector(".lp-link");
+        if (!link) return;
+        // Apply the inverse transform instantly, then transition to 0.
+        link.style.transition = "none";
+        link.style.transform = `translateY(${dy}px)`;
+        // Force reflow so the browser registers the offset.
+        void link.offsetHeight;
+        link.style.transition = "";
+        link.style.transform = "";
+      });
+    };
+
     const persistReorder = async (panel, list) => {
       const resource = panel.dataset.listPanel;
       // Only categories supports reorder right now.
       if (resource !== "categories") return;
       const ids = Array.from(list.querySelectorAll("li > a.lp-link")).map((a) => a.dataset.id);
-      list.querySelectorAll("a.lp-link").forEach((a) => a.classList.add("lp-saving"));
+      panel.classList.add("lp-saving-list");
       try {
         const res = await fetch(`/api/${resource}/reorder`, {
           method: "POST",
@@ -298,13 +382,18 @@ const isNew = Astro.url.pathname.endsWith("/new");
         });
         if (!res.ok) throw new Error("http_" + res.status);
         try { sessionStorage.removeItem(cacheKey(resource)); } catch {}
-        if (typeof window.__casAddBuildToast === "function") {
-          window.__casAddBuildToast("Categorías reordenadas");
+        if (typeof window.casToast === "function") {
+          window.casToast({ type: "success", message: "Orden guardado." });
+        }
+        if (typeof window.casBuildPending === "function") {
+          window.casBuildPending();
         }
       } catch {
-        // Silent fail — visual order persists even if the network failed.
+        if (typeof window.casToast === "function") {
+          window.casToast({ type: "error", message: "No se pudo guardar el orden." });
+        }
       } finally {
-        list.querySelectorAll("a.lp-link").forEach((a) => a.classList.remove("lp-saving"));
+        panel.classList.remove("lp-saving-list");
       }
     };
 
@@ -328,8 +417,10 @@ const isNew = Astro.url.pathname.endsWith("/new");
           if (!li) return;
           const sibling = dir === "up" ? li.previousElementSibling : li.nextElementSibling;
           if (!sibling) return;
-          if (dir === "up") list.insertBefore(li, sibling);
-          else list.insertBefore(sibling, li);
+          flipAnimate(list, () => {
+            if (dir === "up") list.insertBefore(li, sibling);
+            else list.insertBefore(sibling, li);
+          });
           updateArrowDisabled(list);
           persistReorder(panel, list);
         }
@@ -382,8 +473,11 @@ const isNew = Astro.url.pathname.endsWith("/new");
         }
         const rect = target.getBoundingClientRect();
         const before = e.clientY < rect.top + rect.height / 2;
-        if (before) list.insertBefore(draggedItem, target);
-        else list.insertBefore(draggedItem, target.nextElementSibling);
+        const moving = draggedItem;
+        flipAnimate(list, () => {
+          if (before) list.insertBefore(moving, target);
+          else list.insertBefore(moving, target.nextElementSibling);
+        });
         draggedItem = null;
         updateArrowDisabled(list);
         persistReorder(panel, list);
@@ -559,11 +653,10 @@ const isNew = Astro.url.pathname.endsWith("/new");
     // Re-hydrate after Astro view transitions navigate.
     document.addEventListener("astro:after-swap", hydrateAll);
 
-    // Invalidate cache when a form succeeds (server redirects with ?saved/?published).
-    // This pattern detects the redirect by reading the URL on landing.
+    // Invalidate cache when a form succeeds (server redirects with ?saved=1).
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
-      if (url.searchParams.has("saved") || url.searchParams.has("published")) {
+      if (url.searchParams.has("saved")) {
         ["posts", "books", "authors"].forEach((r) => {
           try {
             sessionStorage.removeItem(cacheKey(r));
