@@ -55,18 +55,20 @@ const visibleCards = cards.filter((c) => c.show);
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-10" data-home-stats>
     {visibleCards.map((c) => (
       <a href={c.href} data-astro-prefetch class="card p-4 md:p-5 hover:border-stone-900 transition flex flex-col">
-        <div class="flex items-center justify-between mb-1.5">
+        <div class="flex items-center justify-between mb-3">
           <p class="text-[11px] uppercase tracking-[0.12em] text-stone-500">{c.label}</p>
           <Icon name={c.icon} class="w-4 h-4 text-stone-400" aria-hidden="true" />
         </div>
-        <p class="font-serif text-3xl mt-auto" data-stat={c.primary}>
+        <p class="font-serif text-3xl leading-none" data-stat={c.primary}>
           <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
         </p>
-        {c.detailKey && (
-          <p class="text-[11px] text-stone-500 mt-1">
-            <span data-stat={c.detailKey}>…</span> {c.detailSuffix}
-          </p>
-        )}
+        <p class="text-[11px] text-stone-500 mt-2 min-h-[1rem]">
+          {c.detailKey ? (
+            <><span data-stat={c.detailKey}>…</span> {c.detailSuffix}</>
+          ) : (
+            <span>&nbsp;</span>
+          )}
+        </p>
       </a>
     ))}
   </div>
