@@ -116,16 +116,18 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
           <p class="truncate font-medium text-stone-900 text-[13px]">{user.full_name ?? user.email}</p>
           <p class="truncate text-stone-500 text-[11px]">{user.email}</p>
           <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-0.5">{user.role}</p>
-          <form action="/logout" method="POST" class="mt-2">
-            <button class="cursor-pointer inline-flex items-center gap-1.5 text-stone-700 hover:text-stone-900 text-[12px] border border-stone-300 hover:border-stone-900 px-2.5 py-1 transition">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-              Cerrar sesión
-            </button>
-          </form>
+          <button
+            type="button"
+            id="cms-logout-btn"
+            class="cas-logout-btn mt-2 cursor-pointer inline-flex items-center gap-1.5 text-stone-700 hover:text-stone-900 text-[12px] border border-stone-300 hover:border-stone-900 px-2.5 py-1 transition"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="pointer-events-none">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            <span class="pointer-events-none">Cerrar sesión</span>
+          </button>
         </div>
       </div>
     ) : (
@@ -181,6 +183,51 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
       }
       if (t.closest("#sidebar-backdrop")) {
         setOpen(false);
+        return;
+      }
+      // Logout button: clear the session client-side first, then hit the
+      // server, then hard-navigate to /login. We can't rely on the form-based
+      // POST because Astro's ClientRouter intercepts it but the auth cookies
+      // change isn't reflected in any client-side state, leading to a UI that
+      // looks logged-in until the next full reload.
+      if (t.closest("#cms-logout-btn")) {
+        e.preventDefault();
+        const btn = t.closest("#cms-logout-btn");
+        if (btn instanceof HTMLButtonElement) {
+          btn.disabled = true;
+          btn.style.opacity = "0.6";
+        }
+        (async () => {
+          try {
+            const mod = await import("@supabase/ssr");
+            const supabase = mod.createBrowserClient(
+              import.meta.env.PUBLIC_SUPABASE_URL,
+              import.meta.env.PUBLIC_SUPABASE_ANON_KEY,
+            );
+            await supabase.auth.signOut();
+          } catch (err) {
+            // Continue anyway — server endpoint also clears cookies.
+          }
+          try {
+            await fetch("/logout", { method: "POST", credentials: "same-origin" });
+          } catch {}
+          // Wipe any per-user data the CMS cached in sessionStorage so the
+          // next account that logs in here doesn't see leftover stats / lists.
+          try {
+            const keys = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const k = sessionStorage.key(i);
+              if (k && (k.startsWith("cas:") || k.startsWith("cas_") || k.startsWith("cda_"))) {
+                keys.push(k);
+              }
+            }
+            keys.forEach((k) => sessionStorage.removeItem(k));
+          } catch {}
+          // Hard navigate so persisted components (sidebar, build status bar,
+          // toast stack, etc.) are torn down and the new state is fully read
+          // from the server. Avoids any stale client-side caches.
+          window.location.href = "/login";
+        })();
         return;
       }
       // Close drawer when clicking any link inside the sidebar.
