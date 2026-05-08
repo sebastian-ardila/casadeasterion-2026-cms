@@ -18,22 +18,25 @@ type Item = {
   reorderable?: boolean;
 };
 
-/** "hace 5 minutos" / "hace 3 días" / "hace 2 meses" / "30 nov 2024". */
+/** Activity label: "activo ahora" / "activo hace 2 h" / "activo hace 3 días" / "activo el 30 nov 2024". */
 function formatRelative(iso: string): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return "";
   const diffMs = Date.now() - then;
   const sec = Math.floor(diffMs / 1000);
-  if (sec < 60) return "ahora mismo";
+  // Activity heartbeat fires every ~5 min, so anything under that window
+  // means the user is online right now.
+  if (sec < 300) return "activo ahora";
   const min = Math.floor(sec / 60);
-  if (min < 60) return `hace ${min} min`;
+  if (min < 60) return `activo hace ${min} min`;
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `hace ${hr} h`;
+  if (hr < 24) return `activo hace ${hr} h`;
   const day = Math.floor(hr / 24);
-  if (day < 30) return `hace ${day} día${day === 1 ? "" : "s"}`;
+  if (day < 30) return `activo hace ${day} día${day === 1 ? "" : "s"}`;
   const month = Math.floor(day / 30);
-  if (month < 12) return `hace ${month} mes${month === 1 ? "" : "es"}`;
-  return new Date(iso).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  if (month < 12) return `activo hace ${month} mes${month === 1 ? "" : "es"}`;
+  const formatted = new Date(iso).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  return `activo el ${formatted}`;
 }
 
 type ListResource = Resource;
