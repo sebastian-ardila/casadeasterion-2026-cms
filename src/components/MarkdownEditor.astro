@@ -354,10 +354,12 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
 
   /* ─────────────────────────────────────────────
      Bubble menu (selection toolbar)
+     `position: fixed` so it escapes the editor's overflow:auto host —
+     otherwise selections near the top of the editable area would clip it.
      ───────────────────────────────────────────── */
   .cas-tt-bubble {
-    position: absolute;
-    z-index: 30;
+    position: fixed;
+    z-index: 60;
     display: flex;
     align-items: center;
     gap: 1px;
@@ -366,7 +368,6 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
     color: #fafaf9;
     border-radius: 6px;
     box-shadow: 0 8px 20px -8px rgba(0,0,0,0.4);
-    transform: translate(-50%, -100%) translateY(-8px);
     transition: opacity 120ms;
   }
   .cas-tt-bubble[hidden] { display: none; }
@@ -394,11 +395,11 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   /* ─────────────────────────────────────────────
-     Slash command menu
+     Slash command menu — also fixed so it never clips inside overflow.
      ───────────────────────────────────────────── */
   .cas-tt-slash {
-    position: absolute;
-    z-index: 25;
+    position: fixed;
+    z-index: 55;
     background: #fff;
     border: 1px solid #e7e5e4;
     border-radius: 6px;
@@ -612,20 +613,36 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
     };
 
     // ── Bubble menu position ──
+    // Uses viewport (fixed-position) coordinates so it escapes the editor
+    // host's `overflow-y: auto`. Flips below the selection if it would
+    // collide with the top of the viewport.
     const updateBubble = () => {
       const { from, to, empty } = editor.state.selection;
       if (empty || from === to) {
         bubbleEl.hidden = true;
         return;
       }
+      // Reveal first so we can measure.
+      bubbleEl.hidden = false;
+      bubbleEl.style.visibility = "hidden";
+
       const start = editor.view.coordsAtPos(from);
       const end = editor.view.coordsAtPos(to);
-      const hostRect = (root.querySelector("[data-tt-host]") as HTMLElement).getBoundingClientRect();
-      const left = (start.left + end.left) / 2 - hostRect.left;
-      const top = start.top - hostRect.top;
+      const bubbleRect = bubbleEl.getBoundingClientRect();
+      const margin = 6;
+
+      const centerX = (start.left + end.left) / 2;
+      let left = centerX - bubbleRect.width / 2;
+      // Clamp to viewport.
+      left = Math.max(8, Math.min(left, window.innerWidth - bubbleRect.width - 8));
+
+      // Prefer above; flip below when too close to the top.
+      let top = start.top - bubbleRect.height - margin;
+      if (top < 8) top = end.bottom + margin;
+
       bubbleEl.style.left = left + "px";
       bubbleEl.style.top = top + "px";
-      bubbleEl.hidden = false;
+      bubbleEl.style.visibility = "";
     };
 
     // ── Slash command menu ──
@@ -651,14 +668,27 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
     const positionSlash = () => {
       const { from } = editor.state.selection;
       const coords = editor.view.coordsAtPos(from);
-      const hostRect = (root.querySelector("[data-tt-host]") as HTMLElement).getBoundingClientRect();
-      let left = coords.left - hostRect.left;
-      const top = coords.bottom - hostRect.top + 4;
-      // Keep menu inside the host width
-      const hostWidth = hostRect.width;
-      if (left + 260 > hostWidth) left = Math.max(8, hostWidth - 268);
+      // Reveal then measure (size depends on filtered items count).
+      slashEl.hidden = false;
+      slashEl.style.visibility = "hidden";
+      const slashRect = slashEl.getBoundingClientRect();
+      const margin = 6;
+
+      let left = coords.left;
+      if (left + slashRect.width > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - slashRect.width - 8);
+      }
+
+      // Prefer below; flip above when not enough room.
+      let top = coords.bottom + margin;
+      if (top + slashRect.height > window.innerHeight - 8) {
+        top = coords.top - slashRect.height - margin;
+        if (top < 8) top = 8;
+      }
+
       slashEl.style.left = left + "px";
       slashEl.style.top = top + "px";
+      slashEl.style.visibility = "";
     };
 
     const filterSlash = (q: string) => {
@@ -679,8 +709,7 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
       inst.slashState.filtered = SLASH_ITEMS.slice();
       inst.slashState.index = 0;
       renderSlash();
-      positionSlash();
-      slashEl.hidden = false;
+      positionSlash(); // also sets slashEl.hidden = false
     };
 
     const runSlashItem = (item: SlashItem) => {
@@ -896,6 +925,15 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
         closeSlash();
       }
     });
+
+    // ── Reposition (or hide) on scroll / resize so the fixed-position
+    //    floating menus don't drift away from the selection. ──
+    const onScrollOrResize = () => {
+      if (!bubbleEl.hidden) updateBubble();
+      if (inst.slashState.open) positionSlash();
+    };
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
 
     // ── ESC exits fullscreen ──
     document.addEventListener("keydown", (e) => {
