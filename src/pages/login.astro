@@ -110,14 +110,16 @@ const friendlyReason = reason ? (FRIENDLY_REASON[reason] ?? reason) : null;
         const next = btn.dataset.next ?? "/";
         const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
         try {
-          // Note: don't pass `prompt: select_account` — some mobile browsers
-          // (Safari iOS especially) reject the resulting auth URL with a
-          // "400 malformed request" on the Google side. Letting Google use
-          // its default account picker works everywhere. Users who need to
-          // switch accounts can sign out of Google in the Google tab itself.
+          // `prompt: select_account` forces Google to show its account
+          // picker instead of silently re-using the existing
+          // accounts.google.com session cookie. Without it, signing out of
+          // the CMS only clears Supabase's storage — Google's own cookie
+          // is still set, so the next click would auto-login as the same
+          // user (especially noticeable on mobile, where users can't
+          // easily clear cookies between attempts).
           const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo },
+            options: { redirectTo, queryParams: { prompt: "select_account" } },
           });
           if (error) {
             console.error("[login] signInWithOAuth error:", error);
