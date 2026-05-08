@@ -81,17 +81,10 @@
     @apply block text-xs uppercase tracking-[0.12em] font-semibold text-stone-700 mb-1.5;
   }
 
-  /* Use on grid cells that wrap a <Dropdown /> or other input alongside
-     <Field /> components. Ensures the actual control aligns with the bottom
-     edge so descriptions of varying length above don't shift the inputs. */
+  /* Wrapper for grid cells that hold a non-Field control (e.g. <Dropdown />)
+     so they share the same label-then-control structure as <Field />. */
   .cell-stack {
-    @apply flex flex-col h-full min-w-0;
-  }
-  .cell-stack > [data-dropdown],
-  .cell-stack > input,
-  .cell-stack > select,
-  .cell-stack > .input {
-    margin-top: auto;
+    @apply flex flex-col min-w-0;
   }
 
   .nav-link {
