@@ -2,7 +2,21 @@
 import AuthLayout from "~/layouts/AuthLayout.astro";
 
 const error = Astro.url.searchParams.get("error");
+const reason = Astro.url.searchParams.get("reason");
+const detail = Astro.url.searchParams.get("detail");
 const next = Astro.url.searchParams.get("next") ?? "/";
+
+// Map common OAuth error reasons to friendly Spanish copy.
+const FRIENDLY_REASON: Record<string, string> = {
+  access_denied: "Cancelaste o rechazaste la autorización.",
+  admin_policy_enforced: "Tu organización (Google Workspace) bloquea el acceso a esta app. Pídele al admin de tu cuenta que la autorice.",
+  org_internal: "Esta app solo permite cuentas de la organización autorizada.",
+  invalid_request: "La solicitud a Google fue inválida. Refresca la página e intenta de nuevo.",
+  redirect_uri_mismatch: "La URL de redirección no está autorizada en Google Cloud Console.",
+  missing_code: "Google no devolvió código de autorización. Refresca y reintenta.",
+  exchange_failed: "Tu sesión no pudo completarse. Si sigues viendo este error, intenta cerrar sesión en Google y volver a entrar.",
+};
+const friendlyReason = reason ? (FRIENDLY_REASON[reason] ?? reason) : null;
 ---
 
 <AuthLayout title="Acceder">
@@ -27,9 +41,11 @@ const next = Astro.url.searchParams.get("next") ?? "/";
       </p>
     )}
     {error === "oauth_failed" && (
-      <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-5">
-        No se pudo completar el login. Intenta de nuevo.
-      </p>
+      <div class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-5 space-y-1">
+        <p class="font-medium">No se pudo completar el login.</p>
+        {friendlyReason && <p class="text-[13px]">{friendlyReason}</p>}
+        {detail && <p class="text-[11px] text-red-700/80 break-words">{detail}</p>}
+      </div>
     )}
 
     <button
@@ -94,9 +110,14 @@ const next = Astro.url.searchParams.get("next") ?? "/";
         const next = btn.dataset.next ?? "/";
         const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
         try {
+          // Note: don't pass `prompt: select_account` — some mobile browsers
+          // (Safari iOS especially) reject the resulting auth URL with a
+          // "400 malformed request" on the Google side. Letting Google use
+          // its default account picker works everywhere. Users who need to
+          // switch accounts can sign out of Google in the Google tab itself.
           const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo, queryParams: { prompt: "select_account" } },
+            options: { redirectTo },
           });
           if (error) {
             console.error("[login] signInWithOAuth error:", error);
