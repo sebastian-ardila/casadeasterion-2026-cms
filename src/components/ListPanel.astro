@@ -1,8 +1,12 @@
 ---
 import type { Resource, Level } from "~/lib/auth";
 
+// "admins" is owner-only and isn't a Resource (no permission level),
+// so we accept it as a literal extension here.
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "categories"> | "admins";
+
 interface Props {
-  resource: Extract<Resource, "posts" | "books" | "authors" | "categories">;
+  resource: PanelResource;
   activeId?: string | null;
   permission: Level;
   // When true, hide the list panel on mobile (used when the user is
@@ -12,11 +16,12 @@ interface Props {
 const { resource, activeId, permission, hideOnMobile = false } = Astro.props;
 const canEdit = permission === "edit";
 
-const headerByResource = {
+const headerByResource: Record<PanelResource, { title: string; newHref: string; newLabel: string }> = {
   posts: { title: "Artículos", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
   books: { title: "Libros", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
   categories: { title: "Categorías", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
+  admins: { title: "Administradores", newHref: "/admins/new", newLabel: "+ Nuevo admin" },
 };
 const header = headerByResource[resource];
 
@@ -91,6 +96,14 @@ const isNew = Astro.url.pathname.endsWith("/new");
   .lp-status-draft {
     background: #e7e5e4;
     color: #57534e;
+  }
+  .lp-status-owner {
+    background: #ede9fe;
+    color: #5b21b6;
+  }
+  .lp-status-admin {
+    background: #f5f5f4;
+    color: #44403c;
   }
   .lp-link {
     display: flex;
@@ -526,8 +539,15 @@ const isNew = Astro.url.pathname.endsWith("/new");
         .map((it, idx) => {
           const active = it.id === activeId;
           const cls = "lp-link" + (active ? " lp-link-active" : "") + (reorderable ? " lp-link-reorderable" : "");
-          const status = it.status
-            ? `<span class="lp-status ${it.status === "published" ? "lp-status-pub" : "lp-status-draft"}">${it.status === "published" ? "pub" : "borr"}</span>`
+          const STATUS_VARIANTS = {
+            published: { cls: "lp-status-pub",   label: "pub" },
+            draft:     { cls: "lp-status-draft", label: "borr" },
+            owner:     { cls: "lp-status-owner", label: "owner" },
+            admin:     { cls: "lp-status-admin", label: "admin" },
+          };
+          const sv = STATUS_VARIANTS[it.status];
+          const status = sv
+            ? `<span class="lp-status ${sv.cls}">${sv.label}</span>`
             : "";
 
           const isPhoto = it.imageStyle === "photo";

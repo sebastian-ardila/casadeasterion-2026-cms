@@ -1,0 +1,118 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
+import { requireOwner } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requireOwner(Astro);
+if (guard instanceof Response) return guard;
+const owner = guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const action = strReq(fd, "_action");
+
+    if (action === "add_email") {
+      const email = strReq(fd, "email").trim().toLowerCase();
+      const note = str(fd, "note");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("email inválido");
+      const { error } = await supabase
+        .from("admin_emails")
+        .insert({ email, note, added_by: owner.id });
+      if (error) throw error;
+      return Astro.redirect(`/admins/new?saved=1&msg=${encodeURIComponent(`Email pre-aprobado: ${email}`)}`);
+    } else if (action === "remove_pending") {
+      const email = strReq(fd, "email").toLowerCase();
+      const { error } = await supabase.from("admin_emails").delete().eq("email", email);
+      if (error) throw error;
+      return Astro.redirect(`/admins/new?saved=1&action=deleted&msg=${encodeURIComponent(`Eliminado de la lista: ${email}`)}`);
+    }
+    throw new Error("acción desconocida");
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+// Pending allowlist: emails pre-aprobados que aún no se han logueado.
+const [{ data: profiles }, { data: allowlist }] = await Promise.all([
+  supabase.from("profiles").select("email").in("role", ["owner", "admin"]),
+  supabase.from("admin_emails").select("email, added_at, note").order("added_at", { ascending: false }),
+]);
+const profileEmails = new Set((profiles ?? []).map((p) => p.email.toLowerCase()));
+const pending = (allowlist ?? []).filter((a) => !profileEmails.has(a.email.toLowerCase()));
+---
+
+<AppLayout title="Nuevo administrador" resource="admins">
+  <BackToList href="/admins" label="Administradores" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-2">Nuevo administrador</h1>
+  <p class="text-stone-500 text-sm mb-8 max-w-2xl">
+    Agrega el correo de Google que quieres autorizar. La persona podrá iniciar sesión en el CMS apenas la apruebes; entrará sin permisos en ninguna sección y podrás darle acceso desde su perfil.
+  </p>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6 max-w-3xl">{formError}</p>
+  )}
+
+  <form method="POST" class="card max-w-3xl mb-12">
+    <input type="hidden" name="_action" value="add_email" />
+    <div>
+      <h2 class="card-section-title">Pre-aprobar email</h2>
+      <p class="card-section-desc">Google verifica el correo al iniciar sesión. Solo correos en esta lista pueden entrar al CMS.</p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end mt-5">
+      <div class="sm:col-span-5">
+        <Field label="Email de Google" name="email" type="email" required description="Ej: alguien@dominio.com" />
+      </div>
+      <div class="sm:col-span-5">
+        <Field label="Nota (opcional)" name="note" description="Rol o quién es esta persona." />
+      </div>
+      <div class="sm:col-span-2 flex justify-end">
+        <button type="submit" class="btn-primary w-full sm:w-auto">Agregar</button>
+      </div>
+    </div>
+  </form>
+
+  {pending.length > 0 && (
+    <section class="max-w-3xl">
+      <h2 class="font-serif text-xl mb-2">Pre-aprobados</h2>
+      <p class="text-sm text-stone-500 mb-4">
+        Estos correos pueden iniciar sesión en el CMS pero aún no se han logueado por primera vez. Cuando lo hagan, aparecerán en la lista de la izquierda.
+      </p>
+      <div class="card p-0 overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-600">
+            <tr>
+              <th class="text-left px-4 py-3 font-semibold">Email</th>
+              <th class="text-left px-4 py-3 font-semibold">Nota</th>
+              <th class="text-left px-4 py-3 font-semibold">Agregado</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pending.map((e) => (
+              <tr class="border-t border-stone-100">
+                <td class="px-4 py-3">{e.email}</td>
+                <td class="px-4 py-3 text-stone-600">{e.note ?? "—"}</td>
+                <td class="px-4 py-3 text-stone-500 text-xs">{new Date(e.added_at).toLocaleDateString()}</td>
+                <td class="px-4 py-3 text-right">
+                  <form method="POST" onsubmit={`return confirm('¿Quitar ${e.email} de la lista?')`}>
+                    <input type="hidden" name="_action" value="remove_pending" />
+                    <input type="hidden" name="email" value={e.email} />
+                    <button class="cursor-pointer text-xs text-red-700 hover:underline">Quitar</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )}
+</AppLayout>

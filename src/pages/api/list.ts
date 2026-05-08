@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requirePermission, type Resource } from "~/lib/auth";
+import { requirePermission, requireOwner, type Resource } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 type Item = {
@@ -16,7 +16,11 @@ type Item = {
   reorderable?: boolean;
 };
 
-const ALLOWED = new Set<Resource>(["posts", "books", "authors", "categories"]);
+// "admins" isn't a Resource (it has no permission level — only the owner
+// sees this section), but it follows the same shape so the ListPanel can
+// render it identically to the rest.
+type ListResource = Resource | "admins";
+const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins"]);
 
 const KIND_EMOJI: Record<string, string> = {
   philosophy: "✦",
@@ -33,7 +37,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export const GET: APIRoute = async (ctx) => {
   const url = new URL(ctx.request.url);
-  const resource = url.searchParams.get("resource") as Resource | null;
+  const resource = url.searchParams.get("resource") as ListResource | null;
 
   if (!resource || !ALLOWED.has(resource)) {
     return new Response(JSON.stringify({ error: "invalid resource" }), {
@@ -42,12 +46,24 @@ export const GET: APIRoute = async (ctx) => {
     });
   }
 
-  const guard = await requirePermission(ctx, resource, "view");
-  if (guard instanceof Response) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
+  // Auth gate: admins is owner-only, everything else uses per-resource
+  // view permission.
+  if (resource === "admins") {
+    const owner = await requireOwner(ctx);
+    if (owner instanceof Response) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
+  } else {
+    const guard = await requirePermission(ctx, resource, "view");
+    if (guard instanceof Response) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
   }
 
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);
@@ -108,6 +124,23 @@ export const GET: APIRoute = async (ctx) => {
       imageUrl: KIND_EMOJI[c.kind] ?? KIND_EMOJI.other,
       imageStyle: "emoji",
       reorderable: true,
+    }));
+  } else if (resource === "admins") {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, avatar_url, role")
+      .in("role", ["owner", "admin"])
+      .order("role")
+      .order("email");
+    items = (data ?? []).map((p: any) => ({
+      id: p.id,
+      title: p.full_name ?? p.email,
+      subtitle: p.email,
+      // Render the role as the status pill — owner = green, admin = neutral.
+      status: p.role,
+      href: `/admins/${p.id}`,
+      imageUrl: p.avatar_url ?? null,
+      imageStyle: "photo",
     }));
   }
 

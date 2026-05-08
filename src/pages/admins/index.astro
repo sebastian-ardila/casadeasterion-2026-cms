@@ -1,0 +1,20 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import { requireOwner } from "~/lib/auth";
+
+const guard = await requireOwner(Astro);
+if (guard instanceof Response) return guard;
+---
+
+<AppLayout title="Administradores" resource="admins">
+  <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
+    <p class="font-serif text-xl mb-2">Administradores</p>
+    <p class="text-sm mb-2 max-w-md">
+      Selecciona un administrador de la lista para ver y editar sus permisos, o agrega uno nuevo.
+    </p>
+    <p class="text-xs mb-6 max-w-md">
+      Solo correos pre-aprobados pueden iniciar sesión en el CMS. Cuando agregues uno, aparecerá en la lista apenas se loguee con Google por primera vez.
+    </p>
+    <a href="/admins/new" class="btn-primary">+ Nuevo administrador</a>
+  </div>
+</AppLayout>

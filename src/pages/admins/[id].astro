@@ -1,0 +1,298 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import BackToList from "~/components/BackToList.astro";
+import { requireOwner, RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { strReq } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requireOwner(Astro);
+if (guard instanceof Response) return guard;
+const owner = guard;
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/admins");
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const action = strReq(fd, "_action");
+
+    if (action === "remove_admin") {
+      const email = strReq(fd, "email").toLowerCase();
+      if (email === owner.email.toLowerCase()) throw new Error("no puedes quitarte a ti mismo");
+      const { error } = await supabase.from("admin_emails").delete().eq("email", email);
+      if (error) throw error;
+      return Astro.redirect(`/admins?saved=1&action=deleted&msg=${encodeURIComponent(`Acceso revocado: ${email}`)}`);
+    }
+    throw new Error("acción desconocida");
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+// Load profile + current permissions
+const [{ data: profile }, { data: permRows }] = await Promise.all([
+  supabase
+    .from("profiles")
+    .select("id, email, full_name, avatar_url, role")
+    .eq("id", id)
+    .maybeSingle(),
+  supabase
+    .from("admin_permissions")
+    .select("resource, level")
+    .eq("profile_id", id),
+]);
+
+if (!profile) return Astro.redirect("/admins");
+
+const isOwnerRow = profile.role === "owner";
+const isSelf = profile.id === owner.id;
+
+// Build current permissions map.
+const perms: Record<Resource, Level> = {
+  posts: "none", books: "none", authors: "none", categories: "none", site: "none",
+};
+if (isOwnerRow) {
+  for (const r of RESOURCES) perms[r] = "edit";
+} else {
+  for (const row of permRows ?? []) {
+    if ((RESOURCES as string[]).includes(row.resource)) {
+      perms[row.resource as Resource] = row.level as Level;
+    }
+  }
+}
+
+const initials = (s: string | null, fallback: string) =>
+  ((s ?? fallback).trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?").toUpperCase();
+
+const LEVELS: { value: Level; label: string }[] = [
+  { value: "none", label: "Sin acceso" },
+  { value: "view", label: "Ver" },
+  { value: "edit", label: "Editar" },
+];
+---
+
+<AppLayout title={profile.full_name ?? profile.email} resource="admins" activeId={profile.id} breadcrumbLabel={profile.full_name ?? profile.email}>
+  <BackToList href="/admins" label="Administradores" />
+
+  {/* Header card with avatar */}
+  <header class="flex flex-col sm:flex-row sm:items-center gap-5 mb-8 max-w-3xl">
+    {profile.avatar_url ? (
+      <img
+        src={profile.avatar_url}
+        alt=""
+        referrerpolicy="no-referrer"
+        class="w-20 h-20 rounded-full object-cover shrink-0 border border-stone-200"
+      />
+    ) : (
+      <div class="w-20 h-20 rounded-full bg-stone-200 shrink-0 flex items-center justify-center text-stone-700 text-xl font-medium">
+        {initials(profile.full_name, profile.email)}
+      </div>
+    )}
+    <div class="min-w-0 flex-1">
+      <h1 class="font-serif text-3xl md:text-4xl leading-tight">{profile.full_name ?? profile.email}</h1>
+      <p class="text-stone-500 text-sm mt-1 truncate">{profile.email}</p>
+      <div class="flex items-center gap-2 mt-2">
+        <span class:list={[
+          "inline-flex items-center text-[10px] uppercase tracking-[0.14em] px-2 py-0.5",
+          isOwnerRow ? "bg-violet-100 text-violet-900" : "bg-stone-100 text-stone-700",
+        ]}>
+          {isOwnerRow ? "Owner" : "Admin"}
+        </span>
+        {isSelf && (
+          <span class="text-[11px] text-stone-500 italic">— tú</span>
+        )}
+      </div>
+    </div>
+  </header>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6 max-w-3xl">{formError}</p>
+  )}
+
+  {/* Permissions editor */}
+  <form
+    class="card max-w-3xl mb-12"
+    data-perms-form
+    data-profile-id={profile.id}
+    data-original={JSON.stringify(perms)}
+  >
+    <div class="mb-5">
+      <h2 class="card-section-title">Permisos por sección</h2>
+      <p class="card-section-desc">
+        {isOwnerRow
+          ? "El owner siempre tiene acceso completo a todas las secciones."
+          : "Define qué puede ver y editar este admin en cada sección del CMS."}
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      {RESOURCES.map((r) => (
+        <div class="flex flex-col">
+          <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1.5">
+            {RESOURCE_LABEL[r]}
+          </label>
+          <select name={`level_${r}`} data-resource={r} class="input" disabled={isOwnerRow}>
+            {LEVELS.map((lv) => (
+              <option value={lv.value} selected={perms[r] === lv.value}>{lv.label}</option>
+            ))}
+          </select>
+        </div>
+      ))}
+    </div>
+
+    {!isOwnerRow && (
+      <div class="flex items-center justify-end gap-3 mt-5 pt-5 border-t border-stone-100" data-perms-savebar>
+        <span class="text-xs text-stone-500 hidden" data-perms-status>Sin cambios pendientes.</span>
+        <button type="button" class="btn cursor-pointer hidden" data-perms-revert>Descartar</button>
+        <button type="submit" class="btn-primary" disabled data-perms-save>Guardar cambios</button>
+      </div>
+    )}
+  </form>
+
+  {/* Danger zone — revoke access. Hidden for owner + self. */}
+  {!isOwnerRow && !isSelf && (
+    <form
+      method="POST"
+      class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
+      onsubmit={`return confirm('¿Revocar acceso de ${profile.email}? Tendrá que ser pre-aprobado de nuevo si quieres que regrese.')`}
+    >
+      <input type="hidden" name="_action" value="remove_admin" />
+      <input type="hidden" name="email" value={profile.email} />
+      <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>
+      <button type="submit" class="btn-danger">Revocar acceso</button>
+    </form>
+  )}
+</AppLayout>
+
+<script is:inline>
+  // Detect-changes + save handler. Identical pattern to the bulk admins page
+  // it replaces, but scoped to a single profile.
+  (() => {
+    if (window.__casAdminDetailInit) return;
+    window.__casAdminDetailInit = true;
+
+    const decodeOriginal = (form) => {
+      try {
+        const txt = document.createElement("textarea");
+        txt.innerHTML = form.dataset.original || "{}";
+        return JSON.parse(txt.value);
+      } catch {
+        return {};
+      }
+    };
+    const collectCurrent = (form) => {
+      const cur = {};
+      form.querySelectorAll("select[data-resource]").forEach((sel) => {
+        cur[sel.dataset.resource] = sel.value;
+      });
+      return cur;
+    };
+    const diff = (orig, cur) => {
+      const changes = {};
+      let count = 0;
+      for (const k of Object.keys(cur)) {
+        if (cur[k] !== orig[k]) {
+          changes[k] = cur[k];
+          count++;
+        }
+      }
+      return { changes, count };
+    };
+
+    const updateBar = (form) => {
+      const saveBtn = form.querySelector("[data-perms-save]");
+      const revertBtn = form.querySelector("[data-perms-revert]");
+      const status = form.querySelector("[data-perms-status]");
+      if (!saveBtn) return;
+      const { count } = diff(decodeOriginal(form), collectCurrent(form));
+      saveBtn.disabled = count === 0;
+      revertBtn?.classList.toggle("hidden", count === 0);
+      if (status) {
+        status.classList.toggle("hidden", count === 0);
+        status.textContent = count === 0
+          ? ""
+          : `${count} ${count === 1 ? "cambio sin guardar" : "cambios sin guardar"}`;
+        status.classList.toggle("text-amber-700", count > 0);
+        status.classList.toggle("font-medium", count > 0);
+      }
+    };
+
+    const submitPerms = async (form) => {
+      const profileId = form.dataset.profileId;
+      const orig = decodeOriginal(form);
+      const cur = collectCurrent(form);
+      const { changes, count } = diff(orig, cur);
+      if (count === 0 || !profileId) return;
+
+      const saveBtn = form.querySelector("[data-perms-save]");
+      const status = form.querySelector("[data-perms-status]");
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Guardando…";
+      }
+      try {
+        const res = await fetch("/api/admins/permissions", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          body: JSON.stringify({ profileId, permissions: changes }),
+        });
+        if (!res.ok) throw new Error("http_" + res.status);
+        form.dataset.original = JSON.stringify(cur);
+        if (typeof window.casToast === "function") {
+          window.casToast({ type: "success", message: "Permisos guardados." });
+        }
+      } catch {
+        if (typeof window.casToast === "function") {
+          window.casToast({ type: "error", message: "No se pudo guardar." });
+        }
+      } finally {
+        if (saveBtn) saveBtn.textContent = "Guardar cambios";
+        updateBar(form);
+      }
+    };
+
+    const revert = (form) => {
+      const orig = decodeOriginal(form);
+      form.querySelectorAll("select[data-resource]").forEach((sel) => {
+        if (orig[sel.dataset.resource] != null) sel.value = orig[sel.dataset.resource];
+      });
+      updateBar(form);
+    };
+
+    const wire = () => {
+      const form = document.querySelector("[data-perms-form]");
+      if (!form || form.dataset.casWired) return;
+      form.dataset.casWired = "1";
+      form.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t instanceof HTMLSelectElement && t.dataset.resource) updateBar(form);
+      });
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        submitPerms(form);
+      });
+      form.addEventListener("click", (e) => {
+        const t = e.target;
+        if (t instanceof Element && t.closest("[data-perms-revert]")) {
+          e.preventDefault();
+          revert(form);
+        }
+      });
+      updateBar(form);
+    };
+
+    document.addEventListener("astro:page-load", wire);
+    document.addEventListener("astro:after-swap", wire);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", wire);
+    } else {
+      wire();
+    }
+  })();
+</script>
