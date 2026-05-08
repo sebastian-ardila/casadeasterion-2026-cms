@@ -357,11 +357,23 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
 </style>
 
 <script is:inline>
-  // Single global controller for all .cas-dd dropdowns. Idempotent so
-  // hot-reloads / multiple imports don't double-bind.
+  // Single global controller for all .cas-dd dropdowns. Re-init safe:
+  // any previous handlers are removed before the new ones are bound, so
+  // hot reloads / Astro view-transition page swaps always end with one
+  // active set of listeners (the latest version of this script).
   (() => {
-    if (window.__casDdInit) return;
-    window.__casDdInit = true;
+    if (typeof window.__casDdCleanup === "function") {
+      try { window.__casDdCleanup(); } catch {}
+    }
+    const handlers = [];
+    const add = (target, event, fn, opts) => {
+      target.addEventListener(event, fn, opts);
+      handlers.push(() => target.removeEventListener(event, fn, opts));
+    };
+    window.__casDdCleanup = () => {
+      handlers.forEach((off) => { try { off(); } catch {} });
+      handlers.length = 0;
+    };
 
     let openDd = null;
 
@@ -484,29 +496,39 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       }
     };
 
-    // Click-outside detection. Belt-and-suspenders: we listen on both
-    // pointerdown (covers mouse + touch + pen, fires before click) and
-    // click bubble. Some browsers/contexts swallow pointer events so the
-    // click fallback keeps the menu reliable.
-    const isInsideOpen = (t) => {
+    // Click-outside detection. Two strategies running in parallel for
+    // resilience: DOM-tree (target.closest) and viewport coordinates
+    // (rect-hit-test). Either being "inside" keeps the menu open.
+    const isInsideOpen = (e) => {
       if (!openDd) return true;
-      if (!(t instanceof Element)) return false;
-      if (t.closest("[data-dropdown]")) return true;
-      if (openDd.menu.contains(t)) return true;
+      const t = e.target;
+      // DOM tree check.
+      if (t instanceof Element) {
+        if (t.closest("[data-dropdown]")) return true;
+        if (openDd.menu.contains(t)) return true;
+      }
+      // Coordinate fallback (works regardless of DOM relationships).
+      const x = e.clientX, y = e.clientY;
+      if (typeof x === "number" && typeof y === "number") {
+        const r1 = openDd.menu.getBoundingClientRect();
+        if (x >= r1.left && x <= r1.right && y >= r1.top && y <= r1.bottom) return true;
+        const r2 = openDd.button.getBoundingClientRect();
+        if (x >= r2.left && x <= r2.right && y >= r2.top && y <= r2.bottom) return true;
+      }
       return false;
     };
 
     const handleOutside = (e) => {
       if (!openDd) return;
-      if (isInsideOpen(e.target)) return;
+      if (isInsideOpen(e)) return;
       closeOpen();
     };
 
-    document.addEventListener("pointerdown", handleOutside, true);
-    document.addEventListener("mousedown", handleOutside, true);
-    document.addEventListener("touchstart", handleOutside, { capture: true, passive: true });
+    add(document, "pointerdown", handleOutside, true);
+    add(document, "mousedown", handleOutside, true);
+    add(document, "touchstart", handleOutside, { capture: true, passive: true });
 
-    document.addEventListener("click", (e) => {
+    const onClick = (e) => {
       const target = e.target;
       if (!(target instanceof Element)) return;
 
@@ -537,12 +559,12 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
         return;
       }
 
-      // Last-resort outside check on click bubble (in case pointerdown was
-      // suppressed somewhere upstream).
-      if (openDd && !isInsideOpen(target)) closeOpen();
-    });
+      // Last-resort outside check on click bubble.
+      if (openDd && !isInsideOpen(e)) closeOpen();
+    };
+    add(document, "click", onClick);
 
-    document.addEventListener("keydown", (e) => {
+    const onKeydown = (e) => {
       if (!openDd) {
         // Open with Enter/Space when button focused
         const target = e.target;
@@ -633,34 +655,31 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
           target.click();
         }
       }
-    });
+    };
+    add(document, "keydown", onKeydown);
 
     // Close on scroll/resize so the menu doesn't drift over its trigger.
-    // Critical: ignore scroll events that originate INSIDE the open menu
-    // (the inner options list is scrollable, and closing on its own scroll
-    // would make the menu unusable for long lists).
-    //
-    // We listen on `document` with capture=true. Scroll events don't bubble,
-    // but capture lets us intercept them on any scrollable descendant
-    // (e.g. <main> with overflow-y-auto in this app's md+ layout). The
-    // window listener is added too for the document-level scroll case.
+    // Scroll events don't bubble, but capture phase intercepts them on any
+    // scrollable descendant (e.g. <main> with overflow-y-auto). Inner-menu
+    // scroll is ignored so long option lists stay usable.
     const onScroll = (e) => {
       if (!openDd) return;
       const tgt = e.target;
       if (tgt instanceof Node && openDd.menu.contains(tgt)) return;
       closeOpen();
     };
-    document.addEventListener("scroll", onScroll, true);
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", () => closeOpen());
+    add(document, "scroll", onScroll, true);
+    add(window, "scroll", onScroll, true);
+    add(window, "resize", () => closeOpen());
 
     // Live filter as the user types in the search input.
-    document.addEventListener("input", (e) => {
+    const onInput = (e) => {
       const t = e.target;
       if (!(t instanceof HTMLInputElement)) return;
       if (!t.matches("[data-dd-search]")) return;
       const menu = t.closest("[data-dd-menu]");
       if (menu) applyFilter(menu, t.value);
-    });
+    };
+    add(document, "input", onInput);
   })();
 </script>
