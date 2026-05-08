@@ -24,8 +24,20 @@ if (Astro.request.method === "POST") {
     if (action === "remove_admin") {
       const email = strReq(fd, "email").toLowerCase();
       if (email === owner.email.toLowerCase()) throw new Error("no puedes quitarte a ti mismo");
-      const { error } = await supabase.from("admin_emails").delete().eq("email", email);
-      if (error) throw error;
+      // Drop from the allowlist AND demote the profile in the same flow so
+      // their next request lands on requireAdmin → not_admin instead of
+      // staying logged-in until they manually re-auth.
+      const { error: delErr } = await supabase.from("admin_emails").delete().eq("email", email);
+      if (delErr) throw delErr;
+      const { error: updErr } = await supabase
+        .from("profiles")
+        .update({ role: "viewer" })
+        .eq("id", id)
+        .neq("role", "owner");
+      if (updErr) throw updErr;
+      // Bust the cached auth state so the change takes effect on the next
+      // request from the affected user.
+      invalidateAuthCache(Astro, id);
       return Astro.redirect(`/admins?saved=1&action=deleted&msg=${encodeURIComponent(`Acceso revocado: ${email}`)}`);
     }
     throw new Error("acción desconocida");
@@ -154,18 +166,36 @@ const LEVELS: { value: Level; label: string }[] = [
     )}
   </form>
 
-  {/* Danger zone — revoke access. Hidden for owner + self. */}
+  {/* Danger zone — revoke or fully delete. Hidden for owner + self. */}
   {!isOwnerRow && !isSelf && (
-    <form
-      method="POST"
-      class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
-      onsubmit={`return confirm('¿Revocar acceso de ${profile.email}? Tendrá que ser pre-aprobado de nuevo si quieres que regrese.')`}
-    >
-      <input type="hidden" name="_action" value="remove_admin" />
-      <input type="hidden" name="email" value={profile.email} />
-      <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>
-      <button type="submit" class="btn-danger">Revocar acceso</button>
-    </form>
+    <section class="mt-12 pt-6 border-t border-red-200 max-w-3xl">
+      <p class="text-sm text-stone-600 mb-1">Zona de peligro</p>
+      <p class="text-xs text-stone-500 mb-4 max-w-2xl">
+        Revocar el acceso quita al usuario del CMS pero conserva sus datos
+        (perfil, permisos previos) por si quieres restaurarle el acceso luego.
+        Eliminar borra todo del usuario sin posibilidad de recuperar.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <form
+          method="POST"
+          class="inline-block"
+          onsubmit={`return confirm('¿Revocar acceso de ${profile.email}? Podrás restaurarlo desde la lista de revocados.')`}
+        >
+          <input type="hidden" name="_action" value="remove_admin" />
+          <input type="hidden" name="email" value={profile.email} />
+          <button type="submit" class="btn-danger w-full sm:w-auto">Revocar acceso</button>
+        </form>
+        <button
+          type="button"
+          class="btn-danger w-full sm:w-auto"
+          data-delete-user
+          data-profile-id={profile.id}
+          data-profile-email={profile.email}
+        >
+          Eliminar usuario completamente
+        </button>
+      </div>
+    </section>
   )}
 </AppLayout>
 
@@ -287,12 +317,66 @@ const LEVELS: { value: Level; label: string }[] = [
       updateBar(form);
     };
 
-    document.addEventListener("astro:page-load", wire);
-    document.addEventListener("astro:after-swap", wire);
+    // Delete-user button: confirms loudly, then POSTs to /api/admins/delete-user.
+    const wireDelete = () => {
+      const btn = document.querySelector("[data-delete-user]");
+      if (!btn || btn.dataset.casWired) return;
+      btn.dataset.casWired = "1";
+      btn.addEventListener("click", async () => {
+        const email = btn.dataset.profileEmail || "este usuario";
+        const id = btn.dataset.profileId;
+        if (!id) return;
+        const ok = window.confirm(
+          `¿Eliminar definitivamente a ${email}?\n\n` +
+          "Se borrará su perfil, sus permisos, su sesión y cualquier suscripción al newsletter asociada al mismo correo. NO SE PUEDE DESHACER.",
+        );
+        if (!ok) return;
+        const second = window.prompt(
+          `Para confirmar, escribe el correo: ${email}`,
+        );
+        if (second?.trim().toLowerCase() !== email.toLowerCase()) {
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "error", message: "Correo no coincide. Cancelado." });
+          }
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = "Eliminando…";
+        try {
+          const res = await fetch("/api/admins/delete-user", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify({ profileId: id }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error ?? `http_${res.status}`);
+          }
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "success", message: `Usuario ${email} eliminado.` });
+          }
+          window.location.href = "/admins";
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = "Eliminar usuario completamente";
+          if (typeof window.casToast === "function") {
+            window.casToast({
+              type: "error",
+              message: err instanceof Error ? err.message : "No se pudo eliminar.",
+            });
+          }
+        }
+      });
+    };
+
+    document.addEventListener("astro:page-load", () => { wire(); wireDelete(); });
+    document.addEventListener("astro:after-swap", () => { wire(); wireDelete(); });
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", wire);
+      document.addEventListener("DOMContentLoaded", () => { wire(); wireDelete(); });
     } else {
       wire();
+      wireDelete();
     }
   })();
 </script>

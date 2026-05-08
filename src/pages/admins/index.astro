@@ -1,20 +1,188 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import { requireOwner } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 const guard = await requireOwner(Astro);
 if (guard instanceof Response) return guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+
+// "Revoked" = profile that used to be admin (has rows in admin_permissions)
+// but is no longer in admin_emails AND is not currently an admin/owner.
+// We treat lingering admin_permissions rows as the marker that this user
+// once had access — pure subscribers never produce those rows.
+const [{ data: revokedProfiles }, { data: allowlist }] = await Promise.all([
+  supabase
+    .from("profiles")
+    .select("id, email, full_name, avatar_url, role, admin_permissions(profile_id)")
+    .eq("role", "viewer"),
+  supabase
+    .from("admin_emails")
+    .select("email"),
+]);
+const allowlistSet = new Set((allowlist ?? []).map((a: any) => a.email.toLowerCase()));
+
+const revoked = (revokedProfiles ?? [])
+  .filter((p: any) => Array.isArray(p.admin_permissions) && p.admin_permissions.length > 0)
+  .filter((p: any) => !allowlistSet.has(p.email.toLowerCase()))
+  .sort((a: any, b: any) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email));
+
+const initials = (s: string | null, fallback: string) =>
+  ((s ?? fallback).trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?").toUpperCase();
 ---
 
 <AppLayout title="Administradores" resource="admins">
-  <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
+  <div class="flex flex-col items-center justify-center min-h-[40vh] text-center text-stone-500 mb-8">
     <p class="font-serif text-xl mb-2">Administradores</p>
     <p class="text-sm mb-2 max-w-md">
       Selecciona un administrador de la lista para ver y editar sus permisos, o agrega uno nuevo.
     </p>
-    <p class="text-xs mb-6 max-w-md">
-      Solo correos pre-aprobados pueden iniciar sesión en el CMS. Cuando agregues uno, aparecerá en la lista apenas se loguee con Google por primera vez.
-    </p>
-    <a href="/admins/new" class="btn-primary">+ Nuevo administrador</a>
+    <a href="/admins/new" class="btn-primary mt-4">+ Nuevo administrador</a>
   </div>
+
+  {revoked.length > 0 && (
+    <section class="max-w-3xl mx-auto">
+      <h2 class="font-serif text-xl mb-2">Acceso revocado</h2>
+      <p class="text-sm text-stone-500 mb-4">
+        Estas personas tuvieron acceso al CMS y ya no lo tienen. Su perfil y permisos previos siguen guardados — puedes restaurarles el acceso o borrar todos sus datos definitivamente.
+      </p>
+      <ul class="space-y-3">
+        {revoked.map((p: any) => (
+          <li
+            class="card flex flex-col sm:flex-row sm:items-center gap-4 p-4"
+            data-revoked-row
+            data-profile-id={p.id}
+            data-profile-email={p.email}
+          >
+            {p.avatar_url ? (
+              <img
+                src={p.avatar_url}
+                alt=""
+                referrerpolicy="no-referrer"
+                class="w-11 h-11 rounded-full object-cover shrink-0 border border-stone-200"
+              />
+            ) : (
+              <div class="w-11 h-11 rounded-full bg-stone-200 shrink-0 flex items-center justify-center text-stone-700 text-sm font-medium">
+                {initials(p.full_name, p.email)}
+              </div>
+            )}
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-stone-900 text-sm truncate">{p.full_name ?? p.email}</p>
+              <p class="text-xs text-stone-500 truncate">{p.email}</p>
+              <p class="text-[10px] uppercase tracking-[0.12em] text-stone-400 mt-0.5">Revocado</p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2 shrink-0">
+              <button type="button" class="btn cursor-pointer" data-grant-btn>Dar acceso</button>
+              <button type="button" class="btn-danger cursor-pointer" data-delete-btn>Eliminar</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 </AppLayout>
+
+<script is:inline>
+  (() => {
+    if (window.__casRevokedInit) return;
+    window.__casRevokedInit = true;
+
+    const wireRow = (li) => {
+      if (li.dataset.casWired) return;
+      li.dataset.casWired = "1";
+
+      const id = li.dataset.profileId;
+      const email = li.dataset.profileEmail;
+
+      const grantBtn = li.querySelector("[data-grant-btn]");
+      const deleteBtn = li.querySelector("[data-delete-btn]");
+
+      grantBtn?.addEventListener("click", async () => {
+        if (!confirm(`¿Restaurar acceso de ${email}?`)) return;
+        grantBtn.disabled = true;
+        grantBtn.textContent = "Dando acceso…";
+        try {
+          const res = await fetch("/api/admins/grant-access", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify({ email, profileId: id }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error ?? `http_${res.status}`);
+          }
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "success", message: `Acceso restaurado: ${email}` });
+          }
+          // Reload so the user moves out of the "revoked" list and into
+          // the active admins panel on the left.
+          window.location.reload();
+        } catch (err) {
+          grantBtn.disabled = false;
+          grantBtn.textContent = "Dar acceso";
+          if (typeof window.casToast === "function") {
+            window.casToast({
+              type: "error",
+              message: err instanceof Error ? err.message : "No se pudo restaurar el acceso.",
+            });
+          }
+        }
+      });
+
+      deleteBtn?.addEventListener("click", async () => {
+        if (!confirm(
+          `¿Eliminar definitivamente a ${email}?\n\n` +
+          "Se borrará su perfil, sus permisos, sus sesiones, y cualquier suscripción al newsletter asociada. NO SE PUEDE DESHACER."
+        )) return;
+        const second = window.prompt(`Para confirmar, escribe el correo: ${email}`);
+        if (second?.trim().toLowerCase() !== email.toLowerCase()) {
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "error", message: "Correo no coincide. Cancelado." });
+          }
+          return;
+        }
+        deleteBtn.disabled = true;
+        deleteBtn.textContent = "Eliminando…";
+        try {
+          const res = await fetch("/api/admins/delete-user", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json", accept: "application/json" },
+            body: JSON.stringify({ profileId: id }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error ?? `http_${res.status}`);
+          }
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "success", message: `Usuario ${email} eliminado.` });
+          }
+          li.remove();
+        } catch (err) {
+          deleteBtn.disabled = false;
+          deleteBtn.textContent = "Eliminar";
+          if (typeof window.casToast === "function") {
+            window.casToast({
+              type: "error",
+              message: err instanceof Error ? err.message : "No se pudo eliminar.",
+            });
+          }
+        }
+      });
+    };
+
+    const wireAll = () => {
+      document.querySelectorAll("[data-revoked-row]").forEach(wireRow);
+    };
+
+    document.addEventListener("astro:page-load", wireAll);
+    document.addEventListener("astro:after-swap", wireAll);
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", wireAll);
+    } else {
+      wireAll();
+    }
+  })();
+</script>
