@@ -1,261 +1,921 @@
 ---
+// Modern WYSIWYG editor (TipTap) that stores its content as Markdown so the
+// rest of the system (RLS, build-time render in apps/web, history) doesn't
+// notice. The form sees a single hidden <input name={name}> with the
+// current markdown serialization.
+//
+// Public API matches the old MarkdownEditor:
+//   - name (required) → name of the hidden input
+//   - value           → initial markdown
+//   - label, required → form scaffolding
+//   - bucket          → Storage bucket for inline image uploads
+//
+// On the surface: a sticky toolbar, the editable area, a small statusbar
+// (word count, reading time, save status). Selecting text raises a small
+// floating toolbar; typing `/` at the start of an empty line opens a slash
+// command menu for inserting blocks.
 interface Props {
   name: string;
   value?: string | null;
   label?: string;
-  rows?: number;
   required?: boolean;
   bucket?: "covers" | "content" | "authors";
+  placeholder?: string;
 }
 const {
   name,
   value,
-  label = "Contenido",
-  rows = 18,
+  label,
   required,
   bucket = "content",
+  placeholder = "Escribe tu contenido… Tipea / para insertar bloques.",
 } = Astro.props;
-const id = `md-${name}-${Math.random().toString(36).slice(2, 8)}`;
+const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
 ---
 
-<div class="md-editor" data-md-editor={id} data-bucket={bucket}>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div>
-      <div class="flex items-center justify-between mb-1">
-        <span class="label">{label}{required && " *"} (Markdown)</span>
-        <span id={`${id}-status`} class="text-[11px] text-stone-500 min-h-[14px]"></span>
-      </div>
-
-      <div
-        id={`${id}-toolbar`}
-        class="flex flex-wrap items-center gap-1 border border-stone-300 border-b-0 bg-stone-50 px-1 py-1 text-stone-700"
-        role="toolbar"
-        aria-label="Formato"
-      >
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="h1" title="Título 1">H1</button>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="h2" title="Título 2">H2</button>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="h3" title="Título 3">H3</button>
-        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
-        <button type="button" class="px-2.5 py-1 text-xs font-bold hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="bold" title="Negrita (Cmd/Ctrl+B)">B</button>
-        <button type="button" class="px-2.5 py-1 text-xs italic hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="italic" title="Cursiva (Cmd/Ctrl+I)">I</button>
-        <button type="button" class="px-2.5 py-1 text-xs line-through hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="strike" title="Tachado">S</button>
-        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="ul" title="Lista">•</button>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="ol" title="Lista numerada">1.</button>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="quote" title="Cita">❝</button>
-        <button type="button" class="px-2.5 py-1 text-xs font-mono hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="code" title="Código">{"</>"}</button>
-        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="link" title="Enlace (Cmd/Ctrl+K)">🔗</button>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="image" title="Insertar imagen">🖼️</button>
-        <span class="w-px h-4 bg-stone-300 mx-0.5"></span>
-        <button type="button" class="px-2.5 py-1 text-xs hover:bg-stone-200 rounded-sm transition cursor-pointer" data-md="hr" title="Separador">—</button>
-      </div>
-
-      <input
-        type="file"
-        id={`${id}-file`}
-        accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
-        class="hidden"
-        multiple
-      />
-
-      <textarea
-        id={id}
-        name={name}
-        class="input min-h-[420px] font-mono text-[13px] leading-relaxed border-t-0 rounded-tl-none rounded-tr-none"
-        rows={rows}
-        required={required}
-        data-md-textarea={id}
-        spellcheck="true"
-        set:html={value ?? ""}
-      />
+<div class="cas-tt-wrapper" data-tiptap-id={id} data-bucket={bucket} data-placeholder={placeholder}>
+  {label !== undefined && label !== "" && (
+    <div class="flex items-center justify-between mb-1.5">
+      <span class="label">{label}{required && " *"}</span>
+      <span class="text-[11px] text-stone-500" data-tt-status></span>
     </div>
-    <div>
-      <span class="label">Vista previa</span>
-      <div
-        id={`${id}-preview`}
-        class="input min-h-[460px] bg-stone-50 prose prose-stone max-w-none [&_p]:mb-3 [&_h1]:font-serif [&_h2]:font-serif [&_img]:max-w-full overflow-auto"
-      ></div>
+  )}
+
+  <div class="cas-tt-shell">
+    <div class="cas-tt-toolbar" data-tt-toolbar role="toolbar" aria-label="Formato">
+      {/* History */}
+      <button type="button" class="cas-tt-btn" data-action="undo" title="Deshacer (Cmd/Ctrl+Z)" aria-label="Deshacer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+      </button>
+      <button type="button" class="cas-tt-btn" data-action="redo" title="Rehacer (Cmd/Ctrl+Shift+Z)" aria-label="Rehacer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+      </button>
+      <span class="cas-tt-sep"></span>
+
+      {/* Headings */}
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="h1" title="Título 1" aria-label="Título 1">H1</button>
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="h2" title="Título 2" aria-label="Título 2">H2</button>
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="h3" title="Título 3" aria-label="Título 3">H3</button>
+      <span class="cas-tt-sep"></span>
+
+      {/* Inline marks */}
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="bold" title="Negrita (Cmd/Ctrl+B)" aria-label="Negrita"><b>B</b></button>
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="italic" title="Cursiva (Cmd/Ctrl+I)" aria-label="Cursiva"><i>I</i></button>
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="strike" title="Tachado (Cmd/Ctrl+Shift+X)" aria-label="Tachado"><span style="text-decoration:line-through">S</span></button>
+      <button type="button" class="cas-tt-btn cas-tt-btn-text" data-action="code" title="Código (Cmd/Ctrl+E)" aria-label="Código en línea">{"</>"}</button>
+      <span class="cas-tt-sep"></span>
+
+      {/* Blocks */}
+      <button type="button" class="cas-tt-btn" data-action="ul" title="Lista con viñetas" aria-label="Lista con viñetas">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>
+      </button>
+      <button type="button" class="cas-tt-btn" data-action="ol" title="Lista numerada" aria-label="Lista numerada">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+      </button>
+      <button type="button" class="cas-tt-btn" data-action="quote" title="Cita" aria-label="Cita">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V11a4 4 0 0 1 4-4h0"/><path d="M14 21V11a4 4 0 0 1 4-4h0"/></svg>
+      </button>
+      <button type="button" class="cas-tt-btn" data-action="codeblock" title="Bloque de código" aria-label="Bloque de código">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </button>
+      <button type="button" class="cas-tt-btn" data-action="hr" title="Separador" aria-label="Separador">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="12" x2="20" y2="12"/></svg>
+      </button>
+      <span class="cas-tt-sep"></span>
+
+      {/* Inserts */}
+      <button type="button" class="cas-tt-btn" data-action="link" title="Enlace (Cmd/Ctrl+K)" aria-label="Enlace">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </button>
+      <button type="button" class="cas-tt-btn" data-action="image" title="Insertar imagen" aria-label="Insertar imagen">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1"/><circle cx="9" cy="9" r="1.5"/><path d="M21 15l-5-5-7 7"/></svg>
+      </button>
+      <span class="cas-tt-sep"></span>
+
+      {/* Fullscreen */}
+      <button type="button" class="cas-tt-btn cas-tt-btn-fs" data-action="fullscreen" title="Pantalla completa" aria-label="Pantalla completa">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+    </div>
+
+    <div class="cas-tt-editor-host" data-tt-host>
+      <div class="cas-tt-editor" data-tt-editor></div>
+
+      {/* Floating bubble menu shown on selection */}
+      <div class="cas-tt-bubble" data-tt-bubble role="toolbar" aria-label="Formato rápido" hidden>
+        <button type="button" class="cas-tt-bubble-btn" data-action="bold" title="Negrita"><b>B</b></button>
+        <button type="button" class="cas-tt-bubble-btn" data-action="italic" title="Cursiva"><i>I</i></button>
+        <button type="button" class="cas-tt-bubble-btn" data-action="strike" title="Tachado"><span style="text-decoration:line-through">S</span></button>
+        <button type="button" class="cas-tt-bubble-btn" data-action="code" title="Código">{"</>"}</button>
+        <span class="cas-tt-bubble-sep"></span>
+        <button type="button" class="cas-tt-bubble-btn" data-action="link" title="Enlace">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+      </div>
+
+      {/* Slash command menu */}
+      <div class="cas-tt-slash" data-tt-slash role="menu" aria-label="Insertar bloque" hidden></div>
+    </div>
+
+    <div class="cas-tt-statusbar">
+      <span class="cas-tt-stat" data-tt-words>0 palabras</span>
+      <span class="cas-tt-statsep">·</span>
+      <span class="cas-tt-stat" data-tt-reading>1 min lectura</span>
+      <span class="cas-tt-statsep cas-tt-status-spacer">·</span>
+      <span class="cas-tt-stat cas-tt-stat-tip">
+        Tipea <kbd class="cas-tt-kbd">/</kbd> para insertar bloques.
+      </span>
     </div>
   </div>
+
+  <input
+    type="hidden"
+    name={name}
+    value={value ?? ""}
+    data-tt-input
+  />
+  <input
+    type="file"
+    class="hidden"
+    accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+    data-tt-file
+    multiple
+  />
 </div>
 
-<script type="module" define:vars={{ id, bucket }}>
-  import { marked } from "https://esm.sh/marked@15.0.7";
+<style is:global>
+  /* ─────────────────────────────────────────────
+     Editor shell + chrome
+     ───────────────────────────────────────────── */
+  .cas-tt-shell {
+    border: 1px solid #d6d3d1; /* stone-300 */
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    min-height: 540px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .cas-tt-shell:focus-within {
+    border-color: #1c1917;
+    box-shadow: 0 0 0 1px #1c1917;
+  }
 
-  const ta = document.getElementById(id);
-  const preview = document.getElementById(`${id}-preview`);
-  const toolbar = document.getElementById(`${id}-toolbar`);
-  const fileInput = document.getElementById(`${id}-file`);
-  const status = document.getElementById(`${id}-status`);
+  .cas-tt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 8px;
+    background: #fafaf9;
+    border-bottom: 1px solid #e7e5e4;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .cas-tt-btn {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #57534e;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    padding: 0;
+  }
+  .cas-tt-btn-text {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .cas-tt-btn:hover {
+    background: #e7e5e4;
+    color: #1c1917;
+  }
+  .cas-tt-btn.is-active {
+    background: #1c1917;
+    color: #fafaf9;
+  }
+  .cas-tt-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .cas-tt-btn-fs {
+    margin-left: auto;
+  }
+  .cas-tt-sep {
+    width: 1px;
+    height: 18px;
+    background: #d6d3d1;
+    margin: 0 4px;
+    align-self: center;
+  }
 
-  if (!ta || !preview || !toolbar) {
-    console.warn("MarkdownEditor: missing elements");
-  } else {
-    const render = () => {
-      preview.innerHTML = marked.parse(ta.value || "", { async: false });
-    };
-    render();
-    ta.addEventListener("input", render);
+  .cas-tt-editor-host {
+    position: relative;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .cas-tt-editor {
+    min-height: 460px;
+  }
 
-    const setStatus = (msg, color = "#57534e") => {
-      status.textContent = msg;
-      status.style.color = color;
-    };
+  .cas-tt-statusbar {
+    border-top: 1px solid #e7e5e4;
+    background: #fafaf9;
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #78716c;
+  }
+  .cas-tt-statsep { color: #d6d3d1; }
+  .cas-tt-status-spacer { margin-left: auto; }
+  .cas-tt-stat-tip { color: #a8a29e; }
+  .cas-tt-kbd {
+    display: inline-block;
+    border: 1px solid #d6d3d1;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    background: #fff;
+    color: #44403c;
+  }
 
-    // ---- Insertion helpers ----
-    const wrapSelection = (prefix, suffix = prefix, placeholder = "") => {
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const sel = ta.value.slice(start, end) || placeholder;
-      const before = ta.value.slice(0, start);
-      const after = ta.value.slice(end);
-      ta.value = before + prefix + sel + suffix + after;
-      const cursorStart = before.length + prefix.length;
-      ta.selectionStart = cursorStart;
-      ta.selectionEnd = cursorStart + sel.length;
-      ta.focus();
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-    };
+  /* Fullscreen */
+  .cas-tt-shell.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    border: 0;
+    border-radius: 0;
+    min-height: 100vh;
+    height: 100dvh;
+  }
+  body.has-tt-fullscreen { overflow: hidden; }
 
-    const prefixLines = (prefix) => {
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      const value = ta.value;
-      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-      let lineEnd = value.indexOf("\n", end);
-      if (lineEnd === -1) lineEnd = value.length;
-      const block = value.slice(lineStart, lineEnd);
-      const newBlock = block
-        .split("\n")
-        .map((l, i) => (typeof prefix === "function" ? prefix(i) : prefix) + l)
-        .join("\n");
-      ta.value = value.slice(0, lineStart) + newBlock + value.slice(lineEnd);
-      ta.selectionStart = lineStart;
-      ta.selectionEnd = lineStart + newBlock.length;
-      ta.focus();
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-    };
+  /* ─────────────────────────────────────────────
+     ProseMirror content (the actual editable area)
+     ───────────────────────────────────────────── */
+  .cas-tt-editor .ProseMirror {
+    min-height: 460px;
+    padding: 24px 28px;
+    outline: none;
+    color: #1c1917;
+    font-size: 16px;
+    line-height: 1.7;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+  }
+  .cas-tt-editor .ProseMirror > * + * { margin-top: 0.85em; }
+  .cas-tt-editor .ProseMirror p { margin: 0; }
 
-    const insertAtCursor = (text) => {
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
-      ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
-      const pos = start + text.length;
-      ta.selectionStart = pos;
-      ta.selectionEnd = pos;
-      ta.focus();
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
-    };
+  .cas-tt-editor .ProseMirror h1,
+  .cas-tt-editor .ProseMirror h2,
+  .cas-tt-editor .ProseMirror h3 {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #1c1917;
+  }
+  .cas-tt-editor .ProseMirror h1 { font-size: 2em;    margin-top: 1.3em; }
+  .cas-tt-editor .ProseMirror h2 { font-size: 1.5em;  margin-top: 1.2em; }
+  .cas-tt-editor .ProseMirror h3 { font-size: 1.2em;  margin-top: 1.1em; }
 
-    const actions = {
-      bold: () => wrapSelection("**", "**", "texto"),
-      italic: () => wrapSelection("_", "_", "texto"),
-      strike: () => wrapSelection("~~", "~~", "texto"),
-      h1: () => prefixLines("# "),
-      h2: () => prefixLines("## "),
-      h3: () => prefixLines("### "),
-      ul: () => prefixLines("- "),
-      ol: () => prefixLines((i) => `${i + 1}. `),
-      quote: () => prefixLines("> "),
-      code: () => {
-        const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
-        if (sel.includes("\n")) wrapSelection("```\n", "\n```", "código");
-        else wrapSelection("`", "`", "código");
-      },
-      link: () => {
-        const url = window.prompt("URL del enlace:");
-        if (!url) return;
-        const start = ta.selectionStart, end = ta.selectionEnd;
-        const sel = ta.value.slice(start, end) || "texto";
-        const before = ta.value.slice(0, start), after = ta.value.slice(end);
-        ta.value = before + `[${sel}](${url})` + after;
-        ta.selectionStart = before.length + 1;
-        ta.selectionEnd = before.length + 1 + sel.length;
-        ta.focus();
-        ta.dispatchEvent(new Event("input", { bubbles: true }));
-      },
-      image: () => fileInput.click(),
-      hr: () => insertAtCursor("\n\n---\n\n"),
-    };
+  .cas-tt-editor .ProseMirror a {
+    color: #1c1917;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .cas-tt-editor .ProseMirror strong { font-weight: 700; }
+  .cas-tt-editor .ProseMirror em     { font-style: italic; }
+  .cas-tt-editor .ProseMirror s      { text-decoration: line-through; }
+  .cas-tt-editor .ProseMirror code {
+    background: #f5f5f4;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.92em;
+  }
+  .cas-tt-editor .ProseMirror pre {
+    background: #1c1917;
+    color: #fafaf9;
+    padding: 14px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .cas-tt-editor .ProseMirror pre code { background: transparent; padding: 0; color: inherit; }
+  .cas-tt-editor .ProseMirror blockquote {
+    border-left: 3px solid #1c1917;
+    padding-left: 16px;
+    margin-left: 0;
+    color: #57534e;
+    font-style: italic;
+  }
+  .cas-tt-editor .ProseMirror hr {
+    border: none;
+    border-top: 1px solid #d6d3d1;
+    margin: 1.6em 0;
+  }
+  .cas-tt-editor .ProseMirror ul,
+  .cas-tt-editor .ProseMirror ol {
+    padding-left: 1.6em;
+  }
+  .cas-tt-editor .ProseMirror ul { list-style: disc; }
+  .cas-tt-editor .ProseMirror ol { list-style: decimal; }
+  .cas-tt-editor .ProseMirror li > * + * { margin-top: 0.4em; }
+  .cas-tt-editor .ProseMirror img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 3px;
+  }
 
-    toolbar.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-md]");
-      if (!btn) return;
-      e.preventDefault();
-      const action = actions[btn.dataset.md];
-      if (action) action();
+  /* Placeholder for empty doc */
+  .cas-tt-editor .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: #a8a29e;
+    pointer-events: none;
+    height: 0;
+  }
+
+  /* Drag-over highlight */
+  .cas-tt-editor.is-drop {
+    background: #f5f5f4;
+    box-shadow: inset 0 0 0 2px #1c1917;
+  }
+
+  /* ─────────────────────────────────────────────
+     Bubble menu (selection toolbar)
+     ───────────────────────────────────────────── */
+  .cas-tt-bubble {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding: 4px;
+    background: #1c1917;
+    color: #fafaf9;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px -8px rgba(0,0,0,0.4);
+    transform: translate(-50%, -100%) translateY(-8px);
+    transition: opacity 120ms;
+  }
+  .cas-tt-bubble[hidden] { display: none; }
+  .cas-tt-bubble-btn {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #d6d3d1;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .cas-tt-bubble-btn:hover { background: #292524; color: #fff; }
+  .cas-tt-bubble-btn.is-active { background: #fafaf9; color: #1c1917; }
+  .cas-tt-bubble-sep {
+    width: 1px;
+    height: 14px;
+    background: #44403c;
+    margin: 0 4px;
+  }
+
+  /* ─────────────────────────────────────────────
+     Slash command menu
+     ───────────────────────────────────────────── */
+  .cas-tt-slash {
+    position: absolute;
+    z-index: 25;
+    background: #fff;
+    border: 1px solid #e7e5e4;
+    border-radius: 6px;
+    box-shadow: 0 12px 28px -10px rgba(28, 25, 23, 0.18);
+    width: 260px;
+    padding: 4px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .cas-tt-slash[hidden] { display: none; }
+  .cas-tt-slash-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: left;
+    color: #44403c;
+    transition: background 0.1s;
+  }
+  .cas-tt-slash-item:hover,
+  .cas-tt-slash-item.is-active {
+    background: #f5f5f4;
+    color: #1c1917;
+  }
+  .cas-tt-slash-icon {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #e7e5e4;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #57534e;
+    font-size: 13px;
+    background: #fafaf9;
+    flex-shrink: 0;
+  }
+  .cas-tt-slash-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .cas-tt-slash-title {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .cas-tt-slash-desc {
+    font-size: 11px;
+    color: #a8a29e;
+    margin-top: 1px;
+  }
+
+  /* Mobile tweaks */
+  @media (max-width: 640px) {
+    .cas-tt-toolbar { gap: 0; }
+    .cas-tt-btn { width: 32px; height: 32px; }
+    .cas-tt-editor .ProseMirror { padding: 18px 16px; font-size: 15px; }
+  }
+</style>
+
+<script>
+  import { Editor } from "@tiptap/core";
+  import StarterKit from "@tiptap/starter-kit";
+  import Link from "@tiptap/extension-link";
+  import Image from "@tiptap/extension-image";
+  import Placeholder from "@tiptap/extension-placeholder";
+  import Typography from "@tiptap/extension-typography";
+  import CharacterCount from "@tiptap/extension-character-count";
+  import { Markdown } from "tiptap-markdown";
+
+  type SlashItem = {
+    title: string;
+    desc: string;
+    icon: string;
+    keywords: string[];
+    run: (editor: Editor) => void;
+  };
+
+  const SLASH_ITEMS: SlashItem[] = [
+    { title: "Texto",        desc: "Párrafo normal",     icon: "¶",  keywords: ["texto","p","parrafo","paragraph","plain"], run: (e) => e.chain().focus().setParagraph().run() },
+    { title: "Título 1",     desc: "Encabezado grande",  icon: "H₁", keywords: ["h1","titulo","heading","encabezado"],     run: (e) => e.chain().focus().toggleHeading({ level: 1 }).run() },
+    { title: "Título 2",     desc: "Encabezado medio",   icon: "H₂", keywords: ["h2","subtitulo","heading"],               run: (e) => e.chain().focus().toggleHeading({ level: 2 }).run() },
+    { title: "Título 3",     desc: "Encabezado pequeño", icon: "H₃", keywords: ["h3","heading"],                            run: (e) => e.chain().focus().toggleHeading({ level: 3 }).run() },
+    { title: "Lista",        desc: "Lista con viñetas",  icon: "•",  keywords: ["lista","ul","bullet","viñetas"],          run: (e) => e.chain().focus().toggleBulletList().run() },
+    { title: "Lista numerada", desc: "1. 2. 3.",         icon: "1.", keywords: ["numerada","ol","numbered","ordenada"],     run: (e) => e.chain().focus().toggleOrderedList().run() },
+    { title: "Cita",         desc: "Texto destacado",    icon: "❝",  keywords: ["cita","quote","blockquote"],              run: (e) => e.chain().focus().toggleBlockquote().run() },
+    { title: "Código",       desc: "Bloque de código",   icon: "</>", keywords: ["codigo","code","pre"],                   run: (e) => e.chain().focus().toggleCodeBlock().run() },
+    { title: "Separador",    desc: "Línea horizontal",   icon: "—",  keywords: ["separador","divider","hr","horizontal"], run: (e) => e.chain().focus().setHorizontalRule().run() },
+    { title: "Imagen",       desc: "Subir imagen",       icon: "🖼", keywords: ["imagen","image","foto"],                  run: () => { /* handled inline below */ } },
+  ];
+
+  type Inst = {
+    root: HTMLElement;
+    editor: Editor;
+    bucket: string;
+    hidden: HTMLInputElement;
+    fileInput: HTMLInputElement;
+    statusEl: HTMLElement | null;
+    bubbleEl: HTMLElement;
+    slashEl: HTMLElement;
+    slashState: { open: boolean; query: string; from: number; index: number; filtered: SlashItem[] };
+  };
+
+  const initOne = (root: HTMLElement) => {
+    if (root.dataset.ttInit) return;
+    root.dataset.ttInit = "1";
+
+    const bucket = root.dataset.bucket || "content";
+    const placeholder = root.dataset.placeholder || "Escribe…";
+
+    const editorEl = root.querySelector("[data-tt-editor]") as HTMLElement;
+    const toolbarEl = root.querySelector("[data-tt-toolbar]") as HTMLElement;
+    const hidden = root.querySelector("[data-tt-input]") as HTMLInputElement;
+    const fileInput = root.querySelector("[data-tt-file]") as HTMLInputElement;
+    const statusEl = root.querySelector("[data-tt-status]") as HTMLElement | null;
+    const wordsEl = root.querySelector("[data-tt-words]") as HTMLElement;
+    const readingEl = root.querySelector("[data-tt-reading]") as HTMLElement;
+    const bubbleEl = root.querySelector("[data-tt-bubble]") as HTMLElement;
+    const slashEl = root.querySelector("[data-tt-slash]") as HTMLElement;
+    const shellEl = root.querySelector(".cas-tt-shell") as HTMLElement;
+
+    const editor = new Editor({
+      element: editorEl,
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3] },
+          codeBlock: { HTMLAttributes: { class: "" } },
+        }),
+        Link.configure({
+          openOnClick: false,
+          HTMLAttributes: { rel: "noopener noreferrer" },
+          autolink: true,
+        }),
+        Image.configure({ inline: false, allowBase64: false }),
+        Placeholder.configure({ placeholder }),
+        Typography,
+        CharacterCount.configure({}),
+        Markdown.configure({
+          html: false,
+          tightLists: true,
+          tightListClass: "tight",
+          bulletListMarker: "-",
+          linkify: true,
+          breaks: false,
+          transformPastedText: true,
+          transformCopiedText: true,
+        }),
+      ],
+      content: hidden.value || "",
     });
 
-    // ---- Keyboard shortcuts ----
-    ta.addEventListener("keydown", (e) => {
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      const map = { b: "bold", i: "italic", k: "link" };
-      const key = e.key.toLowerCase();
-      if (map[key]) {
-        e.preventDefault();
-        actions[map[key]]();
-      }
-    });
+    const inst: Inst = {
+      root,
+      editor,
+      bucket,
+      hidden,
+      fileInput,
+      statusEl,
+      bubbleEl,
+      slashEl,
+      slashState: { open: false, query: "", from: 0, index: 0, filtered: SLASH_ITEMS.slice() },
+    };
 
-    // ---- Image upload (file picker, drag-and-drop, paste) ----
-    const uploadAndInsert = async (file) => {
-      if (!file.type.startsWith("image/")) return;
-      if (file.size > 10 * 1024 * 1024) {
-        setStatus(`${file.name}: muy grande (>10 MB)`, "#b91c1c");
+    // ── Sync hidden input + counts ──
+    const syncStats = () => {
+      const md = editor.storage.markdown.getMarkdown();
+      hidden.value = md;
+      const words = editor.storage.characterCount.words();
+      wordsEl.textContent = `${words} ${words === 1 ? "palabra" : "palabras"}`;
+      const minutes = Math.max(1, Math.round(words / 220));
+      readingEl.textContent = `${minutes} min lectura`;
+    };
+    syncStats();
+
+    // ── Toolbar active state ──
+    const updateToolbar = () => {
+      toolbarEl.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((btn) => {
+        const action = btn.dataset.action!;
+        let active = false;
+        if (action === "h1") active = editor.isActive("heading", { level: 1 });
+        else if (action === "h2") active = editor.isActive("heading", { level: 2 });
+        else if (action === "h3") active = editor.isActive("heading", { level: 3 });
+        else if (action === "bold") active = editor.isActive("bold");
+        else if (action === "italic") active = editor.isActive("italic");
+        else if (action === "strike") active = editor.isActive("strike");
+        else if (action === "code") active = editor.isActive("code");
+        else if (action === "ul") active = editor.isActive("bulletList");
+        else if (action === "ol") active = editor.isActive("orderedList");
+        else if (action === "quote") active = editor.isActive("blockquote");
+        else if (action === "codeblock") active = editor.isActive("codeBlock");
+        else if (action === "link") active = editor.isActive("link");
+        btn.classList.toggle("is-active", active);
+        if (action === "undo") btn.disabled = !editor.can().undo();
+        if (action === "redo") btn.disabled = !editor.can().redo();
+      });
+      // Bubble menu active states
+      bubbleEl.querySelectorAll<HTMLButtonElement>("[data-action]").forEach((btn) => {
+        const action = btn.dataset.action!;
+        let active = false;
+        if (action === "bold") active = editor.isActive("bold");
+        else if (action === "italic") active = editor.isActive("italic");
+        else if (action === "strike") active = editor.isActive("strike");
+        else if (action === "code") active = editor.isActive("code");
+        else if (action === "link") active = editor.isActive("link");
+        btn.classList.toggle("is-active", active);
+      });
+    };
+
+    // ── Bubble menu position ──
+    const updateBubble = () => {
+      const { from, to, empty } = editor.state.selection;
+      if (empty || from === to) {
+        bubbleEl.hidden = true;
         return;
       }
-      setStatus("Subiendo imagen...");
-      const fd = new FormData();
-      fd.set("file", file);
-      fd.set("bucket", bucket);
-      try {
-        const res = await fetch("/api/upload", { method: "POST", body: fd });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "upload_failed");
-        const alt = file.name.replace(/\.[^.]+$/, "");
-        insertAtCursor(`![${alt}](${json.url})\n\n`);
-        setStatus("Imagen insertada.", "#166534");
-      } catch (err) {
-        setStatus(err.message ?? "Error al subir.", "#b91c1c");
+      const start = editor.view.coordsAtPos(from);
+      const end = editor.view.coordsAtPos(to);
+      const hostRect = (root.querySelector("[data-tt-host]") as HTMLElement).getBoundingClientRect();
+      const left = (start.left + end.left) / 2 - hostRect.left;
+      const top = start.top - hostRect.top;
+      bubbleEl.style.left = left + "px";
+      bubbleEl.style.top = top + "px";
+      bubbleEl.hidden = false;
+    };
+
+    // ── Slash command menu ──
+    const closeSlash = () => {
+      inst.slashState.open = false;
+      slashEl.hidden = true;
+    };
+
+    const renderSlash = () => {
+      const items = inst.slashState.filtered;
+      slashEl.innerHTML = items
+        .map((it, i) => `
+          <button type="button" class="cas-tt-slash-item${i === inst.slashState.index ? " is-active" : ""}" data-slash-index="${i}">
+            <span class="cas-tt-slash-icon">${it.icon}</span>
+            <span class="cas-tt-slash-meta">
+              <span class="cas-tt-slash-title">${it.title}</span>
+              <span class="cas-tt-slash-desc">${it.desc}</span>
+            </span>
+          </button>
+        `).join("");
+    };
+
+    const positionSlash = () => {
+      const { from } = editor.state.selection;
+      const coords = editor.view.coordsAtPos(from);
+      const hostRect = (root.querySelector("[data-tt-host]") as HTMLElement).getBoundingClientRect();
+      let left = coords.left - hostRect.left;
+      const top = coords.bottom - hostRect.top + 4;
+      // Keep menu inside the host width
+      const hostWidth = hostRect.width;
+      if (left + 260 > hostWidth) left = Math.max(8, hostWidth - 268);
+      slashEl.style.left = left + "px";
+      slashEl.style.top = top + "px";
+    };
+
+    const filterSlash = (q: string) => {
+      const norm = q.toLowerCase();
+      inst.slashState.filtered = SLASH_ITEMS.filter((it) => {
+        if (!norm) return true;
+        return it.title.toLowerCase().includes(norm) ||
+               it.keywords.some((k) => k.toLowerCase().includes(norm));
+      });
+      inst.slashState.index = 0;
+      renderSlash();
+    };
+
+    const openSlash = () => {
+      inst.slashState.open = true;
+      inst.slashState.query = "";
+      inst.slashState.from = editor.state.selection.from;
+      inst.slashState.filtered = SLASH_ITEMS.slice();
+      inst.slashState.index = 0;
+      renderSlash();
+      positionSlash();
+      slashEl.hidden = false;
+    };
+
+    const runSlashItem = (item: SlashItem) => {
+      const currentFrom = editor.state.selection.from;
+      // Delete the "/" + query that triggered the menu before applying.
+      const slashFrom = inst.slashState.from - 1; // include the "/"
+      editor.chain().focus().deleteRange({ from: slashFrom, to: currentFrom }).run();
+      if (item.title === "Imagen") {
+        fileInput.click();
+      } else {
+        item.run(editor);
+      }
+      closeSlash();
+    };
+
+    // ── Image upload ──
+    const uploadAndInsert = async (files: File[]) => {
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        if (statusEl) statusEl.textContent = `Subiendo ${file.name}…`;
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("bucket", bucket);
+        try {
+          const res = await fetch("/api/upload", {
+            method: "POST",
+            credentials: "same-origin",
+            body: fd,
+          });
+          if (!res.ok) throw new Error("upload_failed");
+          const data = await res.json();
+          editor.chain().focus().setImage({ src: data.url, alt: file.name.replace(/\.[^/.]+$/, "") }).run();
+          if (statusEl) {
+            statusEl.textContent = "Imagen subida.";
+            setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 1800);
+          }
+        } catch {
+          if (statusEl) {
+            statusEl.textContent = `Error subiendo ${file.name}`;
+            statusEl.style.color = "#b91c1c";
+          }
+        }
       }
     };
 
-    fileInput.addEventListener("change", async (e) => {
-      const files = Array.from(e.target.files ?? []);
-      for (const f of files) await uploadAndInsert(f);
-      e.target.value = "";
+    fileInput.addEventListener("change", () => {
+      uploadAndInsert(Array.from(fileInput.files || []));
+      fileInput.value = "";
     });
 
-    ta.addEventListener("paste", (e) => {
-      const items = Array.from(e.clipboardData?.items ?? []);
-      const imgs = items.filter((it) => it.type.startsWith("image/"));
-      if (!imgs.length) return;
-      e.preventDefault();
-      imgs.forEach((it) => {
-        const file = it.getAsFile();
-        if (file) uploadAndInsert(file);
-      });
-    });
-
-    ["dragenter", "dragover"].forEach((ev) => {
-      ta.addEventListener(ev, (e) => {
-        if (e.dataTransfer?.types?.includes("Files")) {
-          e.preventDefault();
-          ta.classList.add("ring-2", "ring-stone-700");
+    // ── Toolbar handlers ──
+    const handleAction = (action: string) => {
+      const c = editor.chain().focus();
+      switch (action) {
+        case "h1": c.toggleHeading({ level: 1 }).run(); break;
+        case "h2": c.toggleHeading({ level: 2 }).run(); break;
+        case "h3": c.toggleHeading({ level: 3 }).run(); break;
+        case "bold": c.toggleBold().run(); break;
+        case "italic": c.toggleItalic().run(); break;
+        case "strike": c.toggleStrike().run(); break;
+        case "code": c.toggleCode().run(); break;
+        case "ul": c.toggleBulletList().run(); break;
+        case "ol": c.toggleOrderedList().run(); break;
+        case "quote": c.toggleBlockquote().run(); break;
+        case "codeblock": c.toggleCodeBlock().run(); break;
+        case "hr": c.setHorizontalRule().run(); break;
+        case "undo": c.undo().run(); break;
+        case "redo": c.redo().run(); break;
+        case "link": {
+          const previousUrl = editor.getAttributes("link").href || "";
+          const url = window.prompt("URL del enlace:", previousUrl);
+          if (url === null) return;
+          if (url === "") {
+            editor.chain().focus().extendMarkRange("link").unsetLink().run();
+          } else {
+            editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+          }
+          break;
         }
-      });
+        case "image":
+          fileInput.click();
+          break;
+        case "fullscreen":
+          shellEl.classList.toggle("is-fullscreen");
+          document.body.classList.toggle("has-tt-fullscreen", shellEl.classList.contains("is-fullscreen"));
+          break;
+      }
+    };
+
+    toolbarEl.addEventListener("click", (e) => {
+      const t = e.target as Element;
+      const btn = t.closest("[data-action]") as HTMLElement | null;
+      if (!btn) return;
+      handleAction(btn.dataset.action!);
     });
-    ["dragleave", "drop"].forEach((ev) => {
-      ta.addEventListener(ev, () => {
-        ta.classList.remove("ring-2", "ring-stone-700");
-      });
+    bubbleEl.addEventListener("click", (e) => {
+      const t = e.target as Element;
+      const btn = t.closest("[data-action]") as HTMLElement | null;
+      if (!btn) return;
+      handleAction(btn.dataset.action!);
     });
-    ta.addEventListener("drop", async (e) => {
-      const files = Array.from(e.dataTransfer?.files ?? []);
-      if (!files.length) return;
+
+    // ── Slash menu click ──
+    slashEl.addEventListener("click", (e) => {
+      const t = e.target as Element;
+      const btn = t.closest("[data-slash-index]") as HTMLElement | null;
+      if (!btn) return;
+      const i = Number(btn.dataset.slashIndex);
+      const item = inst.slashState.filtered[i];
+      if (item) runSlashItem(item);
+    });
+
+    // ── Editor events ──
+    editor.on("update", () => {
+      syncStats();
+      updateToolbar();
+
+      // Track slash query
+      if (inst.slashState.open) {
+        const cur = editor.state.selection.from;
+        if (cur < inst.slashState.from) {
+          closeSlash();
+          return;
+        }
+        const text = editor.state.doc.textBetween(inst.slashState.from, cur, "\n");
+        inst.slashState.query = text;
+        if (/\s/.test(text)) {
+          closeSlash();
+          return;
+        }
+        filterSlash(text);
+        positionSlash();
+      }
+    });
+    editor.on("selectionUpdate", () => {
+      updateToolbar();
+      updateBubble();
+    });
+    editor.on("transaction", () => {
+      // Fires on every state change — good for ensuring bubble follows selection.
+      updateBubble();
+    });
+
+    // ── Slash trigger: typing "/" at start of empty paragraph ──
+    editor.view.dom.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (inst.slashState.open) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          inst.slashState.index = (inst.slashState.index + 1) % inst.slashState.filtered.length;
+          renderSlash();
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          inst.slashState.index = (inst.slashState.index - 1 + inst.slashState.filtered.length) % inst.slashState.filtered.length;
+          renderSlash();
+          return;
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const item = inst.slashState.filtered[inst.slashState.index];
+          if (item) runSlashItem(item);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeSlash();
+          return;
+        }
+      } else {
+        // Open on "/"
+        if (e.key === "/") {
+          // Defer to after the "/" is inserted so the menu anchors at the
+          // right position.
+          setTimeout(() => openSlash(), 0);
+        }
+      }
+    });
+
+    // ── Drag-and-drop images ──
+    editorEl.addEventListener("dragover", (e: DragEvent) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.items).some((it) => it.kind === "file")) {
+        e.preventDefault();
+        editorEl.classList.add("is-drop");
+      }
+    });
+    editorEl.addEventListener("dragleave", () => editorEl.classList.remove("is-drop"));
+    editorEl.addEventListener("drop", (e: DragEvent) => {
+      const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith("image/"));
+      if (files.length === 0) return;
       e.preventDefault();
-      for (const f of files) await uploadAndInsert(f);
+      editorEl.classList.remove("is-drop");
+      uploadAndInsert(files);
     });
+
+    // ── Paste images ──
+    editor.view.dom.addEventListener("paste", (e: ClipboardEvent) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageFiles = items
+        .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+        .map((it) => it.getAsFile())
+        .filter((f): f is File => !!f);
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      uploadAndInsert(imageFiles);
+    });
+
+    // ── Hide bubble + slash on outside click ──
+    document.addEventListener("click", (e) => {
+      const t = e.target as Element;
+      if (!root.contains(t)) {
+        bubbleEl.hidden = true;
+        closeSlash();
+      }
+    });
+
+    // ── ESC exits fullscreen ──
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && shellEl.classList.contains("is-fullscreen")) {
+        shellEl.classList.remove("is-fullscreen");
+        document.body.classList.remove("has-tt-fullscreen");
+      }
+    });
+
+    updateToolbar();
+  };
+
+  const initAll = () => {
+    document.querySelectorAll<HTMLElement>("[data-tiptap-id]").forEach((el) => initOne(el));
+  };
+
+  document.addEventListener("astro:page-load", initAll);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAll);
+  } else {
+    initAll();
   }
 </script>
