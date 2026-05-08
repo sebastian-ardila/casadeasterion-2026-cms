@@ -97,10 +97,10 @@ if (isOwnerRow) {
 const initials = (s: string | null, fallback: string) =>
   ((s ?? fallback).trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?").toUpperCase();
 
-const LEVELS: { value: Level; label: string; hint?: string }[] = [
-  { value: "none", label: "Sin acceso" },
-  { value: "view", label: "Ver",    hint: "solo lectura" },
-  { value: "edit", label: "Editar", hint: "lectura + escritura" },
+const LEVELS: { value: Level; label: string; hint?: string; icon: string }[] = [
+  { value: "none", label: "Sin acceso", icon: "lucide:ban" },
+  { value: "view", label: "Ver",    icon: "lucide:eye",     hint: "solo lectura" },
+  { value: "edit", label: "Editar", icon: "lucide:pencil",  hint: "lectura + escritura" },
 ];
 
 const RESOURCE_ICON: Record<ConfigurableResource, string> = {

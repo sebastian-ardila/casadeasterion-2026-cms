@@ -4,6 +4,7 @@
 // - opens a portal-positioned menu fixed to viewport (z-index above everything)
 // - supports keyboard (↑↓ Enter Esc) and click-outside-to-close
 // - degrades gracefully if JS is off (the hidden input is still submitted with `value`)
+import { Icon } from "astro-icon/components";
 
 export interface DropdownOption {
   value: string;
@@ -14,6 +15,10 @@ export interface DropdownOption {
   imageUrl?: string | null;
   /** "person" → round thumbnail with user fallback; "none" (default) → no thumb. */
   iconStyle?: "person" | "none";
+  /** Optional lucide icon name (e.g. "lucide:eye") shown left of the label
+   *  in the menu. Distinct from `iconStyle: "person"` which renders a round
+   *  photo thumbnail. */
+  icon?: string;
 }
 
 interface Props {
@@ -154,6 +159,11 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
               ) : (
                 <Fragment set:html={PERSON_FALLBACK} />
               )}
+            </span>
+          )}
+          {opt.icon && (
+            <span class="cas-dd-option-glyph shrink-0">
+              <Icon name={opt.icon} class="w-4 h-4" aria-hidden="true" />
             </span>
           )}
           <span class="cas-dd-option-text">
@@ -353,6 +363,15 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
   }
   .cas-dd-thumb-option {
     margin-right: 8px;
+  }
+  .cas-dd-option-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #57534e; /* stone-600 */
+  }
+  .cas-dd-option-selected .cas-dd-option-glyph {
+    color: #d6d3d1; /* stone-300 over dark bg */
   }
   /* Selected option in the menu uses dark colors — invert the thumb fallback. */
   .cas-dd-option-selected .cas-dd-thumb {
