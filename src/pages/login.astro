@@ -46,6 +46,11 @@ const next = Astro.url.searchParams.get("next") ?? "/";
       <span>Continuar con Google</span>
     </button>
 
+    <p
+      id="login-error-msg"
+      class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mt-5 hidden"
+    ></p>
+
     <p class="text-xs text-stone-500 mt-6 text-center">
       Solo correos autorizados pueden administrar el sitio.
     </p>
@@ -56,21 +61,71 @@ const next = Astro.url.searchParams.get("next") ?? "/";
 
     const url = import.meta.env.PUBLIC_SUPABASE_URL;
     const key = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
-    const supabase = createBrowserClient(url, key);
 
-    const btn = document.getElementById("google-login") as HTMLButtonElement | null;
-    btn?.addEventListener("click", async () => {
-      btn.disabled = true;
-      const next = btn.dataset.next ?? "/";
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo },
+    const init = () => {
+      const btn = document.getElementById("google-login") as HTMLButtonElement | null;
+      const msgEl = document.getElementById("login-error-msg");
+      if (!btn || btn.dataset.casWired) return;
+      btn.dataset.casWired = "1";
+
+      // After a logout, supabase-js' storage may still hold a stale PKCE
+      // verifier — wipe any leftover sb-* / supabase.* keys so the next
+      // signInWithOAuth gets a clean slate.
+      try {
+        const stale: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith("sb-") || k.startsWith("supabase."))) stale.push(k);
+        }
+        stale.forEach((k) => localStorage.removeItem(k));
+      } catch {}
+
+      const supabase = createBrowserClient(url, key);
+
+      const showError = (text: string) => {
+        if (!msgEl) return;
+        msgEl.textContent = text;
+        msgEl.classList.remove("hidden");
+      };
+
+      btn.addEventListener("click", async () => {
+        if (msgEl) msgEl.classList.add("hidden");
+        btn.disabled = true;
+        const next = btn.dataset.next ?? "/";
+        const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+        try {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: { redirectTo, queryParams: { prompt: "select_account" } },
+          });
+          if (error) {
+            console.error("[login] signInWithOAuth error:", error);
+            showError(error.message ?? "No se pudo iniciar sesión.");
+            btn.disabled = false;
+            return;
+          }
+          // signInWithOAuth navigates the page to Google on success — we
+          // don't actually return here. If we DID return without a redirect,
+          // something odd is going on (popup blocker, etc.).
+          setTimeout(() => {
+            if (!btn.disabled) return;
+            showError("La redirección no inició. Permite ventanas emergentes y reintenta.");
+            btn.disabled = false;
+          }, 4000);
+        } catch (err) {
+          console.error("[login] unexpected error:", err);
+          showError(
+            err instanceof Error ? err.message : "Error inesperado. Intenta de nuevo.",
+          );
+          btn.disabled = false;
+        }
       });
-      if (error) {
-        console.error(error);
-        btn.disabled = false;
-      }
-    });
+    };
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
   </script>
 </AuthLayout>

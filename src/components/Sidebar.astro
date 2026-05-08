@@ -265,21 +265,35 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
   const key = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
   window.casLogout = async () => {
-    // 1. Tear down the client-side Supabase session (clears localStorage).
+    // 1. Tear down the client-side Supabase session (clears localStorage
+    //    auth tokens via supabase-js's storage adapter).
     try {
       if (url && key) {
         const supabase = createBrowserClient(url, key);
-        await supabase.auth.signOut({ scope: "local" });
+        await supabase.auth.signOut();
       }
     } catch {
-      // ignore — the server-side logout below also clears auth cookies
+      // ignore — server-side logout below also clears auth cookies
     }
     // 2. Clear server-side session cookies.
     try {
       await fetch("/logout", { method: "POST", credentials: "same-origin" });
     } catch {}
-    // 3. Wipe any per-user data the CMS cached in sessionStorage so the
-    //    next account that logs in here doesn't see leftover stats / lists.
+    // 3. Belt-and-suspenders cleanup of any leftover Supabase storage.
+    //    signOut() should have done this, but PKCE flow code-verifiers
+    //    sometimes linger and trip up the next signInWithOAuth on /login.
+    try {
+      const localKeys: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith("sb-") || k.startsWith("supabase."))) {
+          localKeys.push(k);
+        }
+      }
+      localKeys.forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    // 4. Wipe per-user data the CMS cached in sessionStorage so the next
+    //    account doesn't see leftover stats / lists.
     try {
       const keys: string[] = [];
       for (let i = 0; i < sessionStorage.length; i++) {
@@ -290,7 +304,7 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
       }
       keys.forEach((k) => sessionStorage.removeItem(k));
     } catch {}
-    // 4. Hard navigate so persisted components (sidebar, build status bar,
+    // 5. Hard navigate so persisted components (sidebar, build status bar,
     //    toast stack, etc.) are torn down and the new state is fully read
     //    from the server.
     window.location.href = "/login";
