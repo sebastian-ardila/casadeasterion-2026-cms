@@ -484,22 +484,27 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       }
     };
 
-    // Detect click-outside on pointerdown (capture phase) so it's
-    // independent of any other click handler that might stop propagation.
-    document.addEventListener(
-      "pointerdown",
-      (e) => {
-        if (!openDd) return;
-        const t = e.target;
-        if (!(t instanceof Element)) return;
-        // Stay open if the pointer landed inside any dropdown wrapper or
-        // inside the floating menu (which is portaled visually but still
-        // a DOM descendant of the wrapper).
-        if (t.closest("[data-dropdown]") || openDd.menu.contains(t)) return;
-        closeOpen();
-      },
-      true,
-    );
+    // Click-outside detection. Belt-and-suspenders: we listen on both
+    // pointerdown (covers mouse + touch + pen, fires before click) and
+    // click bubble. Some browsers/contexts swallow pointer events so the
+    // click fallback keeps the menu reliable.
+    const isInsideOpen = (t) => {
+      if (!openDd) return true;
+      if (!(t instanceof Element)) return false;
+      if (t.closest("[data-dropdown]")) return true;
+      if (openDd.menu.contains(t)) return true;
+      return false;
+    };
+
+    const handleOutside = (e) => {
+      if (!openDd) return;
+      if (isInsideOpen(e.target)) return;
+      closeOpen();
+    };
+
+    document.addEventListener("pointerdown", handleOutside, true);
+    document.addEventListener("mousedown", handleOutside, true);
+    document.addEventListener("touchstart", handleOutside, { capture: true, passive: true });
 
     document.addEventListener("click", (e) => {
       const target = e.target;
@@ -529,7 +534,12 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
           });
           closeOpen();
         }
+        return;
       }
+
+      // Last-resort outside check on click bubble (in case pointerdown was
+      // suppressed somewhere upstream).
+      if (openDd && !isInsideOpen(target)) closeOpen();
     });
 
     document.addEventListener("keydown", (e) => {
@@ -625,20 +635,23 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       }
     });
 
-    // Reposition or close on scroll/resize so the menu doesn't drift.
+    // Close on scroll/resize so the menu doesn't drift over its trigger.
     // Critical: ignore scroll events that originate INSIDE the open menu
     // (the inner options list is scrollable, and closing on its own scroll
     // would make the menu unusable for long lists).
-    window.addEventListener(
-      "scroll",
-      (e) => {
-        if (!openDd) return;
-        const tgt = e.target;
-        if (tgt instanceof Node && openDd.menu.contains(tgt)) return;
-        closeOpen();
-      },
-      true,
-    );
+    //
+    // We listen on `document` with capture=true. Scroll events don't bubble,
+    // but capture lets us intercept them on any scrollable descendant
+    // (e.g. <main> with overflow-y-auto in this app's md+ layout). The
+    // window listener is added too for the document-level scroll case.
+    const onScroll = (e) => {
+      if (!openDd) return;
+      const tgt = e.target;
+      if (tgt instanceof Node && openDd.menu.contains(tgt)) return;
+      closeOpen();
+    };
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", () => closeOpen());
 
     // Live filter as the user types in the search input.
