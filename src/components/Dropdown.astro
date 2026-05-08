@@ -484,11 +484,28 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       }
     };
 
+    // Detect click-outside on pointerdown (capture phase) so it's
+    // independent of any other click handler that might stop propagation.
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!openDd) return;
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+        // Stay open if the pointer landed inside any dropdown wrapper or
+        // inside the floating menu (which is portaled visually but still
+        // a DOM descendant of the wrapper).
+        if (t.closest("[data-dropdown]") || openDd.menu.contains(t)) return;
+        closeOpen();
+      },
+      true,
+    );
+
     document.addEventListener("click", (e) => {
       const target = e.target;
       if (!(target instanceof Element)) return;
 
-      // Click on a button inside a dropdown
+      // Click on a button inside a dropdown → toggle open
       const button = target.closest("[data-dd-button]");
       if (button) {
         const root = button.closest("[data-dropdown]");
@@ -499,7 +516,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
         return;
       }
 
-      // Click on an option
+      // Click on an option → pick it
       const option = target.closest("[data-dd-option]");
       if (option && openDd) {
         const root = option.closest("[data-dropdown]");
@@ -512,12 +529,6 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
           });
           closeOpen();
         }
-        return;
-      }
-
-      // Click outside any dropdown → close
-      if (!target.closest("[data-dropdown]")) {
-        closeOpen();
       }
     });
 
