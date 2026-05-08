@@ -141,21 +141,22 @@ export const GET: APIRoute = async (ctx) => {
       if (rr !== 0) return rr;
       return (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email);
     });
-    items = sorted.map((p: any) => ({
-      id: p.id,
-      title: p.full_name ?? p.email,
-      // Pack the email + last-sign-in into subtitle so the list panel can
-      // surface the freshness indicator without a schema change.
-      subtitle: p.email,
-      meta: p.last_sign_in_at
-        ? formatRelative(p.last_sign_in_at)
-        : "Nunca ha entrado",
-      // Role rendered as the status pill — styling handled by the panel.
-      status: p.role,
-      href: `/admins/${p.id}`,
-      imageUrl: p.avatar_url ?? null,
-      imageStyle: "photo",
-    }));
+    items = sorted.map((p: any) => {
+      // Prefer last_active_at (touched on every authenticated request,
+      // throttled). Fall back to last_sign_in_at for users who logged in
+      // before activity tracking shipped.
+      const ts = p.last_active_at ?? p.last_sign_in_at;
+      return {
+        id: p.id,
+        title: p.full_name ?? p.email,
+        subtitle: p.email,
+        meta: ts ? formatRelative(ts) : "Nunca ha entrado",
+        status: p.role,
+        href: `/admins/${p.id}`,
+        imageUrl: p.avatar_url ?? null,
+        imageStyle: "photo",
+      };
+    });
   }
 
   return new Response(JSON.stringify({ items }), {

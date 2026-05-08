@@ -89,6 +89,12 @@ class TinyCache<T> {
 const userCache = new TinyCache<AdminUser | null>();
 const permsCache = new TinyCache<Record<Resource, Level>>();
 
+// Track when we last bumped each user's last_active_at. We only write
+// once every ACTIVITY_THROTTLE_MS per user so a chatty page doesn't fire
+// an UPDATE on every request.
+const ACTIVITY_THROTTLE_MS = 5 * 60_000;
+const activityTouchedAt = new Map<string, number>();
+
 // Derive a stable cache key from the request's Supabase auth cookies.
 // We hash so we never log raw tokens.
 function sessionKey(ctx: APIContext): string | null {
@@ -133,6 +139,20 @@ export async function loadCurrentUser(ctx: APIContext): Promise<App.Locals["user
 
   const result = (profile ?? null) as AdminUser | null;
   if (key) userCache.set(key, result);
+
+  // Heartbeat: bump last_active_at, throttled per-user. Fire-and-forget so
+  // it doesn't add latency to the request.
+  if (result && (result.role === "owner" || result.role === "admin" || result.role === "editor")) {
+    const last = activityTouchedAt.get(result.id) ?? 0;
+    if (Date.now() - last >= ACTIVITY_THROTTLE_MS) {
+      activityTouchedAt.set(result.id, Date.now());
+      void supabase.rpc("touch_profile_activity").then(() => {}, () => {
+        // Failed write → roll back the throttle so we'll try again sooner.
+        activityTouchedAt.delete(result.id);
+      });
+    }
+  }
+
   return result;
 }
 
