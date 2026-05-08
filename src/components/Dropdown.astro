@@ -232,6 +232,12 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
     min-width: 14rem;
     overflow: hidden;
   }
+  /* Ensure .hidden actually hides the menu — our display:flex above would
+     otherwise win over Tailwind's .hidden { display: none } at the same
+     specificity, so the closed menu would stay visible. */
+  .cas-dd-menu.hidden {
+    display: none;
+  }
   .cas-dd-options {
     flex: 1 1 0%;
     overflow-y: auto;
