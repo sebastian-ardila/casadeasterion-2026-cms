@@ -12,6 +12,14 @@ applications:
           commands:
             - pnpm build
             - sed -i 's/nodejs20\.x/nodejs22.x/g' .amplify-hosting/deploy-manifest.json
+            # Strip devDependencies before shipping node_modules into the
+            # Lambda output. TipTap (and friends) are bundled into the client
+            # chunks during `pnpm build`; the SSR Lambda only needs runtime
+            # deps. Reinstalling with --prod from scratch gives a clean tree
+            # — `pnpm prune --prod` doesn't always shake the .pnpm store
+            # under hoisted linker. Keeps us under Amplify's 230 MB cap.
+            - rm -rf node_modules
+            - pnpm install --prod --frozen-lockfile --config.node-linker=hoisted
             - mv node_modules ./.amplify-hosting/compute/default
       artifacts:
         baseDirectory: .amplify-hosting
