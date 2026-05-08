@@ -109,6 +109,23 @@ const friendlyReason = reason ? (FRIENDLY_REASON[reason] ?? reason) : null;
         btn.disabled = true;
         const next = btn.dataset.next ?? "/";
         const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+        // Watchdog: if the redirect to Google really fails to start (popup
+        // blocker, network down) we should tell the user. Cancel it as soon
+        // as the page actually starts unloading — that means the redirect
+        // *did* start, just slowly. iOS Safari over 5G can take 6-8s to
+        // commit the navigation; we give it 12s before complaining.
+        let unloaded = false;
+        const onPageHide = () => { unloaded = true; };
+        window.addEventListener("pagehide", onPageHide, { once: true });
+        window.addEventListener("beforeunload", onPageHide, { once: true });
+
+        const watchdog = setTimeout(() => {
+          if (unloaded || document.visibilityState === "hidden") return;
+          showError("La redirección está tardando. Si no carga, permite ventanas emergentes y reintenta.");
+          btn.disabled = false;
+        }, 12000);
+
         try {
           // `prompt: select_account` forces Google to show its account
           // picker instead of silently re-using the existing
@@ -123,20 +140,17 @@ const friendlyReason = reason ? (FRIENDLY_REASON[reason] ?? reason) : null;
           });
           if (error) {
             console.error("[login] signInWithOAuth error:", error);
+            clearTimeout(watchdog);
             showError(error.message ?? "No se pudo iniciar sesión.");
             btn.disabled = false;
             return;
           }
-          // signInWithOAuth navigates the page to Google on success — we
-          // don't actually return here. If we DID return without a redirect,
-          // something odd is going on (popup blocker, etc.).
-          setTimeout(() => {
-            if (!btn.disabled) return;
-            showError("La redirección no inició. Permite ventanas emergentes y reintenta.");
-            btn.disabled = false;
-          }, 4000);
+          // signInWithOAuth has set window.location.href to the Google URL.
+          // The browser will commit the navigation any moment now — pagehide
+          // will fire and the watchdog will short-circuit on its own.
         } catch (err) {
           console.error("[login] unexpected error:", err);
+          clearTimeout(watchdog);
           showError(
             err instanceof Error ? err.message : "Error inesperado. Intenta de nuevo.",
           );
