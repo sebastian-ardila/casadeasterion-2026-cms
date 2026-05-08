@@ -449,14 +449,18 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
       }
     };
 
+    // Lowercase + strip diacritics so "ector" / "hector" match "Héctor".
+    const normalize = (s) =>
+      String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
     const applyFilter = (menu, query) => {
-      const q = query.trim().toLowerCase();
+      const q = normalize(query.trim());
       const items = menu.querySelectorAll("[data-dd-search-text]");
       let visible = 0;
       items.forEach((li) => {
-        // data-dd-search-text → dataset.ddSearchText (camelCase strip
-        // applies to the entire `data-` prefix, not just one segment).
-        const text = li.dataset.ddSearchText || "";
+        // data-dd-search-text → dataset.ddSearchText (the camelCase strip
+        // applies to the whole `data-` prefix, not just one segment).
+        const text = normalize(li.dataset.ddSearchText || "");
         const match = !q || text.includes(q);
         li.classList.toggle("hidden", !match);
         if (match) visible++;
