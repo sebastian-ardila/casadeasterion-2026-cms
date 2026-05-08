@@ -19,11 +19,13 @@
     "ai": "^6.0.176",
     "astro": "^5.7.5",
     "astro-aws-amplify": "^0.2.4",
+    "astro-icon": "^1.1.5",
     "sharp": "^0.34.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.4",
+    "@iconify-json/lucide": "^1.2.105",
     "@tailwindcss/vite": "^4.1.4",
     "@tiptap/core": "^3.22.5",
     "@tiptap/extension-character-count": "^3.22.5",

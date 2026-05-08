@@ -1,5 +1,6 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
+import { Icon } from "astro-icon/components";
 import { requireAdmin, getAllPermissions, RESOURCE_LABEL } from "~/lib/auth";
 
 // SSR: only auth gate + permissions for which cards to show. Stats are loaded
@@ -9,14 +10,36 @@ if (guard instanceof Response) return guard;
 const user = guard;
 const perms = await getAllPermissions(Astro, user);
 const isOwner = user.role === "owner";
+const isManager = isOwner || user.role === "admin";
 
 const error = Astro.url.searchParams.get("error");
 const section = Astro.url.searchParams.get("section");
+
+interface StatCard {
+  href: string;
+  label: string;
+  icon: string;
+  primary: string;        // data-stat key for the big number
+  detailKey?: string;     // optional secondary data-stat key
+  detailSuffix?: string;  // text after the secondary number ("publicados", etc.)
+  show: boolean;
+}
+
+const cards: StatCard[] = [
+  { href: "/books",       label: "Libros",       icon: "lucide:book-open",   primary: "books_total", detailKey: "books_published", detailSuffix: "publicados", show: perms.books !== "none" },
+  { href: "/posts",       label: "Artículos",    icon: "lucide:newspaper",   primary: "posts_total", detailKey: "posts_published", detailSuffix: "publicados", show: perms.posts !== "none" },
+  { href: "/authors",     label: "Autores",      icon: "lucide:users",       primary: "authors",                                                              show: perms.authors !== "none" },
+  { href: "/categories",  label: "Categorías",   icon: "lucide:folder-tree", primary: "categories",                                                           show: perms.categories !== "none" },
+  { href: "/admins",      label: "Usuarios",     icon: "lucide:users-round", primary: "users_total", detailKey: "users_editors",   detailSuffix: "editores",   show: isManager },
+  { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail",        primary: "subs_confirmed", detailKey: "subs_pending", detailSuffix: "pendientes", show: isOwner },
+];
+
+const visibleCards = cards.filter((c) => c.show);
 ---
 
 <AppLayout title="Inicio">
   <h1 class="font-serif text-3xl md:text-4xl mb-2">Buenas, {user.full_name?.split(" ")[0] ?? "admin"}.</h1>
-  <p class="text-stone-500 mb-10">Resumen del catálogo.</p>
+  <p class="text-stone-500 mb-10">Resumen del catálogo y la comunidad.</p>
 
   {error === "no_permission" && (
     <p class="bg-amber-50 border border-amber-200 text-amber-900 text-sm p-3 mb-6">
@@ -29,93 +52,74 @@ const section = Astro.url.searchParams.get("section");
     </p>
   )}
 
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-10" data-home-stats>
-    {perms.books !== "none" && (
-      <a href="/books" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
-        <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Libros</p>
-        <p class="font-serif text-3xl mt-1" data-stat="books_total">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-10" data-home-stats>
+    {visibleCards.map((c) => (
+      <a href={c.href} data-astro-prefetch class="card p-4 md:p-5 hover:border-stone-900 transition flex flex-col">
+        <div class="flex items-center justify-between mb-1.5">
+          <p class="text-[11px] uppercase tracking-[0.12em] text-stone-500">{c.label}</p>
+          <Icon name={c.icon} class="w-4 h-4 text-stone-400" aria-hidden="true" />
+        </div>
+        <p class="font-serif text-3xl mt-auto" data-stat={c.primary}>
           <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
         </p>
-        <p class="text-xs text-stone-500 mt-1">
-          <span data-stat="books_published">…</span> publicados
-        </p>
+        {c.detailKey && (
+          <p class="text-[11px] text-stone-500 mt-1">
+            <span data-stat={c.detailKey}>…</span> {c.detailSuffix}
+          </p>
+        )}
       </a>
-    )}
-    {perms.posts !== "none" && (
-      <a href="/posts" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
-        <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Artículos</p>
-        <p class="font-serif text-3xl mt-1" data-stat="posts_total">
-          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
-        </p>
-        <p class="text-xs text-stone-500 mt-1">
-          <span data-stat="posts_published">…</span> publicados
-        </p>
-      </a>
-    )}
-    {perms.authors !== "none" && (
-      <a href="/authors" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
-        <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Autores</p>
-        <p class="font-serif text-3xl mt-1" data-stat="authors">
-          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
-        </p>
-      </a>
-    )}
-    {perms.categories !== "none" && (
-      <a href="/categories" data-astro-prefetch class="card p-5 hover:border-stone-900 transition">
-        <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Categorías</p>
-        <p class="font-serif text-3xl mt-1" data-stat="categories">
-          <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
-        </p>
-      </a>
-    )}
+    ))}
   </div>
 
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
-    {isOwner && (
-      <a href="/subscribers" data-astro-prefetch class="card block p-6 hover:border-stone-900 transition">
-        <p class="text-xs uppercase tracking-[0.12em] text-stone-500 mb-2">Newsletter</p>
-        <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-          <p class="text-stone-900">
-            <span class="font-serif text-3xl" data-stat="subs_confirmed">
-              <span class="inline-block bg-stone-100 rounded w-10 h-7 align-middle animate-pulse"></span>
-            </span>
-            <span class="text-sm text-stone-500 ml-1">confirmados</span>
-          </p>
-          <p class="text-stone-700 text-sm" data-pending-row>
-            <span class="font-medium" data-stat="subs_pending">…</span>
-            <span class="text-stone-500 ml-1">pendientes</span>
-          </p>
-        </div>
-      </a>
-    )}
-
-    <a
-      href="https://casadeasterionediciones.com"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="relative overflow-hidden block p-6 transition group bg-stone-900 text-stone-50 border border-stone-900 hover:bg-stone-800 hover:shadow-2xl hover:shadow-stone-900/20"
-    >
-      <div class="absolute -top-12 -right-10 w-44 h-44 rounded-full bg-stone-700/30 blur-2xl pointer-events-none"></div>
-      <div class="relative flex items-start justify-between gap-3 mb-3">
-        <p class="text-[10px] uppercase tracking-[0.18em] text-stone-400">Sitio público</p>
-        <span class="flex items-center justify-center w-8 h-8 rounded-full bg-stone-50 text-stone-900 group-hover:rotate-12 transition-transform">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M7 17 17 7"/>
-            <path d="M7 7h10v10"/>
-          </svg>
-        </span>
+  {isManager && (
+    <div class="card p-5 mb-10 max-w-3xl">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs uppercase tracking-[0.12em] text-stone-500">Composición de usuarios</p>
+        <Icon name="lucide:users-round" class="w-4 h-4 text-stone-400" aria-hidden="true" />
       </div>
-      <p class="relative font-serif text-2xl md:text-3xl leading-tight mb-2">Ver el sitio público</p>
-      <p class="relative text-sm text-stone-300 mb-4">casadeasterionediciones.com</p>
-      <span class="relative inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.18em] border-b border-stone-50/40 group-hover:border-stone-50 pb-0.5 transition">
-        Abrir en nueva pestaña
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M5 12h14"/>
-          <path d="M13 5l7 7-7 7"/>
+      <div class="grid grid-cols-3 gap-4">
+        <div class="border-l-4 border-violet-500 pl-3">
+          <p class="font-serif text-2xl" data-stat="users_owners">…</p>
+          <p class="text-[11px] uppercase tracking-[0.12em] text-stone-500">Owner</p>
+        </div>
+        <div class="border-l-4 border-stone-900 pl-3">
+          <p class="font-serif text-2xl" data-stat="users_admins">…</p>
+          <p class="text-[11px] uppercase tracking-[0.12em] text-stone-500">Admins</p>
+        </div>
+        <div class="border-l-4 border-stone-300 pl-3">
+          <p class="font-serif text-2xl" data-stat="users_editors">…</p>
+          <p class="text-[11px] uppercase tracking-[0.12em] text-stone-500">Editores</p>
+        </div>
+      </div>
+    </div>
+  )}
+
+  <a
+    href="https://casadeasterionediciones.com"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="relative overflow-hidden block p-6 transition group bg-stone-900 text-stone-50 border border-stone-900 hover:bg-stone-800 hover:shadow-2xl hover:shadow-stone-900/20 max-w-3xl"
+  >
+    <div class="absolute -top-12 -right-10 w-44 h-44 rounded-full bg-stone-700/30 blur-2xl pointer-events-none"></div>
+    <div class="relative flex items-start justify-between gap-3 mb-3">
+      <p class="text-[10px] uppercase tracking-[0.18em] text-stone-400">Sitio público</p>
+      <span class="flex items-center justify-center w-8 h-8 rounded-full bg-stone-50 text-stone-900 group-hover:rotate-12 transition-transform">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 17 17 7"/>
+          <path d="M7 7h10v10"/>
         </svg>
       </span>
-    </a>
-  </div>
+    </div>
+    <p class="relative font-serif text-2xl md:text-3xl leading-tight mb-2">Ver el sitio público</p>
+    <p class="relative text-sm text-stone-300 mb-4">casadeasterionediciones.com</p>
+    <span class="relative inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.18em] border-b border-stone-50/40 group-hover:border-stone-50 pb-0.5 transition">
+      Abrir en nueva pestaña
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M5 12h14"/>
+        <path d="M13 5l7 7-7 7"/>
+      </svg>
+    </span>
+  </a>
 </AppLayout>
 
 <script is:inline>
@@ -124,10 +128,6 @@ const section = Astro.url.searchParams.get("section");
     window.__casHomeInit = true;
 
     const setStat = (key, value) => {
-      document.querySelectorAll(`[data-home-stats] [data-stat="${key}"]`).forEach((el) => {
-        el.textContent = String(value);
-      });
-      // Newsletter card uses data-stat too.
       document.querySelectorAll(`[data-stat="${key}"]`).forEach((el) => {
         el.textContent = String(value);
       });
@@ -138,12 +138,6 @@ const section = Astro.url.searchParams.get("section");
 
     const apply = (stats) => {
       Object.entries(stats).forEach(([k, v]) => setStat(k, v));
-      const pending = document.querySelector("[data-pending-row]");
-      if (pending && (!stats.subs_pending || stats.subs_pending === 0)) {
-        pending.classList.add("hidden");
-      } else if (pending) {
-        pending.classList.remove("hidden");
-      }
     };
 
     const hydrate = async () => {

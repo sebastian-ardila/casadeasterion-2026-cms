@@ -119,11 +119,11 @@ const statusOptions = [
         <p class="card-section-desc">Asocia el artículo a un autor y a una categoría del menú.</p>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
-        <div>
+        <div class="cell-stack">
           <span class="label">Autor</span>
           <Dropdown name="author_id" options={authorOptions} placeholder="Sin autor" />
         </div>
-        <div>
+        <div class="cell-stack">
           <span class="label">Categoría</span>
           <Dropdown name="category_id" options={categoryOptions} placeholder="Sin categoría" />
         </div>

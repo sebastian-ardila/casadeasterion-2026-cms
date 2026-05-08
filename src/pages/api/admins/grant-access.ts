@@ -24,14 +24,17 @@ export const POST: APIRoute = async (ctx) => {
   }
   const email = (body as { email?: unknown }).email;
   const profileId = (body as { profileId?: unknown }).profileId;
+  const requestedRole = (body as { role?: unknown }).role;
   if (typeof email !== "string" || !email) {
     return json({ error: "invalid_email" }, 400);
   }
+  // Default to editor; only owner can grant admin access.
+  const role = guard.user.role === "owner" && requestedRole === "admin" ? "admin" : "editor";
 
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);
   const { error } = await supabase
     .from("admin_emails")
-    .insert({ email: email.trim().toLowerCase(), added_by: guard.user.id, note: "re-granted" });
+    .insert({ email: email.trim().toLowerCase(), added_by: guard.user.id, note: "re-granted", role });
   if (error) return json({ error: error.message }, 500);
 
   if (typeof profileId === "string") invalidateAuthCache(ctx, profileId);

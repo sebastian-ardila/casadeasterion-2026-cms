@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requirePermission, RESOURCES, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import { requirePermission, CONFIGURABLE_RESOURCES, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 
 const json = (body: unknown, status = 200) =>
@@ -42,14 +42,21 @@ export const POST: APIRoute = async (ctx) => {
   if (targetProfile?.role === "owner") {
     return json({ error: "cannot_edit_owner" }, 403);
   }
+  // A non-owner manager (admin role) can only edit editor profiles.
+  // Owners can edit anyone (except themselves and other owners — guarded above).
+  if (guard.user.role !== "owner" && targetProfile?.role !== "editor") {
+    return json({ error: "only_owner_can_edit_admin" }, 403);
+  }
   if (!permissions || typeof permissions !== "object") {
     return json({ error: "invalid_permissions" }, 400);
   }
 
-  // Validate each resource → level pair.
+  // Validate each resource → level pair. Only the configurable subset is
+  // accepted — subscribers / admins are role-derived and shouldn't be
+  // upserted here.
   const rows: { profile_id: string; resource: Resource; level: Level }[] = [];
   for (const [k, v] of Object.entries(permissions as Record<string, unknown>)) {
-    if (!(RESOURCES as string[]).includes(k)) {
+    if (!(CONFIGURABLE_RESOURCES as string[]).includes(k)) {
       return json({ error: `invalid_resource_${k}` }, 400);
     }
     if (typeof v !== "string" || !VALID_LEVELS.has(v as Level)) {

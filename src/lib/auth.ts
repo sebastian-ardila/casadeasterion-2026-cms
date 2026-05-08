@@ -7,7 +7,14 @@ export type AdminUser = NonNullable<App.Locals["user"]>;
 export type Resource = "posts" | "books" | "authors" | "categories" | "site" | "subscribers" | "admins";
 export type Level = "none" | "view" | "edit";
 
+/** A CMS account role. owner > admin > editor > viewer (no CMS access). */
+export type CmsRole = "owner" | "admin" | "editor";
+
+/** Resources whose permissions are configurable per-user (in admin_permissions). */
 export const RESOURCES: Resource[] = ["posts", "books", "authors", "categories", "site", "subscribers", "admins"];
+
+/** The configurable subset that admins/editors can have row-level overrides for. */
+export const CONFIGURABLE_RESOURCES: Resource[] = ["posts", "books", "authors", "categories", "site"];
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
   posts: "Artículos",
@@ -16,7 +23,29 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   categories: "Categorías",
   site: "Configuración",
   subscribers: "Suscriptores",
-  admins: "Administradores",
+  admins: "Usuarios",
+};
+
+/** Defaults applied when an editor is created. Mirrors the SQL trigger. */
+export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
+  posts: "edit",
+  books: "edit",
+  authors: "edit",
+  categories: "view",
+  site: "none",
+  subscribers: "none",
+  admins: "none",
+};
+
+/** Defaults applied when an admin is created (everything edit). */
+export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
+  posts: "edit",
+  books: "edit",
+  authors: "edit",
+  categories: "edit",
+  site: "edit",
+  subscribers: "none",
+  admins: "none",
 };
 
 // ---------------------------------------------------------------------------
@@ -108,6 +137,11 @@ export async function loadCurrentUser(ctx: APIContext): Promise<App.Locals["user
 }
 
 export function isCmsUser(user: App.Locals["user"]): user is AdminUser {
+  return !!user && (user.role === "owner" || user.role === "admin" || user.role === "editor");
+}
+
+/** True if the user can manage other CMS users (create editors, etc.). */
+export function isUserManager(user: App.Locals["user"]): user is AdminUser {
   return !!user && (user.role === "owner" || user.role === "admin");
 }
 
@@ -129,6 +163,16 @@ export async function requireOwner(ctx: APIContext): Promise<AdminUser | Respons
   if (guard instanceof Response) return guard;
   if (guard.role !== "owner") {
     return ctx.redirect("/?error=owner_only");
+  }
+  return guard;
+}
+
+/** Page guard for the user-management area: owner OR admin (not editor). */
+export async function requireUserManager(ctx: APIContext): Promise<AdminUser | Response> {
+  const guard = await requireAdmin(ctx);
+  if (guard instanceof Response) return guard;
+  if (!isUserManager(guard)) {
+    return ctx.redirect("/?error=no_permission&section=admins");
   }
   return guard;
 }
@@ -163,7 +207,7 @@ export async function getAllPermissions(
     permsCache.set(user.id, out);
     return out;
   }
-  if (user.role !== "admin") {
+  if (user.role !== "admin" && user.role !== "editor") {
     permsCache.set(user.id, out);
     return out;
   }
@@ -177,6 +221,10 @@ export async function getAllPermissions(
       out[row.resource as Resource] = row.level as Level;
     }
   }
+  // Role-derived permissions: subscribers + admins (user management) are
+  // not stored per-row. They come straight from the role.
+  out.subscribers = user.role === "owner" ? "edit" : "none";
+  out.admins      = user.role === "owner" || user.role === "admin" ? "edit" : "none";
   permsCache.set(user.id, out);
   return out;
 }

@@ -7,6 +7,7 @@ import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
 import AiSuggest from "~/components/AiSuggest.astro";
+import CardHeader from "~/components/CardHeader.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray, slugify } from "~/lib/forms";
@@ -115,35 +116,26 @@ const statusOptions = [
   <form method="POST" class="space-y-6 max-w-3xl">
 
     <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Identidad del libro</h2>
-        <p class="card-section-desc">Cómo se nombra y se encuentra en el catálogo.</p>
-      </div>
+      <CardHeader icon="lucide:tag" title="Identidad del libro" description="Cómo se nombra y se encuentra en el catálogo." />
       <Field label="Título" name="title" required description="Título principal de la obra." />
       <Field label="Slug" name="slug" description="Se autogenera del título si lo dejas vacío." />
       <Field label="Subtítulo" name="subtitle" description="Subtítulo opcional. Aparece debajo del título." />
     </section>
 
     <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Portada y galería</h2>
-        <p class="card-section-desc">Imágenes del libro. Se convierten automáticamente a WebP.</p>
-      </div>
+      <CardHeader icon="lucide:image" title="Portada y galería" description="Imágenes del libro. Se convierten automáticamente a WebP." />
       <ImageUpload name="cover_image_url" label="Portada" bucket="covers" />
       <GalleryUpload name="gallery_urls" label="Galería del libro" bucket="content" hint="Páginas interiores, contraportada, ilustraciones, etc." />
     </section>
 
     <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Clasificación</h2>
-        <p class="card-section-desc">Asocia el libro a un autor y a una categoría del menú.</p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div>
+      <CardHeader icon="lucide:layers" title="Clasificación" description="Asocia el libro a un autor y a una categoría del menú." />
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="cell-stack">
           <span class="label">Autor</span>
           <Dropdown name="author_id" options={authorOptions} placeholder="Sin autor" />
         </div>
-        <div>
+        <div class="cell-stack">
           <span class="label">Categoría</span>
           <Dropdown name="category_id" options={categoryOptions} placeholder="Sin categoría" />
         </div>
@@ -151,22 +143,16 @@ const statusOptions = [
     </section>
 
     <section class="card space-y-3">
-      <div>
-        <h2 class="card-section-title">Descripción</h2>
-        <p class="card-section-desc">Sinopsis del libro. Soporta markdown.</p>
-      </div>
+      <CardHeader icon="lucide:type" title="Descripción" description="Sinopsis del libro. Soporta markdown." />
       <MarkdownEditor name="description_md" label="" />
     </section>
 
     <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Detalles editoriales</h2>
-        <p class="card-section-desc">Datos físicos y comerciales.</p>
-      </div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <CardHeader icon="lucide:book-marked" title="Detalles editoriales" description="Datos físicos y comerciales." />
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Field label="ISBN" name="isbn" description="10 o 13 dígitos. Acepta guiones." />
         <Field label="Páginas" name="pages" type="number" description="Total de páginas." />
-        <div>
+        <div class="cell-stack">
           <span class="label">Formato</span>
           <Dropdown name="format" options={formatOptions} placeholder="Sin especificar" />
         </div>
@@ -174,7 +160,7 @@ const statusOptions = [
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Field label="Precio" name="price_amount" type="number" description="Precio sugerido." />
-        <div>
+        <div class="cell-stack">
           <span class="label">Moneda</span>
           <Dropdown name="price_currency" value="COP" options={currencyOptions} />
         </div>
@@ -183,10 +169,7 @@ const statusOptions = [
     </section>
 
     <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Compra por WhatsApp</h2>
-        <p class="card-section-desc">Mensaje específico para este libro. Si lo dejas vacío, se usa la plantilla global.</p>
-      </div>
+      <CardHeader icon="lucide:message-circle" title="Compra por WhatsApp" description="Mensaje específico para este libro. Si lo dejas vacío, se usa la plantilla global." />
       <Field
         label="Mensaje WhatsApp (opcional)"
         name="whatsapp_message_override"
@@ -197,21 +180,15 @@ const statusOptions = [
     </section>
 
     <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">SEO y redes sociales</h2>
-        <p class="card-section-desc">Cómo aparece en Google y al compartir.</p>
-      </div>
+      <CardHeader icon="lucide:search" title="SEO y redes sociales" description="Cómo aparece en Google y al compartir." />
       <AiSuggest kind="book" contentField="description_md" />
       <Field label="Palabras clave (SEO)" name="keywords" description="Separadas por coma." />
       <Field label="Texto alt de la portada" name="cover_image_alt" description="Descripción de la portada para lectores de pantalla y SEO." />
       <Field label="URL canónica" name="canonical_url" type="url" description="Si la ficha existe en otro lado (Goodreads, etc.) y quieres apuntar ahí como original." />
     </section>
 
-    <section class="card">
-      <div class="mb-4">
-        <h2 class="card-section-title">Estado de publicación</h2>
-        <p class="card-section-desc">Borrador queda oculto. Publicado dispara un rebuild del sitio público.</p>
-      </div>
+    <section class="card space-y-4">
+      <CardHeader icon="lucide:circle-dot" title="Estado de publicación" description="Borrador queda oculto. Publicado dispara un rebuild del sitio público." />
       <div class="max-w-xs">
         <Dropdown name="status" value="draft" options={statusOptions} />
       </div>

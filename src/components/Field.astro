@@ -24,13 +24,10 @@ const {
 } = Astro.props;
 ---
 
-<div class="block">
+<div class="block min-w-0">
   <label for={`f-${name}`} class="block">
     <span class="label">{label}{required && <span class="text-stone-400 font-normal"> *</span>}</span>
   </label>
-  {description && (
-    <p class="text-xs text-stone-500 mt-0 mb-2 leading-relaxed">{description}</p>
-  )}
   {type === "textarea" ? (
     <textarea
       id={`f-${name}`}
@@ -51,6 +48,9 @@ const {
       required={required}
       placeholder={placeholder}
     />
+  )}
+  {description && (
+    <p class="text-xs text-stone-500 mt-1.5 leading-relaxed">{description}</p>
   )}
   {hint && <p class="text-xs text-stone-500 mt-1.5">{hint}</p>}
 </div>

@@ -1,4 +1,5 @@
 ---
+import { Icon } from "astro-icon/components";
 import type { Level, Resource } from "~/lib/auth";
 
 interface Props {
@@ -9,19 +10,21 @@ const { user, permissions } = Astro.props;
 const path = Astro.url.pathname;
 const isOwner = user?.role === "owner";
 
-const allItems: Array<{ href: string; label: string; resource?: Resource; ownerOnly?: boolean }> = [
-  { href: "/", label: "Inicio" },
-  { href: "/books", label: "Libros", resource: "books" },
-  { href: "/posts", label: "Artículos", resource: "posts" },
-  { href: "/authors", label: "Autores", resource: "authors" },
-  { href: "/categories", label: "Categorías", resource: "categories" },
-  { href: "/site", label: "Configuración", resource: "site" },
-  { href: "/subscribers", label: "Suscriptores", ownerOnly: true },
-  { href: "/admins", label: "Administradores", ownerOnly: true },
+const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean }> = [
+  { href: "/", label: "Inicio", icon: "lucide:home" },
+  { href: "/books", label: "Libros", icon: "lucide:book-open", resource: "books" },
+  { href: "/posts", label: "Artículos", icon: "lucide:newspaper", resource: "posts" },
+  { href: "/authors", label: "Autores", icon: "lucide:users", resource: "authors" },
+  { href: "/categories", label: "Categorías", icon: "lucide:folder-tree", resource: "categories" },
+  { href: "/site", label: "Configuración", icon: "lucide:settings", resource: "site" },
+  { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail", ownerOnly: true },
+  { href: "/admins", label: "Usuarios", icon: "lucide:users-round", managerOnly: true },
 ];
 
+const isManager = user?.role === "owner" || user?.role === "admin";
 const items = allItems.filter((item) => {
   if (item.ownerOnly) return isOwner;
+  if (item.managerOnly) return isManager;
   if (item.resource) return (permissions?.[item.resource] ?? "none") !== "none";
   return true;
 });
@@ -88,11 +91,12 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         href={item.href}
         data-astro-prefetch
         class:list={[
-          "nav-link",
+          "nav-link inline-flex items-center gap-2.5",
           isActive(item.href) && "nav-link-active",
         ]}
       >
-        {item.label}
+        <Icon name={item.icon} class="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span>{item.label}</span>
       </a>
     ))}
   </nav>

@@ -81,8 +81,21 @@
     @apply block text-xs uppercase tracking-[0.12em] font-semibold text-stone-700 mb-1.5;
   }
 
+  /* Use on grid cells that wrap a <Dropdown /> or other input alongside
+     <Field /> components. Ensures the actual control aligns with the bottom
+     edge so descriptions of varying length above don't shift the inputs. */
+  .cell-stack {
+    @apply flex flex-col h-full min-w-0;
+  }
+  .cell-stack > [data-dropdown],
+  .cell-stack > input,
+  .cell-stack > select,
+  .cell-stack > .input {
+    margin-top: auto;
+  }
+
   .nav-link {
-    @apply block cursor-pointer px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition;
+    @apply flex w-full items-center gap-2.5 cursor-pointer px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition;
   }
   .nav-link-active {
     @apply bg-stone-900 text-white hover:bg-stone-900 hover:text-white;

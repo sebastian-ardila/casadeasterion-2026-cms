@@ -7,21 +7,21 @@ if (guard instanceof Response) return guard;
 const canEdit = guard.permission === "edit";
 ---
 
-<AppLayout title="Administradores" resource="admins">
+<AppLayout title="Usuarios" resource="admins">
   <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
-    <p class="font-serif text-xl mb-2">Administradores</p>
+    <p class="font-serif text-xl mb-2">Usuarios del CMS</p>
     <p class="text-sm mb-2 max-w-md">
       {canEdit
-        ? "Selecciona un administrador de la lista para ver y editar sus permisos, o agrega uno nuevo."
-        : "Selecciona un administrador de la lista para ver sus permisos."}
+        ? "Selecciona un usuario de la lista para ver y editar sus permisos, o agrega uno nuevo."
+        : "Selecciona un usuario de la lista para ver sus permisos."}
     </p>
     {canEdit && (
       <p class="text-xs mb-6 max-w-md">
-        En la página de "Nuevo administrador" también encuentras los pre-aprobados pendientes y los usuarios con acceso revocado.
+        Los nuevos usuarios pueden ser <strong>editores</strong> (publican contenido) o <strong>admins</strong> (acceso completo). Solo el owner puede crear admins.
       </p>
     )}
     {canEdit && (
-      <a href="/admins/new" class="btn-primary">+ Nuevo administrador</a>
+      <a href="/admins/new" class="btn-primary">+ Nuevo usuario</a>
     )}
   </div>
 </AppLayout>

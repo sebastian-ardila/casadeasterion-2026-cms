@@ -111,17 +111,24 @@ export const GET: APIRoute = async (ctx) => {
       reorderable: true,
     }));
   } else if (resource === "admins") {
+    // Sort by role rank (owner > admin > editor) then by name. Postgres'
+    // text comparison would put 'admin' before 'editor' before 'owner',
+    // so we sort client-side after fetching.
     const { data } = await supabase
       .from("profiles")
       .select("id, email, full_name, avatar_url, role")
-      .in("role", ["owner", "admin"])
-      .order("role")
-      .order("email");
-    items = (data ?? []).map((p: any) => ({
+      .in("role", ["owner", "admin", "editor"]);
+    const ROLE_RANK: Record<string, number> = { owner: 0, admin: 1, editor: 2 };
+    const sorted = (data ?? []).slice().sort((a: any, b: any) => {
+      const rr = (ROLE_RANK[a.role] ?? 99) - (ROLE_RANK[b.role] ?? 99);
+      if (rr !== 0) return rr;
+      return (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email);
+    });
+    items = sorted.map((p: any) => ({
       id: p.id,
       title: p.full_name ?? p.email,
       subtitle: p.email,
-      // Render the role as the status pill — owner = green, admin = neutral.
+      // Role rendered as the status pill — styling handled by the panel.
       status: p.role,
       href: `/admins/${p.id}`,
       imageUrl: p.avatar_url ?? null,

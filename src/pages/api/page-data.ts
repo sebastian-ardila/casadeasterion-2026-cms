@@ -134,13 +134,18 @@ export const GET: APIRoute = async (ctx) => {
     if (guard instanceof Response) return json({ error: "unauthorized" }, 401);
     const perms = await getAllPermissions(ctx, guard);
     const isOwner = guard.role === "owner";
-    const [books, posts, authors, categories, subs] = await Promise.all([
+    const isManager = isOwner || guard.role === "admin";
+    const [books, posts, authors, categories, subs, users] = await Promise.all([
       perms.books !== "none" ? supabase.from("books").select("id,status") : Promise.resolve({ data: null }),
       perms.posts !== "none" ? supabase.from("posts").select("id,status") : Promise.resolve({ data: null }),
       perms.authors !== "none" ? supabase.from("authors").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
       perms.categories !== "none" ? supabase.from("categories").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
       isOwner ? supabase.from("subscribers").select("id,confirmed_at,unsubscribed_at") : Promise.resolve({ data: null }),
+      isManager ? supabase.from("profiles").select("id,role").in("role", ["owner", "admin", "editor"]) : Promise.resolve({ data: null }),
     ] as const);
+    const userRows = (users as any).data ?? null;
+    const usersByRole = (role: string) =>
+      userRows ? userRows.filter((u: any) => u.role === role).length : 0;
     return json({
       stats: {
         books_total: (books as any).data?.length ?? 0,
@@ -151,6 +156,10 @@ export const GET: APIRoute = async (ctx) => {
         categories: (categories as any).count ?? 0,
         subs_confirmed: (subs as any).data?.filter((s: any) => s.confirmed_at && !s.unsubscribed_at).length ?? 0,
         subs_pending: (subs as any).data?.filter((s: any) => !s.confirmed_at).length ?? 0,
+        users_total: userRows?.length ?? 0,
+        users_owners: usersByRole("owner"),
+        users_admins: usersByRole("admin"),
+        users_editors: usersByRole("editor"),
       },
     });
   }

@@ -1,7 +1,9 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import BackToList from "~/components/BackToList.astro";
-import { requirePermission, RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import Dropdown from "~/components/Dropdown.astro";
+import { Icon } from "astro-icon/components";
+import { requirePermission, CONFIGURABLE_RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { strReq } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
@@ -10,7 +12,7 @@ const guard = await requirePermission(Astro, "admins", "view");
 if (guard instanceof Response) return guard;
 const owner = guard.user;
 const isOwner = owner.role === "owner";
-const canEdit = guard.permission === "edit";
+const grantedEdit = guard.permission === "edit";
 
 const { id } = Astro.params;
 if (!id) return Astro.redirect("/admins");
@@ -19,7 +21,6 @@ const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
 
 if (Astro.request.method === "POST") {
-  if (!canEdit) return Astro.redirect("/?error=no_permission&section=admins");
   try {
     const fd = await Astro.request.formData();
     const action = strReq(fd, "_action");
@@ -27,6 +28,11 @@ if (Astro.request.method === "POST") {
     if (action === "remove_admin") {
       const email = strReq(fd, "email").toLowerCase();
       if (email === owner.email.toLowerCase()) throw new Error("no puedes quitarte a ti mismo");
+      // A non-owner manager (admin) cannot revoke another admin or owner.
+      if (!isOwner) {
+        const { data: target } = await supabase.from("profiles").select("role").eq("id", id).maybeSingle();
+        if (!target || target.role !== "editor") throw new Error("solo el owner puede revocar a otro admin");
+      }
       // Drop from the allowlist AND demote the profile in the same flow so
       // their next request lands on requireAdmin → not_admin instead of
       // staying logged-in until they manually re-auth.
@@ -65,18 +71,25 @@ const [{ data: profile }, { data: permRows }] = await Promise.all([
 if (!profile) return Astro.redirect("/admins");
 
 const isOwnerRow = profile.role === "owner";
+const isAdminRow = profile.role === "admin";
+const isEditorRow = profile.role === "editor";
 const isSelf = profile.id === owner.id;
+// Non-owner managers (admins) can only edit editors. They can VIEW other
+// admins/owner but cannot change permissions or revoke them.
+const canEdit = grantedEdit && (isOwner || isEditorRow);
 
-// Build current permissions map.
-const perms: Record<Resource, Level> = {
+// Build current permissions map (only the configurable subset; subscribers
+// and admins-management are role-derived, not stored).
+type ConfigurableResource = (typeof CONFIGURABLE_RESOURCES)[number];
+const perms: Record<ConfigurableResource, Level> = {
   posts: "none", books: "none", authors: "none", categories: "none", site: "none",
 };
 if (isOwnerRow) {
-  for (const r of RESOURCES) perms[r] = "edit";
+  for (const r of CONFIGURABLE_RESOURCES) perms[r] = "edit";
 } else {
   for (const row of permRows ?? []) {
-    if ((RESOURCES as string[]).includes(row.resource)) {
-      perms[row.resource as Resource] = row.level as Level;
+    if ((CONFIGURABLE_RESOURCES as string[]).includes(row.resource)) {
+      perms[row.resource as ConfigurableResource] = row.level as Level;
     }
   }
 }
@@ -84,15 +97,23 @@ if (isOwnerRow) {
 const initials = (s: string | null, fallback: string) =>
   ((s ?? fallback).trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?").toUpperCase();
 
-const LEVELS: { value: Level; label: string }[] = [
+const LEVELS: { value: Level; label: string; hint?: string }[] = [
   { value: "none", label: "Sin acceso" },
-  { value: "view", label: "Ver" },
-  { value: "edit", label: "Editar" },
+  { value: "view", label: "Ver",    hint: "solo lectura" },
+  { value: "edit", label: "Editar", hint: "lectura + escritura" },
 ];
+
+const RESOURCE_ICON: Record<ConfigurableResource, string> = {
+  posts: "lucide:newspaper",
+  books: "lucide:book-open",
+  authors: "lucide:users",
+  categories: "lucide:folder-tree",
+  site: "lucide:settings",
+};
 ---
 
 <AppLayout title={profile.full_name ?? profile.email} resource="admins" activeId={profile.id} breadcrumbLabel={profile.full_name ?? profile.email}>
-  <BackToList href="/admins" label="Administradores" />
+  <BackToList href="/admins" label="Usuarios" />
 
   {/* Header card with avatar */}
   <header class="flex flex-col sm:flex-row sm:items-center gap-5 mb-8 max-w-3xl">
@@ -114,9 +135,11 @@ const LEVELS: { value: Level; label: string }[] = [
       <div class="flex items-center gap-2 mt-2">
         <span class:list={[
           "inline-flex items-center text-[10px] uppercase tracking-[0.14em] px-2 py-0.5",
-          isOwnerRow ? "bg-violet-100 text-violet-900" : "bg-stone-100 text-stone-700",
+          isOwnerRow ? "bg-violet-100 text-violet-900"
+            : isAdminRow ? "bg-stone-900 text-white"
+            : "bg-stone-100 text-stone-700",
         ]}>
-          {isOwnerRow ? "Owner" : "Admin"}
+          {isOwnerRow ? "Owner" : isAdminRow ? "Admin" : "Editor"}
         </span>
         {isSelf && (
           <span class="text-[11px] text-stone-500 italic">— tú</span>
@@ -141,21 +164,23 @@ const LEVELS: { value: Level; label: string }[] = [
       <p class="card-section-desc">
         {isOwnerRow
           ? "El owner siempre tiene acceso completo a todas las secciones."
-          : "Define qué puede ver y editar este admin en cada sección del CMS."}
+          : `Define qué puede ver y editar este ${isAdminRow ? "admin" : "editor"} en cada sección del CMS.`}
       </p>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-      {RESOURCES.map((r) => (
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {CONFIGURABLE_RESOURCES.map((r) => (
         <div class="flex flex-col">
-          <label class="text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1.5">
-            {RESOURCE_LABEL[r]}
+          <label class="flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-stone-500 mb-1.5">
+            <Icon name={RESOURCE_ICON[r]} class="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{RESOURCE_LABEL[r]}</span>
           </label>
-          <select name={`level_${r}`} data-resource={r} class="input" disabled={isOwnerRow || !canEdit}>
-            {LEVELS.map((lv) => (
-              <option value={lv.value} selected={perms[r] === lv.value}>{lv.label}</option>
-            ))}
-          </select>
+          <Dropdown
+            name={`level_${r}`}
+            value={perms[r]}
+            options={LEVELS}
+            disabled={isOwnerRow || !canEdit}
+          />
         </div>
       ))}
     </div>
@@ -229,8 +254,12 @@ const LEVELS: { value: Level; label: string }[] = [
     };
     const collectCurrent = (form) => {
       const cur = {};
-      form.querySelectorAll("select[data-resource]").forEach((sel) => {
-        cur[sel.dataset.resource] = sel.value;
+      form.querySelectorAll('[data-dropdown]').forEach((dd) => {
+        const name = dd.dataset.name || "";
+        if (!name.startsWith("level_")) return;
+        const r = name.slice("level_".length);
+        const input = dd.querySelector('[data-dd-input]');
+        cur[r] = input ? input.value : "";
       });
       return cur;
     };
@@ -301,8 +330,14 @@ const LEVELS: { value: Level; label: string }[] = [
 
     const revert = (form) => {
       const orig = decodeOriginal(form);
-      form.querySelectorAll("select[data-resource]").forEach((sel) => {
-        if (orig[sel.dataset.resource] != null) sel.value = orig[sel.dataset.resource];
+      form.querySelectorAll('[data-dropdown]').forEach((dd) => {
+        const name = dd.dataset.name || "";
+        if (!name.startsWith("level_")) return;
+        const r = name.slice("level_".length);
+        const target = orig[r];
+        if (!target) return;
+        const opt = dd.querySelector(`[data-dd-option][data-value="${target}"]`);
+        if (opt instanceof HTMLElement) opt.click();
       });
       updateBar(form);
     };
@@ -311,9 +346,11 @@ const LEVELS: { value: Level; label: string }[] = [
       const form = document.querySelector("[data-perms-form]");
       if (!form || form.dataset.casWired) return;
       form.dataset.casWired = "1";
+      // Dropdowns dispatch a 'change' event on their hidden input when the
+      // user picks an option. The hidden input has name="level_<resource>".
       form.addEventListener("change", (e) => {
         const t = e.target;
-        if (t instanceof HTMLSelectElement && t.dataset.resource) updateBar(form);
+        if (t instanceof HTMLInputElement && t.name?.startsWith("level_")) updateBar(form);
       });
       form.addEventListener("submit", (e) => {
         e.preventDefault();

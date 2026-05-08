@@ -1,10 +1,12 @@
 import { defineConfig } from "astro/config";
 import awsAmplify from "astro-aws-amplify";
 import tailwindcss from "@tailwindcss/vite";
+import icon from "astro-icon";
 
 export default defineConfig({
   output: "server",
   adapter: awsAmplify(),
+  integrations: [icon()],
   server: { port: 4322, host: "localhost" },
   // Prefetch links on hover so navigations feel instant. Combined with
   // <ClientRouter /> (view transitions) in AppLayout, the sidebar/listpanel

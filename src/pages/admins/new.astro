@@ -2,6 +2,8 @@
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
 import BackToList from "~/components/BackToList.astro";
+import CardHeader from "~/components/CardHeader.astro";
+import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq } from "~/lib/forms";
@@ -10,6 +12,7 @@ import { friendlyError } from "~/lib/errors";
 const guard = await requirePermission(Astro, "admins", "edit");
 if (guard instanceof Response) return guard;
 const owner = guard.user;
+const isOwner = owner.role === "owner";
 
 const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
 let formError: string | null = null;
@@ -22,15 +25,23 @@ if (Astro.request.method === "POST") {
     if (action === "add_email") {
       const email = strReq(fd, "email").trim().toLowerCase();
       const note = str(fd, "note");
+      const requestedRole = str(fd, "role") ?? "editor";
+      // Only owner may create new admins. Admins can only create editors.
+      const role = isOwner && requestedRole === "admin" ? "admin" : "editor";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("email inválido");
       const { error } = await supabase
         .from("admin_emails")
-        .insert({ email, note, added_by: owner.id });
+        .insert({ email, note, added_by: owner.id, role });
       if (error) throw error;
-      return Astro.redirect(`/admins/new?saved=1&msg=${encodeURIComponent(`Email pre-aprobado: ${email}`)}`);
+      const label = role === "admin" ? "admin" : "editor";
+      return Astro.redirect(`/admins/new?saved=1&msg=${encodeURIComponent(`${label} pre-aprobado: ${email}`)}`);
     } else if (action === "remove_pending") {
       const email = strReq(fd, "email").toLowerCase();
-      const { error } = await supabase.from("admin_emails").delete().eq("email", email);
+      // Only owner can drop a pending admin from the allowlist; admins can
+      // only manage editors they pre-approved.
+      let q = supabase.from("admin_emails").delete().eq("email", email);
+      if (!isOwner) q = q.eq("role", "editor");
+      const { error } = await q;
       if (error) throw error;
       return Astro.redirect(`/admins/new?saved=1&action=deleted&msg=${encodeURIComponent(`Eliminado de la lista: ${email}`)}`);
     }
@@ -40,82 +51,151 @@ if (Astro.request.method === "POST") {
   }
 }
 
-// Pending allowlist: emails pre-aprobados que aún no se han logueado.
-// Revoked: profiles role='viewer' that have admin_permissions rows (signal
-// that they were once admins) and aren't in admin_emails anymore.
-const [{ data: profiles }, { data: allowlist }, { data: revokedRaw }] = await Promise.all([
-  supabase.from("profiles").select("email").in("role", ["owner", "admin"]),
-  supabase.from("admin_emails").select("email, added_at, note").order("added_at", { ascending: false }),
+// Pending allowlist + revoked profiles. For non-owner admins we filter out
+// admin/owner rows so they can only see and act on editors.
+const [{ data: profiles }, { data: allowlistRaw }, { data: revokedRaw }] = await Promise.all([
+  supabase.from("profiles").select("email").in("role", ["owner", "admin", "editor"]),
+  supabase.from("admin_emails").select("email, added_at, note, role").order("added_at", { ascending: false }),
   supabase
     .from("profiles")
     .select("id, email, full_name, avatar_url, role, admin_permissions(profile_id)")
     .eq("role", "viewer"),
 ]);
 const profileEmails = new Set((profiles ?? []).map((p) => p.email.toLowerCase()));
-const pending = (allowlist ?? []).filter((a) => !profileEmails.has(a.email.toLowerCase()));
+const allowlist = (allowlistRaw ?? []).filter((a: any) => isOwner || a.role === "editor");
+const pending = allowlist.filter((a: any) => !profileEmails.has(a.email.toLowerCase()));
 
-const allowlistSet = new Set((allowlist ?? []).map((a: any) => a.email.toLowerCase()));
+const allowlistSet = new Set((allowlistRaw ?? []).map((a: any) => a.email.toLowerCase()));
 const revoked = (revokedRaw ?? [])
   .filter((p: any) => Array.isArray(p.admin_permissions) && p.admin_permissions.length > 0)
   .filter((p: any) => !allowlistSet.has(p.email.toLowerCase()))
   .sort((a: any, b: any) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email));
 
-const isOwner = guard.user.role === "owner";
-
 const initials = (s: string | null, fallback: string) =>
   ((s ?? fallback).trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?").toUpperCase();
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  editor: "Editor",
+};
 ---
 
-<AppLayout title="Nuevo administrador" resource="admins">
-  <BackToList href="/admins" label="Administradores" />
-  <h1 class="font-serif text-3xl md:text-4xl mb-2">Nuevo administrador</h1>
+<AppLayout title="Nuevo usuario" resource="admins">
+  <BackToList href="/admins" label="Usuarios" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-2">Nuevo usuario</h1>
   <p class="text-stone-500 text-sm mb-8 max-w-2xl">
-    Agrega el correo de Google que quieres autorizar. La persona podrá iniciar sesión en el CMS apenas la apruebes; entrará sin permisos en ninguna sección y podrás darle acceso desde su perfil.
+    Agrega el correo de Google que quieres autorizar. La persona podrá iniciar sesión apenas la apruebes;
+    {isOwner ? " un admin tiene acceso completo, un editor solo puede gestionar contenido." : " los editores pueden gestionar contenido pero no la configuración global ni otros usuarios."}
   </p>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6 max-w-3xl">{formError}</p>
   )}
 
-  <form method="POST" class="card max-w-3xl mb-12">
+  <form method="POST" class="card max-w-3xl mb-12 space-y-5">
     <input type="hidden" name="_action" value="add_email" />
-    <div>
-      <h2 class="card-section-title">Pre-aprobar email</h2>
-      <p class="card-section-desc">Google verifica el correo al iniciar sesión. Solo correos en esta lista pueden entrar al CMS.</p>
+    <CardHeader icon="lucide:user-plus" title="Pre-aprobar correo" description="Google verifica el correo al iniciar sesión. Solo correos en esta lista pueden entrar al CMS." />
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Field label="Email de Google" name="email" type="email" required description="Ej: alguien@dominio.com" />
+      <Field label="Nota (opcional)" name="note" description="Quién es esta persona." />
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end mt-5">
-      <div class="sm:col-span-5">
-        <Field label="Email de Google" name="email" type="email" required description="Ej: alguien@dominio.com" />
-      </div>
-      <div class="sm:col-span-5">
-        <Field label="Nota (opcional)" name="note" description="Rol o quién es esta persona." />
-      </div>
-      <div class="sm:col-span-2 flex justify-end">
-        <button type="submit" class="btn-primary w-full sm:w-auto">Agregar</button>
-      </div>
+
+    <div>
+      <span class="label">Rol</span>
+      {isOwner ? (
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="cas-role-card">
+            <input type="radio" name="role" value="editor" checked class="sr-only peer" />
+            <span class="cas-role-card-inner">
+              <span class="flex items-center gap-2">
+                <Icon name="lucide:edit-3" class="w-4 h-4" aria-hidden="true" />
+                <span class="font-medium">Editor</span>
+              </span>
+              <span class="text-xs text-stone-500 mt-1">Publica y edita contenido. Sin acceso a configuración ni a usuarios.</span>
+            </span>
+          </label>
+          <label class="cas-role-card">
+            <input type="radio" name="role" value="admin" class="sr-only peer" />
+            <span class="cas-role-card-inner">
+              <span class="flex items-center gap-2">
+                <Icon name="lucide:shield-check" class="w-4 h-4" aria-hidden="true" />
+                <span class="font-medium">Admin</span>
+              </span>
+              <span class="text-xs text-stone-500 mt-1">Acceso completo al CMS y a la gestión de editores.</span>
+            </span>
+          </label>
+        </div>
+      ) : (
+        <>
+          <input type="hidden" name="role" value="editor" />
+          <p class="text-xs text-stone-600 bg-stone-50 border border-stone-200 px-3 py-2.5 inline-flex items-center gap-2">
+            <Icon name="lucide:edit-3" class="w-4 h-4" aria-hidden="true" />
+            <span>Se creará como <strong>editor</strong>. Solo el owner puede crear admins.</span>
+          </p>
+        </>
+      )}
+    </div>
+
+    <div class="flex justify-end pt-2 border-t border-stone-100">
+      <button type="submit" class="btn-primary inline-flex items-center gap-2">
+        <Icon name="lucide:user-plus" class="w-4 h-4" aria-hidden="true" />
+        Pre-aprobar correo
+      </button>
     </div>
   </form>
+
+  <style is:global>
+    .cas-role-card-inner {
+      display: flex;
+      flex-direction: column;
+      padding: 12px 14px;
+      border: 1px solid #d6d3d1;
+      background: #fff;
+      transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+      cursor: pointer;
+    }
+    .cas-role-card:hover .cas-role-card-inner {
+      border-color: #78716c;
+    }
+    .cas-role-card .peer:checked ~ .cas-role-card-inner,
+    .cas-role-card input:checked + .cas-role-card-inner {
+      border-color: #1c1917;
+      background: #fafaf9;
+      box-shadow: inset 0 0 0 1px #1c1917;
+    }
+  </style>
 
   {pending.length > 0 && (
     <section class="max-w-3xl mb-12">
       <h2 class="font-serif text-xl mb-2">Pre-aprobados</h2>
       <p class="text-sm text-stone-500 mb-4">
-        Estos correos pueden iniciar sesión en el CMS pero aún no se han logueado por primera vez. Cuando lo hagan, aparecerán en la lista de la izquierda.
+        Estos correos pueden iniciar sesión pero aún no se han logueado por primera vez.
       </p>
       <div class="card p-0 overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-stone-50 text-xs uppercase tracking-[0.12em] text-stone-600">
             <tr>
               <th class="text-left px-4 py-3 font-semibold">Email</th>
+              <th class="text-left px-4 py-3 font-semibold">Rol</th>
               <th class="text-left px-4 py-3 font-semibold">Nota</th>
               <th class="text-left px-4 py-3 font-semibold">Agregado</th>
               <th class="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            {pending.map((e) => (
+            {pending.map((e: any) => (
               <tr class="border-t border-stone-100">
                 <td class="px-4 py-3">{e.email}</td>
+                <td class="px-4 py-3">
+                  <span class:list={[
+                    "inline-block text-[10px] uppercase tracking-[0.12em] px-2 py-0.5 border",
+                    e.role === "admin"
+                      ? "border-violet-300 bg-violet-50 text-violet-800"
+                      : "border-stone-300 bg-stone-50 text-stone-700",
+                  ]}>{ROLE_LABEL[e.role] ?? e.role}</span>
+                </td>
                 <td class="px-4 py-3 text-stone-600">{e.note ?? "—"}</td>
                 <td class="px-4 py-3 text-stone-500 text-xs">{new Date(e.added_at).toLocaleDateString()}</td>
                 <td class="px-4 py-3 text-right">
@@ -137,7 +217,7 @@ const initials = (s: string | null, fallback: string) =>
     <section class="max-w-3xl">
       <h2 class="font-serif text-xl mb-2">Acceso revocado</h2>
       <p class="text-sm text-stone-500 mb-4">
-        Estas personas tuvieron acceso al CMS y ya no lo tienen. Su perfil y permisos previos siguen guardados — puedes restaurarles el acceso o (solo el owner) borrar todos sus datos definitivamente.
+        Tuvieron acceso al CMS y ya no lo tienen. Su perfil y permisos previos siguen guardados.
       </p>
       <ul class="space-y-3">
         {revoked.map((p: any) => (
