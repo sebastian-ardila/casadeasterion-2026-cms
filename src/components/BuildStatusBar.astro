@@ -70,6 +70,13 @@
       opacity 220ms ease-out,
       border-color 280ms ease;
   }
+  /* Tailwind's `.hidden` (display: none) loses to .cas-build-bar's
+     `display: flex`. Force it back so the bar doesn't sit invisibly on top
+     of UI in the bottom-left corner (notably the sidebar's "Cerrar sesión"
+     button) and eat clicks. */
+  .cas-build-bar.hidden {
+    display: none !important;
+  }
   .cas-build-bar.cas-build-bar-visible {
     transform: translateY(0);
     opacity: 1;
