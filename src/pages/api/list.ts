@@ -6,6 +6,8 @@ type Item = {
   id: string;
   title: string;
   subtitle: string | null;
+  /** Optional third line (e.g. "hace 2 días"). Renders muted under the subtitle. */
+  meta?: string | null;
   status?: string | null;
   href: string;
   imageUrl?: string | null;
@@ -15,6 +17,24 @@ type Item = {
   /** Categories: extra metadata used to render reorder controls. */
   reorderable?: boolean;
 };
+
+/** "hace 5 minutos" / "hace 3 días" / "hace 2 meses" / "30 nov 2024". */
+function formatRelative(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "";
+  const diffMs = Date.now() - then;
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return "ahora mismo";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `hace ${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `hace ${hr} h`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `hace ${day} día${day === 1 ? "" : "s"}`;
+  const month = Math.floor(day / 30);
+  if (month < 12) return `hace ${month} mes${month === 1 ? "" : "es"}`;
+  return new Date(iso).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+}
 
 type ListResource = Resource;
 const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins"]);
@@ -111,13 +131,10 @@ export const GET: APIRoute = async (ctx) => {
       reorderable: true,
     }));
   } else if (resource === "admins") {
-    // Sort by role rank (owner > admin > editor) then by name. Postgres'
-    // text comparison would put 'admin' before 'editor' before 'owner',
-    // so we sort client-side after fetching.
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, avatar_url, role")
-      .in("role", ["owner", "admin", "editor"]);
+    // Use the SECURITY DEFINER RPC so we can join auth.users.last_sign_in_at
+    // (which lives in the protected auth schema). Sort client-side because
+    // role text comparison would order them admin < editor < owner.
+    const { data } = await supabase.rpc("list_cms_users");
     const ROLE_RANK: Record<string, number> = { owner: 0, admin: 1, editor: 2 };
     const sorted = (data ?? []).slice().sort((a: any, b: any) => {
       const rr = (ROLE_RANK[a.role] ?? 99) - (ROLE_RANK[b.role] ?? 99);
@@ -127,7 +144,12 @@ export const GET: APIRoute = async (ctx) => {
     items = sorted.map((p: any) => ({
       id: p.id,
       title: p.full_name ?? p.email,
+      // Pack the email + last-sign-in into subtitle so the list panel can
+      // surface the freshness indicator without a schema change.
       subtitle: p.email,
+      meta: p.last_sign_in_at
+        ? formatRelative(p.last_sign_in_at)
+        : "Nunca ha entrado",
       // Role rendered as the status pill — styling handled by the panel.
       status: p.role,
       href: `/admins/${p.id}`,

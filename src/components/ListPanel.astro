@@ -172,6 +172,15 @@ const isNew = Astro.url.pathname.endsWith("/new");
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .lp-meta {
+    font-size: 11px;
+    color: #a8a29e;
+    margin-top: 2px;
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .lp-row-top {
     display: flex;
     align-items: flex-start;
@@ -592,6 +601,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
                       ${status}
                     </div>
                     ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
+                    ${it.meta ? `<p class="lp-meta">${escape(it.meta)}</p>` : ""}
                   </div>
                 </span>
                 ${arrows}
