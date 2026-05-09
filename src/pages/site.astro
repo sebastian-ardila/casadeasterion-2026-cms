@@ -377,8 +377,10 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
           </div>
           <div class="cas-preview-frame border border-stone-200 bg-stone-100 overflow-hidden" data-preview-frame>
             <div class="relative w-full h-full" data-preview-stage>
+              {/* Right-half image — only visible in desktop preview */}
               <div data-preview-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
-              <a data-preview-card class="absolute z-10 block flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
+              {/* The card. Position is computed at render time per platform. */}
+              <a data-preview-card class="z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
                 <div>
                   <p data-preview-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
                   <h1 data-preview-title class="leading-[1.1] mb-3"></h1>
@@ -386,6 +388,8 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
                 </div>
                 <span data-preview-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
               </a>
+              {/* Stacked mobile image — only visible in mobile preview */}
+              <img data-preview-mobile-img alt="" class="block w-full" style="display:none;" />
             </div>
           </div>
           <button type="button" class="text-xs text-stone-500 hover:text-stone-900 underline underline-offset-4" data-reset-hero-btn>
@@ -647,7 +651,10 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
     };
 
     // ----- Preview render -----
-    const applyLayout = (card, layout) => {
+    // Visual styles that don't depend on positioning (bg, color, radius,
+    // padding, font, shadow, blur, min-height). Position/size is set in
+    // applyDesktopPos/applyMobilePos because those differ between layouts.
+    const applyVisuals = (card, layout) => {
       const bg = hexToRgba(layout.bg_color, layout.bg_alpha);
       const bgRule = layout.bg_image_url
         ? `linear-gradient(${bg}, ${bg}), url('${layout.bg_image_url}') center/cover no-repeat`
@@ -656,12 +663,7 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       card.style.color = layout.text_color;
       card.style.borderRadius = `${layout.border_radius_tl}px ${layout.border_radius_tr}px ${layout.border_radius_br}px ${layout.border_radius_bl}px`;
       card.style.padding = `${layout.padding}px`;
-      card.style.width = layout.width > 0 ? `${layout.width}px` : "auto";
-      card.style.maxWidth = layout.width > 0 ? "100%" : `calc(100% - ${layout.offset_x * 2}px)`;
       card.style.minHeight = `${layout.height}px`;
-      card.style.left = `${layout.offset_x}px`;
-      card.style.top = `calc(50% + ${layout.offset_y}px)`;
-      card.style.transform = "translateY(-50%)";
       card.style.boxShadow = layout.shadow ? "0 25px 50px -12px rgba(0,0,0,0.25)" : "none";
       card.style.backdropFilter = layout.bg_blur > 0 ? `blur(${layout.bg_blur}px)` : "none";
       card.style.webkitBackdropFilter = layout.bg_blur > 0 ? `blur(${layout.bg_blur}px)` : "none";
@@ -670,6 +672,44 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         : `"Inter",system-ui,-apple-system,sans-serif`;
       const t = card.querySelector("[data-preview-title]");
       if (t) t.style.fontFamily = titleFont;
+    };
+
+    // Desktop: card sits absolute over the right-half hero image. Margin-right
+    // is intentionally 0 so the card extends past the 50% divider.
+    const applyDesktopPos = (card, layout) => {
+      card.style.position = "absolute";
+      card.style.left = `${layout.offset_x}px`;
+      card.style.top = `calc(50% + ${layout.offset_y}px)`;
+      card.style.transform = "translateY(-50%)";
+      card.style.alignSelf = "auto";
+      card.style.marginLeft = "0";
+      card.style.marginTop = "0";
+      card.style.marginRight = "0";
+      card.style.marginBottom = "0";
+      card.style.width = layout.width > 0 ? `${layout.width}px` : "auto";
+      card.style.maxWidth = layout.width > 0 ? "100%" : `calc(100% - ${layout.offset_x * 2}px)`;
+    };
+
+    // Mobile: card is in flow inside a flex-col stage; offset_x mirrors to
+    // both sides for visual balance, matching the public site rendering.
+    const applyMobilePos = (card, layout) => {
+      card.style.position = "static";
+      card.style.left = "auto";
+      card.style.top = "auto";
+      card.style.transform = "none";
+      card.style.marginLeft = `${layout.offset_x}px`;
+      card.style.marginRight = `${layout.offset_x}px`;
+      card.style.marginTop = `${layout.offset_y}px`;
+      card.style.marginBottom = "0";
+      if (layout.width > 0) {
+        card.style.width = `${layout.width}px`;
+        card.style.maxWidth = "100%";
+        card.style.alignSelf = "flex-start";
+      } else {
+        card.style.width = "auto";
+        card.style.maxWidth = "none";
+        card.style.alignSelf = "stretch";
+      }
     };
 
     const applyContent = (card, cfg) => {
@@ -695,6 +735,7 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       const stage = $("[data-preview-stage]");
       const card = $("[data-preview-card]");
       const bgImage = $("[data-preview-bg-image]");
+      const mobileImg = $("[data-preview-mobile-img]");
       const meta = $("[data-preview-meta]");
       const frame = $("[data-preview-frame]");
       if (!stage || !card || !frame) return;
@@ -712,12 +753,13 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         if (mirror && mirror !== el) mirror.value = String(v);
       });
 
-      // The site's hero image visible in the preview
+      // The site's hero image visible in the preview (mobile + desktop both
+      // use the same uploaded image in their own way).
       const heroImgInput = document.querySelector('input[type="hidden"][name="hero_image_url"]');
       const heroImageUrl = (heroImgInput?.value || "").trim() || HERO_FALLBACK_URL;
 
       const layout = currentPreviewTab === "desktop" ? cfg.desktop : cfg.mobile;
-      applyLayout(card, layout);
+      applyVisuals(card, layout);
       applyContent(card, cfg);
 
       // Title size matches the public site
@@ -725,20 +767,41 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       if (t) t.style.fontSize = currentPreviewTab === "desktop" ? "3rem" : "1.4rem";
 
       if (currentPreviewTab === "desktop") {
+        // Stage: absolute-positioned children (right-half image + card)
+        stage.style.display = "block";
         bgImage.style.display = "block";
         bgImage.style.backgroundImage = `url('${heroImageUrl}')`;
+        mobileImg.style.display = "none";
+        applyDesktopPos(card, layout);
       } else {
+        // Stage: vertical flex; card on top, image below — mirrors the
+        // public site's mobile flex-col stack.
+        stage.style.display = "flex";
+        stage.style.flexDirection = "column";
         bgImage.style.display = "none";
+        applyMobilePos(card, layout);
+        mobileImg.style.display = "block";
+        mobileImg.src = heroImageUrl;
+        mobileImg.style.width = "100%";
+        mobileImg.style.aspectRatio = "4 / 3";
+        mobileImg.style.objectFit = "cover";
+        mobileImg.style.marginTop = "24px"; // matches mt-6 on the public site
       }
 
-      // Scale the stage to fit the frame
+      // Scale the stage to fit the frame.
+      // Desktop: 1440 × 720 fixed. Mobile: 390 wide, height grows to fit
+      // the stacked card + image; we let it overflow visually but clip
+      // via the frame's overflow:hidden if absolutely necessary.
       const fw = frame.clientWidth - 16;
       const fh = frame.clientHeight - 16;
       const targetW = currentPreviewTab === "desktop" ? FRAME_DESKTOP_W : FRAME_MOBILE_W;
       const targetH = currentPreviewTab === "desktop" ? FRAME_DESKTOP_H : FRAME_MOBILE_H;
-      const scale = Math.min(fw / targetW, fh / targetH, 1);
+      const scale = currentPreviewTab === "desktop"
+        ? Math.min(fw / targetW, fh / targetH, 1)
+        : Math.min(fw / targetW, 1);
       stage.style.width = `${targetW}px`;
-      stage.style.height = `${targetH}px`;
+      stage.style.height = currentPreviewTab === "desktop" ? `${targetH}px` : "auto";
+      stage.style.minHeight = currentPreviewTab === "mobile" ? `${targetH}px` : "";
       stage.style.transformOrigin = "top left";
       stage.style.transform = `scale(${scale})`;
       stage.style.position = "absolute";
@@ -842,31 +905,52 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       } catch {}
     };
 
+    // Centralized tab switcher — used by clicks on the preview tabs and by
+    // auto-switch when the user starts editing controls of a different
+    // platform.
+    const switchPreviewTab = (name) => {
+      if (name !== "desktop" && name !== "mobile") return;
+      if (currentPreviewTab === name) return;
+      currentPreviewTab = name;
+      $$("[data-preview-tab]").forEach(b => b.classList.toggle("cas-preview-tab-active", b.getAttribute("data-preview-tab") === name));
+      $$("[data-platform-section]").forEach(sec => {
+        sec.style.outline = sec.getAttribute("data-platform-section") === name ? "2px solid rgb(28 25 23)" : "";
+        sec.style.outlineOffset = "-2px";
+      });
+      renderHeroPreview();
+    };
+
     // ----- Wire events -----
     const wireForm = () => {
       $$("[data-bind]").forEach(el => {
         el.addEventListener("input", renderHeroPreview);
         el.addEventListener("change", renderHeroPreview);
       });
+      // Auto-switch the preview tab when the user focuses or changes a
+      // control inside one of the platform-scoped sections. Catches
+      // mouse + keyboard interaction.
+      $$("[data-platform-section]").forEach(sec => {
+        const platform = sec.getAttribute("data-platform-section");
+        const trigger = () => switchPreviewTab(platform);
+        sec.addEventListener("focusin", trigger);
+        sec.addEventListener("input", trigger);
+        sec.addEventListener("change", trigger);
+      });
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
         if (d.name === "hero_image_url") {
           updateHeroFallbackStatus();
           renderHeroPreview();
-        } else if (d.name === "desktop_bg_image" || d.name === "mobile_bg_image") {
+        } else if (d.name === "desktop_bg_image") {
+          switchPreviewTab("desktop");
+          renderHeroPreview();
+        } else if (d.name === "mobile_bg_image") {
+          switchPreviewTab("mobile");
           renderHeroPreview();
         }
       });
       $$("[data-preview-tab]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          currentPreviewTab = btn.getAttribute("data-preview-tab");
-          $$("[data-preview-tab]").forEach(b => b.classList.toggle("cas-preview-tab-active", b === btn));
-          $$("[data-platform-section]").forEach(sec => {
-            sec.style.outline = sec.getAttribute("data-platform-section") === currentPreviewTab ? "2px solid rgb(28 25 23)" : "";
-            sec.style.outlineOffset = "-2px";
-          });
-          renderHeroPreview();
-        });
+        btn.addEventListener("click", () => switchPreviewTab(btn.getAttribute("data-preview-tab")));
       });
       const reset = $("[data-reset-hero-btn]");
       if (reset) reset.addEventListener("click", (ev) => {
