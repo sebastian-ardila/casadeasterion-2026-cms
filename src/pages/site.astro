@@ -2202,20 +2202,22 @@ const DEFAULT_HERO_CARD = {
       // so a user's explicit Web/Mobile click isn't fought by
       // unrelated micro-scrolls.
       const platformSections = $$("[data-platform-section]");
+      // scrollSpyPaused is flipped on programmatic scrolls (e.g.
+      // clicking the Web/Mobile preview tab) so the spy doesn't
+      // flicker the preview while it scrolls past the OTHER
+      // platform's section in transit.
+      let scrollSpyPaused = false;
       if (platformSections.length) {
         let lastActive = null;
         let scrollScheduled = false;
         const evaluate = () => {
           scrollScheduled = false;
+          if (scrollSpyPaused) return;
           const triggerY = Math.max(140, window.innerHeight * 0.3);
           let active = null;
           let activeTop = -Infinity;
           for (const sec of platformSections) {
             const rect = sec.getBoundingClientRect();
-            // Pick the section whose top has most recently crossed
-            // (or is sitting at) the trigger line. rect.top must be
-            // ≤ triggerY (already scrolled into the band) and we
-            // want the maximum such top.
             if (rect.top <= triggerY && rect.top > activeTop) {
               active = sec;
               activeTop = rect.top;
@@ -2232,11 +2234,31 @@ const DEFAULT_HERO_CARD = {
           scrollScheduled = true;
           requestAnimationFrame(evaluate);
         };
-        window.addEventListener("scroll", onScroll, { passive: true });
+        // Scroll events don't bubble, but they DO fire in the capture
+        // phase. <main> has its own md:overflow-y-auto on desktop, so
+        // a window-scoped listener wouldn't see those scrolls. Capture
+        // phase catches scroll on any element on the page.
+        document.addEventListener("scroll", onScroll, { passive: true, capture: true });
         window.addEventListener("resize", onScroll, { passive: true });
-        // Initial run after layout settles.
         requestAnimationFrame(evaluate);
       }
+      // Web / Mobile preview tab → scroll the matching editor
+      // section into view AND switch the preview tab. Pauses the
+      // spy long enough for smooth-scroll to settle so the preview
+      // doesn't flicker through the other platform on the way.
+      $$("[data-preview-tab]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const platform = btn.getAttribute("data-preview-tab");
+          if (!platform) return;
+          switchPreviewTab(platform);
+          const target = $(`[data-platform-section="${platform}"]`);
+          if (target) {
+            scrollSpyPaused = true;
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+            setTimeout(() => { scrollSpyPaused = false; }, 800);
+          }
+        });
+      });
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
         if (d.name === "hero_image_url") {
@@ -2250,10 +2272,6 @@ const DEFAULT_HERO_CARD = {
           renderHeroPreview();
         }
       });
-      $$("[data-preview-tab]").forEach(btn => {
-        btn.addEventListener("click", () => switchPreviewTab(btn.getAttribute("data-preview-tab")));
-      });
-
       // Fullscreen launcher buttons in the tab nav
       $$("[data-fullscreen-tab]").forEach(btn => {
         btn.addEventListener("click", () => openFullscreen(btn.getAttribute("data-fullscreen-tab")));
