@@ -814,54 +814,108 @@ const DEFAULT_HERO_CARD = {
   .cas-preview-noninteractive,
   .cas-preview-noninteractive * { pointer-events: none; }
 
-  /* Preview text sizing + truncation, scoped per simulated platform.
-     Mirror of the Tailwind classes used on the public hero card so
-     the inline + fullscreen previews show exactly the same line
-     count, font sizes, and clamp behavior visitors will see at
-     each breakpoint. data-platform is set on the stage in renderInto. */
-  [data-preview-stage] [data-preview-title],
-  [data-preview-stage] [data-preview-body],
-  [data-fullscreen-stage] [data-preview-title],
-  [data-fullscreen-stage] [data-preview-body] {
+  /* Preview parity with the public hero card.
+     Every visual property the public site sets via Tailwind utility
+     classes is replicated here as plain CSS, scoped to the preview's
+     own data-attributes. This keeps the preview self-contained — it
+     does NOT rely on Tailwind classes existing in the bundle, on the
+     responsive viewport breakpoints (preview is rendered inside a
+     desktop-sized CMS viewport so md:* would always apply), or on
+     the order of inline styles vs class styles. Source of truth:
+     apps/web/src/pages/index.astro lines 86-102. */
+
+  /* Card: same flex behavior as the public <a class="hero-card-cms">. */
+  [data-preview-card],
+  [data-fullscreen-card] {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+
+  /* Eyebrow: <p class="hcc-eyebrow uppercase text-[10px] sm:text-xs
+     tracking-[0.2em] opacity-70 mb-3 sm:mb-5"> */
+  [data-preview-eyebrow] {
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    opacity: 0.7;
+    margin: 0 0 0.75rem 0;
+  }
+
+  /* Title: <h1 class="hcc-title text-[1.4rem] sm:text-2xl md:text-5xl
+     leading-[1.1] mb-3 sm:mb-5 line-clamp-3 md:line-clamp-4"> */
+  [data-preview-title] {
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: normal;
+    margin: 0 0 0.75rem 0;
+    /* Clamp setup; line-count is platform-scoped below. */
     display: -webkit-box;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  /* DESKTOP variant — matches md:* breakpoint utilities on the public site */
+
+  /* Body: <p class="hcc-body text-xs sm:text-sm md:text-base
+     opacity-80 leading-relaxed line-clamp-2 md:line-clamp-3"> */
+  [data-preview-body] {
+    font-weight: 400;
+    line-height: 1.625;       /* leading-relaxed */
+    opacity: 0.8;
+    letter-spacing: normal;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* CTA: <span class="hcc-cta uppercase text-[11px] sm:text-xs
+     tracking-[0.18em] border-b border-current/60 pb-1 self-start
+     mt-4"> */
+  [data-preview-cta] {
+    align-self: flex-start;
+    margin-top: 1rem;
+    padding-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-weight: 400;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 60%, transparent);
+  }
+
+  /* DESKTOP — matches the md:* breakpoint utilities (≥768px). */
   [data-platform="desktop"] [data-preview-eyebrow] {
-    font-size: 0.75rem;     /* text-xs */
-    margin-bottom: 1.25rem; /* mb-5 */
+    font-size: 0.75rem;       /* text-xs */
+    margin-bottom: 1.25rem;   /* mb-5 */
   }
   [data-platform="desktop"] [data-preview-title] {
-    font-size: 3rem;        /* text-5xl */
-    line-height: 1.1;
-    margin-bottom: 1.25rem; /* mb-5 */
+    font-size: 3rem;          /* text-5xl */
+    margin-bottom: 1.25rem;   /* mb-5 */
     -webkit-line-clamp: 4;
   }
   [data-platform="desktop"] [data-preview-body] {
-    font-size: 1rem;        /* text-base */
+    font-size: 1rem;          /* text-base */
     -webkit-line-clamp: 3;
   }
   [data-platform="desktop"] [data-preview-cta] {
-    font-size: 0.75rem;     /* text-xs */
+    font-size: 0.75rem;       /* text-xs */
   }
-  /* MOBILE variant — base (pre-sm) sizes on the public site */
+
+  /* MOBILE — matches the base (<sm) utilities (<640px). */
   [data-platform="mobile"] [data-preview-eyebrow] {
-    font-size: 10px;        /* text-[10px] */
-    margin-bottom: 0.75rem; /* mb-3 */
+    font-size: 10px;          /* text-[10px] */
+    margin-bottom: 0.75rem;   /* mb-3 */
   }
   [data-platform="mobile"] [data-preview-title] {
-    font-size: 1.4rem;      /* text-[1.4rem] */
-    line-height: 1.1;
-    margin-bottom: 0.75rem; /* mb-3 */
+    font-size: 1.4rem;        /* text-[1.4rem] */
+    margin-bottom: 0.75rem;   /* mb-3 */
     -webkit-line-clamp: 3;
   }
   [data-platform="mobile"] [data-preview-body] {
-    font-size: 0.75rem;     /* text-xs */
+    font-size: 0.75rem;       /* text-xs */
     -webkit-line-clamp: 2;
   }
   [data-platform="mobile"] [data-preview-cta] {
-    font-size: 11px;        /* text-[11px] */
+    font-size: 11px;          /* text-[11px] */
   }
 
   /* When the user clicks Web / Mobile in the preview, auto-scroll
@@ -1936,16 +1990,14 @@ const DEFAULT_HERO_CARD = {
       }
       if (title) {
         title.textContent = c.title || "";
-        // Keep -webkit-box from CSS so -webkit-line-clamp applies.
-        // Inline styles win over CSS rules, so we MUST mirror the
-        // value from the platform-scoped CSS instead of setting
-        // "block" — otherwise long titles render unclamped on the
-        // right-side preview while the left mini-preview clamps.
-        title.style.display = c.title ? "-webkit-box" : "none";
+        // Clear inline display so the [data-preview-title] CSS rule
+        // (display: -webkit-box) governs and -webkit-line-clamp can
+        // truncate. Only set "none" inline when there's no text.
+        title.style.display = c.title ? "" : "none";
       }
       if (body) {
         body.textContent = c.body || "";
-        body.style.display = c.body ? "-webkit-box" : "none";
+        body.style.display = c.body ? "" : "none";
       }
       if (cta) cta.textContent = c.cta_label || "";
       card.href = c.cta_href || "#";
@@ -1960,8 +2012,9 @@ const DEFAULT_HERO_CARD = {
       applyVisuals(els.card, layout);
       applyContent(els.card, cfg);
 
-      const titleEl = els.card.querySelector("[data-preview-title]");
-      if (titleEl) titleEl.style.fontSize = platform === "desktop" ? "3rem" : "1.4rem";
+      // Title font-size is governed by the [data-platform=...] CSS
+      // rules; no inline override needed (and an inline value would
+      // beat the rule, breaking platform parity).
 
       if (platform === "desktop") {
         els.stage.style.display = "block";
