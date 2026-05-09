@@ -245,7 +245,12 @@ const DEFAULT_HERO_CARD = {
       add the 56px mobile-app header. So sticky top values: 96px mobile,
       40px desktop (right under the breadcrumb's bottom edge). The
       preview buttons on the right open a fullscreen overlay. */}
-  <nav class="cas-tabs sticky top-[96px] md:top-[40px] z-10 flex items-stretch gap-1 mb-6 border-b border-stone-200 overflow-x-auto bg-white -mx-5 md:-mx-8 lg:-mx-10 px-5 md:px-8 lg:px-10" data-tab-nav>
+  {/* Tab nav: sticky inside <main>'s scroll container. The
+      breadcrumb now lives OUTSIDE main (above ListPanel + main),
+      so on md+ main's scroll origin is at 0 — the tabs stick
+      flush at the top. On mobile the body scrolls and the
+      breadcrumb stays at top-14 (56px) so the tabs sit at 56+40=96. */}
+  <nav class="cas-tabs sticky top-[96px] md:top-0 z-10 flex items-stretch gap-1 mb-6 border-b border-stone-200 overflow-x-auto bg-white -mx-5 md:-mx-8 lg:-mx-10 px-5 md:px-8 lg:px-10" data-tab-nav>
     <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
       <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
       <span>Hero</span>
@@ -427,11 +432,12 @@ const DEFAULT_HERO_CARD = {
         </div>
 
         {/* Live preview pane.
-            Sticky offset accounts for the breadcrumb (40px, sticky at top:0)
-            plus the tab nav (~46px, sticky at top:40px). Without this the
-            WEB/MOBILE buttons slide under the tab nav on scroll. */}
-        <aside class="lg:sticky lg:top-[100px] space-y-3 lg:order-2 order-1">
-          <div class="flex items-center gap-2">
+            On lg+ it sticks below the tab nav (~46px tall, sticky at
+            md:top-0 inside main). 60px ≈ tab nav + small breathing
+            room. The breadcrumb lives outside main now, so it does
+            NOT count against this offset. */}
+        <aside class="lg:sticky lg:top-[60px] space-y-3 lg:order-2 order-1">
+          <div class="flex items-center gap-2 flex-wrap">
             <button type="button" data-preview-tab="desktop" class="cas-preview-tab cas-preview-tab-active">
               <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
               Web
@@ -440,14 +446,33 @@ const DEFAULT_HERO_CARD = {
               <Icon name="lucide:smartphone" class="w-3.5 h-3.5" aria-hidden="true" />
               Mobile
             </button>
-            <span class="ml-auto text-[11px] uppercase tracking-wider text-stone-400" data-preview-meta>desktop · 1440 × 720</span>
+            {/* Zoom controls — multiply the auto-fit scale by this
+                factor so editors can inspect tiny details (a 12px
+                eyebrow on a 1440px frame ≈ 4px on screen at 1×). */}
+            <div class="cas-preview-zoom ml-auto flex items-center gap-0.5 border border-stone-200 rounded-sm" role="group" aria-label="Zoom del preview">
+              <button type="button" data-preview-zoom-out class="cas-preview-zoom-btn" aria-label="Reducir zoom" title="Reducir zoom">
+                <Icon name="lucide:minus" class="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              <span class="cas-preview-zoom-value tabular-nums" data-preview-zoom-value>100%</span>
+              <button type="button" data-preview-zoom-in class="cas-preview-zoom-btn" aria-label="Aumentar zoom" title="Aumentar zoom">
+                <Icon name="lucide:plus" class="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              <button type="button" data-preview-zoom-reset class="cas-preview-zoom-btn cas-preview-zoom-reset" aria-label="Restablecer zoom" title="Restablecer zoom (100%)">
+                <Icon name="lucide:rotate-ccw" class="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
+            <span class="text-[11px] uppercase tracking-wider text-stone-400" data-preview-meta>desktop · 1440 × 720</span>
           </div>
-          <div class="cas-preview-frame border border-stone-200 bg-stone-100 overflow-hidden" data-preview-frame>
+          {/* The frame's overflow flips to auto when zoom > 1 so the
+              user can pan via scroll. The card link is rendered with
+              pointer-events: none below so a user can't accidentally
+              navigate away by clicking "Explorar el catálogo". */}
+          <div class="cas-preview-frame border border-stone-200 bg-stone-100" data-preview-frame>
             <div class="relative w-full h-full" data-preview-stage>
               {/* Right-half image — only visible in desktop preview */}
               <div data-preview-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
               {/* The card. Position is computed at render time per platform. */}
-              <a data-preview-card class="z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
+              <a data-preview-card class="cas-preview-noninteractive z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-disabled="true">
                 <div>
                   <p data-preview-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
                   <h1 data-preview-title class="leading-[1.1] mb-3"></h1>
@@ -691,10 +716,55 @@ const DEFAULT_HERO_CARD = {
   .cas-preview-frame {
     height: clamp(280px, 48vh, 720px);
     position: relative;
+    overflow: hidden;
   }
-  /* On lg+ (desktop CMS) the preview is sticky and tall enough */
+  /* When the editor zooms in past 100% the staged content extends
+     past the frame; flip overflow to auto so they can pan. */
+  .cas-preview-frame[data-preview-zoomed="true"] { overflow: auto; }
   @media (min-width: 1024px) {
     .cas-preview-frame { height: clamp(420px, 56vh, 720px); }
+  }
+  /* The preview card is rendered as <a> for layout parity with the
+     public site, but inside the CMS we don't want clicks navigating
+     away to /catalogo etc. Block all pointer interaction on the
+     card and its descendants. */
+  .cas-preview-noninteractive,
+  .cas-preview-noninteractive * { pointer-events: none; }
+
+  /* When the user clicks Web / Mobile in the preview, auto-scroll
+     stops short by this much so the sticky tab nav (and on mobile
+     also the sticky mobile header + breadcrumb) doesn't cover the
+     top of the target editor section.
+     - mobile: 56 (mobile header) + 40 (breadcrumb) + 46 (tabs) ≈ 144
+     - md+:    46 (only the tab nav is sticky inside main)         */
+  [data-platform-section] { scroll-margin-top: 144px; }
+  @media (min-width: 768px) {
+    [data-platform-section] { scroll-margin-top: 60px; }
+  }
+
+  /* Zoom controls */
+  .cas-preview-zoom-btn {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border: 0;
+    color: rgb(68 64 60);
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .cas-preview-zoom-btn:hover { background: rgb(245 245 244); color: rgb(28 25 23); }
+  .cas-preview-zoom-btn:disabled { color: rgb(214 211 209); cursor: not-allowed; background: white; }
+  .cas-preview-zoom-reset { border-left: 1px solid rgb(231 229 228); }
+  .cas-preview-zoom-value {
+    font-size: 11px;
+    color: rgb(68 64 60);
+    padding: 0 0.4rem;
+    min-width: 36px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
   }
 
   /* === Stack + row helpers === */
@@ -1235,6 +1305,35 @@ const DEFAULT_HERO_CARD = {
     const FRAME_MOBILE_H = 720;
 
     let currentPreviewTab = "desktop";
+    // Editor-controlled zoom factor multiplied on top of the auto-fit
+    // scale. 1 = fits the frame; >1 lets editors inspect details, with
+    // the frame switching to overflow:auto so they can pan.
+    let previewZoom = 1;
+    const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+    const setPreviewZoom = (z) => {
+      const next = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], z));
+      if (next === previewZoom) return;
+      previewZoom = next;
+      const labels = $$("[data-preview-zoom-value]");
+      labels.forEach(el => { el.textContent = `${Math.round(previewZoom * 100)}%`; });
+      $$("[data-preview-zoom-out]").forEach(b => { b.disabled = previewZoom <= ZOOM_STEPS[0]; });
+      $$("[data-preview-zoom-in]").forEach(b => { b.disabled = previewZoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]; });
+      renderHeroPreview();
+    };
+    const stepZoom = (dir) => {
+      const idx = ZOOM_STEPS.indexOf(previewZoom);
+      if (idx === -1) {
+        // Current zoom isn't on the discrete scale — pick the nearest
+        // step in the requested direction.
+        const next = dir > 0
+          ? ZOOM_STEPS.find(z => z > previewZoom)
+          : [...ZOOM_STEPS].reverse().find(z => z < previewZoom);
+        if (next != null) setPreviewZoom(next);
+        return;
+      }
+      const nextIdx = Math.max(0, Math.min(ZOOM_STEPS.length - 1, idx + dir));
+      setPreviewZoom(ZOOM_STEPS[nextIdx]);
+    };
     let currentHeroCfg = structuredClone(DEFAULT_HERO_CARD);
 
     const $ = (s, p = document) => p.querySelector(s);
@@ -1512,19 +1611,31 @@ const DEFAULT_HERO_CARD = {
       const fh = els.frame.clientHeight - 16;
       const targetW = platform === "desktop" ? FRAME_DESKTOP_W : FRAME_MOBILE_W;
       const targetH = platform === "desktop" ? FRAME_DESKTOP_H : FRAME_MOBILE_H;
-      const scale = platform === "desktop"
+      const fitScale = platform === "desktop"
         ? Math.min(fw / targetW, fh / targetH, 1)
         : Math.min(fw / targetW, 1);
+      const finalScale = fitScale * previewZoom;
       els.stage.style.width = `${targetW}px`;
       els.stage.style.height = platform === "desktop" ? `${targetH}px` : "auto";
       els.stage.style.minHeight = platform === "mobile" ? `${targetH}px` : "";
       els.stage.style.transformOrigin = "top left";
-      els.stage.style.transform = `scale(${scale})`;
+      els.stage.style.transform = `scale(${finalScale})`;
       els.stage.style.position = "absolute";
       els.stage.style.top = "8px";
-      const scaledW = targetW * scale;
+      const scaledW = targetW * finalScale;
       const offsetLeft = (els.frame.clientWidth - scaledW) / 2;
-      els.stage.style.left = `${Math.max(8, offsetLeft)}px`;
+      // When zoomed in, anchor at the frame's left edge so panning
+      // by scroll feels natural; otherwise keep it horizontally
+      // centered as before.
+      els.stage.style.left = previewZoom > 1
+        ? "8px"
+        : `${Math.max(8, offsetLeft)}px`;
+      // Flip the frame's overflow so the user can scroll when the
+      // staged content is bigger than the frame.
+      if (els.frame) {
+        if (previewZoom > 1) els.frame.setAttribute("data-preview-zoomed", "true");
+        else els.frame.removeAttribute("data-preview-zoomed");
+      }
 
       if (els.meta) els.meta.textContent = `${platform} · ${targetW} × ${targetH}`;
     };
@@ -2246,6 +2357,8 @@ const DEFAULT_HERO_CARD = {
       // section into view AND switch the preview tab. Pauses the
       // spy long enough for smooth-scroll to settle so the preview
       // doesn't flicker through the other platform on the way.
+      // The platform sections carry scroll-margin-top so the sticky
+      // tab nav (and mobile header + breadcrumb) don't cover them.
       $$("[data-preview-tab]").forEach(btn => {
         btn.addEventListener("click", () => {
           const platform = btn.getAttribute("data-preview-tab");
@@ -2259,6 +2372,12 @@ const DEFAULT_HERO_CARD = {
           }
         });
       });
+      // Zoom controls — present once per page; we listen on each
+      // matched element so duplicates inside the fullscreen modal
+      // (none today, but future-proof) all work.
+      $$("[data-preview-zoom-in]").forEach(b => b.addEventListener("click", () => stepZoom(+1)));
+      $$("[data-preview-zoom-out]").forEach(b => b.addEventListener("click", () => stepZoom(-1)));
+      $$("[data-preview-zoom-reset]").forEach(b => b.addEventListener("click", () => setPreviewZoom(1)));
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
         if (d.name === "hero_image_url") {
