@@ -13,13 +13,30 @@ const isOwner = user?.role === "owner";
 // `countKey`: identifies which value from /api/sidebar-counts the JS
 // should drop into this row's badge. Items without a key (Inicio,
 // Landing Page) just don't render a badge.
-const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string }> = [
+// `subItems`: nested rows that show only when the parent route is
+// active. Used by Landing Page to expose Home / Catálogo / Artículos / etc.
+type SidebarSub = { href: string; label: string; icon: string; pageKey?: string };
+const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string; subItems?: SidebarSub[] }> = [
   { href: "/",            label: "Inicio",       icon: "lucide:home" },
   { href: "/books",       label: "Libros",       icon: "lucide:book-open",       resource: "books",      countKey: "books" },
   { href: "/posts",       label: "Artículos",    icon: "lucide:newspaper",       resource: "posts",      countKey: "posts" },
   { href: "/authors",     label: "Autores",      icon: "lucide:users",           resource: "authors",    countKey: "authors" },
   { href: "/categories",  label: "Categorías",   icon: "lucide:folder-tree",     resource: "categories", countKey: "categories" },
-  { href: "/site",        label: "Landing Page", icon: "lucide:layout-template", resource: "site" },
+  {
+    href: "/site",
+    label: "Landing Page",
+    icon: "lucide:layout-template",
+    resource: "site",
+    subItems: [
+      { href: "/site",                 label: "Home",      icon: "lucide:home",         pageKey: "home"      },
+      { href: "/site?page=catalogo",   label: "Catálogo",  icon: "lucide:book-open",    pageKey: "catalogo"  },
+      { href: "/site?page=articulos",  label: "Artículos", icon: "lucide:newspaper",    pageKey: "articulos" },
+      { href: "/site?page=filosofia",  label: "Filosofía", icon: "lucide:scroll-text",  pageKey: "filosofia" },
+      { href: "/site?page=poesia",     label: "Poesía",    icon: "lucide:feather",      pageKey: "poesia"    },
+      { href: "/site?page=autores",    label: "Autores",   icon: "lucide:users",        pageKey: "autores"   },
+      { href: "/site?page=contacto",   label: "Contacto",  icon: "lucide:phone",        pageKey: "contacto"  },
+    ],
+  },
   { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail",            ownerOnly: true,        countKey: "subscribers" },
   { href: "/admins",      label: "Usuarios",     icon: "lucide:users-round",     managerOnly: true,      countKey: "admins" },
 ];
@@ -90,20 +107,37 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
 
   <nav class="flex-1 min-h-0 overflow-y-auto px-2 py-3" data-sidebar-nav>
     {items.map((item) => (
-      <a
-        href={item.href}
-        data-astro-prefetch
-        class:list={[
-          "nav-link cas-nav-row",
-          isActive(item.href) && "nav-link-active",
-        ]}
-      >
-        <Icon name={item.icon} class="w-4 h-4 shrink-0" aria-hidden="true" />
-        <span class="cas-nav-label">{item.label}</span>
-        {item.countKey && (
-          <span class="cas-nav-count" data-count-key={item.countKey} aria-hidden="true"></span>
+      <>
+        <a
+          href={item.href}
+          data-astro-prefetch
+          class:list={[
+            "nav-link cas-nav-row",
+            isActive(item.href) && "nav-link-active",
+          ]}
+        >
+          <Icon name={item.icon} class="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span class="cas-nav-label">{item.label}</span>
+          {item.countKey && (
+            <span class="cas-nav-count" data-count-key={item.countKey} aria-hidden="true"></span>
+          )}
+        </a>
+        {item.subItems && (
+          <div class="cas-subnav" data-subnav-parent={item.href} hidden={!isActive(item.href)}>
+            {item.subItems.map((sub) => (
+              <a
+                href={sub.href}
+                data-astro-prefetch
+                data-page-key={sub.pageKey}
+                class="cas-subnav-link"
+              >
+                <Icon name={sub.icon} class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>{sub.label}</span>
+              </a>
+            ))}
+          </div>
         )}
-      </a>
+      </>
     ))}
   </nav>
 
@@ -188,6 +222,46 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     background: rgba(255,255,255,0.18);
     color: rgb(245 245 244);
   }
+
+  /* Sub-navigation chips under an expanded parent (e.g. Landing Page →
+     Home / Catálogo / Artículos / …). Wrapping row of pills, each
+     sized to its own content (icon + label), so several fit per line
+     within the sidebar's narrow column. */
+  .cas-subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0.25rem 0.625rem 0.5rem;
+  }
+  .cas-subnav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    color: rgb(120 113 108);               /* stone-500 */
+    background: white;
+    border: 1px solid rgb(231 229 228);    /* stone-200 */
+    border-radius: 9999px;
+    text-decoration: none;
+    transition: color 0.12s, background-color 0.12s, border-color 0.12s;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .cas-subnav-link:hover {
+    color: rgb(28 25 23);
+    background: rgb(245 245 244);
+    border-color: rgb(214 211 209);
+  }
+  .cas-subnav-link.cas-subnav-active,
+  .cas-subnav-link.cas-subnav-active:hover {
+    color: white;
+    background: rgb(28 25 23);             /* stone-900 */
+    border-color: rgb(28 25 23);
+    font-weight: 500;
+  }
+  .cas-subnav-link > svg { color: currentColor; flex: 0 0 auto; }
 </style>
 
 <script is:inline>
@@ -332,25 +406,52 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     // Re-sync the active state of nav links. Called immediately on click and
     // again when a navigation completes — so the highlighted item updates the
     // moment you tap, not after the destination page finishes loading.
-    const setActive = (path) => {
-      const isActive = (href) =>
-        href === path || (href !== "/" && path.startsWith(href));
-      document.querySelectorAll("#cms-sidebar [data-sidebar-nav] a").forEach((a) => {
+    // Also expands/collapses sub-navs (e.g. Landing Page's Home / Catálogo /
+    // Artículos / …) and highlights the active sub-item by ?page=… key.
+    const setActive = (path, search) => {
+      const params = new URLSearchParams(search || "");
+      const pageKey = (params.get("page") || "home").toLowerCase();
+      const isActive = (href) => {
+        // Sub-item hrefs include a query — match against pathname only
+        // for the parent highlight.
+        const hrefPath = href.split("?")[0];
+        return hrefPath === path || (hrefPath !== "/" && path.startsWith(hrefPath));
+      };
+      // Top-level nav-link rows: only the parent highlight uses pathname.
+      document.querySelectorAll("#cms-sidebar [data-sidebar-nav] > a.nav-link, #cms-sidebar [data-sidebar-nav] a.nav-link").forEach((a) => {
         const href = a.getAttribute("href") || "";
         a.classList.toggle("nav-link-active", isActive(href));
       });
+      // Sub-navs: visible only when their parent is active.
+      document.querySelectorAll("#cms-sidebar [data-subnav-parent]").forEach((el) => {
+        const parent = el.getAttribute("data-subnav-parent") || "";
+        const open = isActive(parent);
+        if (open) el.removeAttribute("hidden");
+        else el.setAttribute("hidden", "");
+      });
+      // Sub-items: highlight the one matching ?page=. "home" matches when
+      // there's no ?page param too.
+      document.querySelectorAll("#cms-sidebar .cas-subnav-link").forEach((a) => {
+        const key = a.getAttribute("data-page-key") || "";
+        a.classList.toggle("cas-subnav-active", key === pageKey);
+      });
     };
-    const syncActive = () => setActive(window.location.pathname);
+    const syncActive = () =>
+      setActive(window.location.pathname, window.location.search);
 
     // Highlight the target link immediately on click — no waiting for SSR.
     document.addEventListener("astro:before-preparation", (e) => {
       try {
         const dest = e.to instanceof URL ? e.to : new URL(e.to);
-        setActive(dest.pathname);
+        setActive(dest.pathname, dest.search);
       } catch {}
     });
     document.addEventListener("astro:page-load", syncActive);
     document.addEventListener("astro:after-swap", syncActive);
+    // Listen for in-page page-tab changes from /site (the chip nav).
+    // The /site script dispatches "cas:page-tab-change" so we can sync
+    // the sidebar without a real navigation.
+    window.addEventListener("cas:page-tab-change", syncActive);
     syncActive();
   })();
 </script>

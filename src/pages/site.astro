@@ -6,6 +6,7 @@ import CardHeader from "~/components/CardHeader.astro";
 import Dropdown from "~/components/Dropdown.astro";
 import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astro";
 import ColorEditor from "~/components/ColorEditor.astro";
+import PageStub from "~/components/PageStub.astro";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
@@ -253,6 +254,44 @@ const DEFAULT_HERO_CARD = {
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
+
+  {/* Page chooser — wraps to multiple lines on narrow screens, each
+      chip sized to its content. Mirrors the sub-nav under "Landing
+      Page" in the sidebar so editors can switch from either place.
+      Selecting a chip swaps which [data-page-tab-panel] is visible
+      below and updates ?page= without a full navigation. */}
+  <nav class="cas-pagenav" data-pagenav aria-label="Páginas del sitio">
+    <button type="button" data-page-tab="home" class="cas-pagechip">
+      <Icon name="lucide:home" class="w-4 h-4" aria-hidden="true" />
+      <span>Home</span>
+    </button>
+    <button type="button" data-page-tab="catalogo" class="cas-pagechip">
+      <Icon name="lucide:book-open" class="w-4 h-4" aria-hidden="true" />
+      <span>Catálogo</span>
+    </button>
+    <button type="button" data-page-tab="articulos" class="cas-pagechip">
+      <Icon name="lucide:newspaper" class="w-4 h-4" aria-hidden="true" />
+      <span>Artículos</span>
+    </button>
+    <button type="button" data-page-tab="filosofia" class="cas-pagechip">
+      <Icon name="lucide:scroll-text" class="w-4 h-4" aria-hidden="true" />
+      <span>Filosofía</span>
+    </button>
+    <button type="button" data-page-tab="poesia" class="cas-pagechip">
+      <Icon name="lucide:feather" class="w-4 h-4" aria-hidden="true" />
+      <span>Poesía</span>
+    </button>
+    <button type="button" data-page-tab="autores" class="cas-pagechip">
+      <Icon name="lucide:users" class="w-4 h-4" aria-hidden="true" />
+      <span>Autores</span>
+    </button>
+    <button type="button" data-page-tab="contacto" class="cas-pagechip">
+      <Icon name="lucide:phone" class="w-4 h-4" aria-hidden="true" />
+      <span>Contacto</span>
+    </button>
+  </nav>
+
+  <div data-page-tab-panel="home">
 
   {/* Tab nav — sticky beneath the breadcrumb on scroll. The breadcrumb is
       ~40px tall (py-2.5 + 11px text) on every breakpoint; on mobile we
@@ -728,9 +767,75 @@ const DEFAULT_HERO_CARD = {
       </div>
     </div>
   </div>
+
+  </div>{/* /[data-page-tab-panel="home"] */}
+
+  {/* Placeholder panels for the other site pages. Each one shows a
+      simple "en construcción" card; the real editor wiring will land
+      in follow-up work. */}
+  <div data-page-tab-panel="catalogo" hidden>
+    <PageStub icon="lucide:book-open" title="Catálogo" />
+  </div>
+  <div data-page-tab-panel="articulos" hidden>
+    <PageStub icon="lucide:newspaper" title="Artículos" />
+  </div>
+  <div data-page-tab-panel="filosofia" hidden>
+    <PageStub icon="lucide:scroll-text" title="Filosofía" />
+  </div>
+  <div data-page-tab-panel="poesia" hidden>
+    <PageStub icon="lucide:feather" title="Poesía" />
+  </div>
+  <div data-page-tab-panel="autores" hidden>
+    <PageStub icon="lucide:users" title="Autores" />
+  </div>
+  <div data-page-tab-panel="contacto" hidden>
+    <PageStub icon="lucide:phone" title="Contacto" />
+  </div>
 </AppLayout>
 
 <style is:global>
+  /* === Page nav (Home / Catálogo / Artículos / …) ===
+     Single row of chips that wraps to multiple lines on narrow widths.
+     Each chip is sized to its own content (icon + label) so the row
+     stays compact and the active chip is unmistakable. Mirrors the
+     sub-nav rendered in the sidebar under "Landing Page". */
+  .cas-pagenav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .cas-pagechip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: rgb(68 64 60);                  /* stone-700 */
+    background: white;
+    border: 1px solid rgb(214 211 209);    /* stone-300 */
+    border-radius: 9999px;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .cas-pagechip:hover {
+    background: rgb(245 245 244);          /* stone-100 */
+    color: rgb(28 25 23);
+    border-color: rgb(168 162 158);
+  }
+  .cas-pagechip-active,
+  .cas-pagechip-active:hover {
+    background: rgb(28 25 23);             /* stone-900 */
+    color: white;
+    border-color: rgb(28 25 23);
+  }
+  .cas-pagechip > svg { color: currentColor; flex: 0 0 auto; }
+  @media (max-width: 640px) {
+    .cas-pagechip { padding: 0.375rem 0.625rem; font-size: 0.75rem; gap: 0.375rem; }
+  }
+
   /* === Tab nav === */
   .cas-tabs { margin-bottom: 1.5rem; }
   .cas-tab {
@@ -3147,7 +3252,61 @@ const DEFAULT_HERO_CARD = {
       window.addEventListener("resize", renderHeroPreview);
     };
 
+    // Page tab switcher: reads ?page= from the URL and toggles which
+    // [data-page-tab-panel] is visible. "home" is the default and
+    // contains the existing Hero/Editorial/Contacto/SEO controls; the
+    // other pages render a "en construcción" placeholder. Clicks on a
+    // chip swap panels without a real navigation, replaceState the URL
+    // so refresh keeps you on the same page, and dispatch a custom
+    // event so the sidebar's sub-nav can highlight the matching item.
+    const PAGE_KEYS = ["home", "catalogo", "articulos", "filosofia", "poesia", "autores", "contacto"];
+    const currentPageKey = () => {
+      const k = (new URL(window.location.href).searchParams.get("page") || "home").toLowerCase();
+      return PAGE_KEYS.includes(k) ? k : "home";
+    };
+    const setPageTab = (key, push) => {
+      key = PAGE_KEYS.includes(key) ? key : "home";
+      $$("[data-page-tab-panel]").forEach(p => {
+        p.hidden = p.getAttribute("data-page-tab-panel") !== key;
+      });
+      $$("[data-page-tab]").forEach(b => {
+        b.classList.toggle("cas-pagechip-active", b.getAttribute("data-page-tab") === key);
+      });
+      // Update breadcrumb sub-segment so it reads "Landing Page · Home" etc.
+      const pageLabelMap = {
+        home: "Home", catalogo: "Catálogo", articulos: "Artículos",
+        filosofia: "Filosofía", poesia: "Poesía", autores: "Autores",
+        contacto: "Contacto",
+      };
+      const bcExtra = document.querySelector("[data-breadcrumb-page]");
+      if (bcExtra) bcExtra.textContent = pageLabelMap[key] || "Home";
+      if (push) {
+        const url = new URL(window.location.href);
+        if (key === "home") url.searchParams.delete("page");
+        else url.searchParams.set("page", key);
+        window.history.replaceState({}, "", url.toString());
+      }
+      window.dispatchEvent(new CustomEvent("cas:page-tab-change", { detail: { key } }));
+    };
+    const wirePageTabs = () => {
+      const nav = $("[data-pagenav]");
+      if (!nav || nav.dataset.wired) {
+        // Even if already wired, sync visibility on (re)boot.
+        setPageTab(currentPageKey(), false);
+        return;
+      }
+      nav.dataset.wired = "1";
+      nav.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-page-tab]");
+        if (!btn) return;
+        e.preventDefault();
+        setPageTab(btn.getAttribute("data-page-tab"), true);
+      });
+      setPageTab(currentPageKey(), false);
+    };
+
     const boot = () => {
+      wirePageTabs();
       wireTabs();
       wireForm();
       hydrate();

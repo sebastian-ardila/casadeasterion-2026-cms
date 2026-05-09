@@ -1,0 +1,82 @@
+---
+import { Icon } from "astro-icon/components";
+
+interface Props {
+  /** lucide icon name, e.g. "lucide:book-open". */
+  icon: string;
+  /** Title of the page being stubbed (e.g. "Catálogo"). */
+  title: string;
+}
+const { icon, title } = Astro.props;
+---
+
+<div class="cas-pagestub">
+  <div class="cas-pagestub-card">
+    <div class="cas-pagestub-icon">
+      <Icon name="lucide:hammer" class="w-5 h-5" aria-hidden="true" />
+    </div>
+    <div class="cas-pagestub-body">
+      <h2 class="cas-pagestub-title">
+        <Icon name={icon} class="w-5 h-5" aria-hidden="true" />
+        <span>{title}</span>
+      </h2>
+      <p class="cas-pagestub-tag">En construcción</p>
+      <p class="cas-pagestub-desc">
+        Esta sección estará disponible próximamente.
+      </p>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  .cas-pagestub {
+    padding: 2rem 0 4rem;
+  }
+  .cas-pagestub-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.5rem;
+    border: 1px dashed rgb(214 211 209);   /* stone-300 */
+    background: rgb(250 250 249);          /* stone-50 */
+    border-radius: 0.5rem;
+    max-width: 640px;
+  }
+  .cas-pagestub-icon {
+    flex: 0 0 auto;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: rgb(231 229 228);          /* stone-200 */
+    color: rgb(68 64 60);                  /* stone-700 */
+  }
+  .cas-pagestub-body { min-width: 0; }
+  .cas-pagestub-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: 1.5rem;
+    line-height: 1.2;
+    color: rgb(28 25 23);                  /* stone-900 */
+    margin: 0 0 0.25rem;
+  }
+  .cas-pagestub-title > svg { color: rgb(120 113 108); }
+  .cas-pagestub-tag {
+    display: inline-block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: rgb(120 113 108);
+    margin: 0 0 0.5rem;
+  }
+  .cas-pagestub-desc {
+    font-size: 0.875rem;
+    color: rgb(87 83 78);                  /* stone-600 */
+    margin: 0;
+    max-width: 38ch;
+  }
+</style>

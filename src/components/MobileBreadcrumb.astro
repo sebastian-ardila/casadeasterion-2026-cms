@@ -24,18 +24,43 @@ const path = Astro.url.pathname.replace(/\/$/, "");
 const segments = path.split("/").filter(Boolean);
 const showCrumbs = segments.length > 0;
 
+// Special-case /site: it's a single-route page that switches sub-views
+// via ?page= (Home / Catálogo / Artículos / …). When a sub-view is
+// active, append an extra crumb so the trail reads
+// "Inicio › Landing Page › Catálogo". The label can also be updated
+// client-side by JS as the user clicks a chip — see [data-breadcrumb-pagetab].
+const SITE_PAGE_LABELS: Record<string, string> = {
+  home: "Home",
+  catalogo: "Catálogo",
+  articulos: "Artículos",
+  filosofia: "Filosofía",
+  poesia: "Poesía",
+  autores: "Autores",
+  contacto: "Contacto",
+};
+const isSite = segments[0] === "site" && segments.length === 1;
+const sitePageKey = isSite
+  ? (Astro.url.searchParams.get("page") || "home").toLowerCase()
+  : null;
+const sitePageLabel = sitePageKey ? (SITE_PAGE_LABELS[sitePageKey] ?? "Home") : null;
+
 type Crumb = { label: string; href: string | null };
 const crumbs: Crumb[] = showCrumbs
   ? [
       { label: "Inicio", href: "/" },
       ...segments.map((seg, idx) => {
         const isLast = idx === segments.length - 1;
-        const href = isLast ? null : "/" + segments.slice(0, idx + 1).join("/");
+        // On /site, demote the "Landing Page" segment to a link so the
+        // appended sub-page crumb is the actual leaf.
+        const href = isLast && !isSite
+          ? null
+          : "/" + segments.slice(0, idx + 1).join("/");
         const label = isLast && currentLabel
           ? currentLabel
           : labels[seg] ?? decodeURIComponent(seg).replace(/-/g, " ");
         return { label, href };
       }),
+      ...(isSite && sitePageLabel ? [{ label: sitePageLabel, href: null }] : []),
     ]
   : [];
 ---
