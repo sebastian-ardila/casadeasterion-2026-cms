@@ -202,10 +202,13 @@ const DEFAULT_HERO_CARD = {
       <div data-tab-panel="hero" class="grid lg:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
         <div class="space-y-6 min-w-0 lg:order-1 order-2">
 
-          {/* Hero image */}
+          {/* Hero image — Tu imagen + Imagen por defecto stacked vertically.
+              On lg+ the form column is already narrow (≈600px after the
+              440px preview takes its share), so a 2-col layout here turns
+              labels into 2-line wraps. Stack instead. */}
           <section class="card space-y-5">
             <CardHeader icon="lucide:image" title="Imagen del hero" desc="Foto que ocupa la mitad derecha en desktop y aparece debajo de la card en mobile." />
-            <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-4">
               <ImageUpload
                 name="hero_image_url"
                 label="Tu imagen"
@@ -305,8 +308,11 @@ const DEFAULT_HERO_CARD = {
           </section>
         </div>
 
-        {/* Live preview pane */}
-        <aside class="lg:sticky lg:top-6 space-y-3 lg:order-2 order-1">
+        {/* Live preview pane.
+            Sticky offset accounts for the breadcrumb (40px, sticky at top:0)
+            plus the tab nav (~46px, sticky at top:40px). Without this the
+            WEB/MOBILE buttons slide under the tab nav on scroll. */}
+        <aside class="lg:sticky lg:top-[100px] space-y-3 lg:order-2 order-1">
           <div class="flex items-center gap-2">
             <button type="button" data-preview-tab="desktop" class="cas-preview-tab cas-preview-tab-active">
               <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
