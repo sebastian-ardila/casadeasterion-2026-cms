@@ -38,22 +38,35 @@ const isNew = Astro.url.pathname.endsWith("/new");
   data-list-panel={resource}
   data-active-id={activeId ?? ""}
 >
-  <div class="px-5 py-5 border-b border-stone-200 flex items-center justify-between gap-3">
-    <h2 class="font-serif text-lg">{header.title}</h2>
-    {canEdit && (
-      <a
-        href={header.newHref}
-        data-astro-prefetch
-        class:list={[
-          "cursor-pointer text-xs px-2.5 py-1.5 border transition",
-          isNew
-            ? "border-stone-900 bg-stone-900 text-white"
-            : "border-stone-300 hover:border-stone-900",
-        ]}
-      >
-        {header.newLabel}
-      </a>
-    )}
+  <div class="px-5 pt-5 pb-3 border-b border-stone-200">
+    <div class="flex items-center justify-between gap-3 mb-3">
+      <h2 class="font-serif text-lg">{header.title}</h2>
+      {canEdit && (
+        <a
+          href={header.newHref}
+          data-astro-prefetch
+          class:list={[
+            "cursor-pointer text-xs px-2.5 py-1.5 border transition",
+            isNew
+              ? "border-stone-900 bg-stone-900 text-white"
+              : "border-stone-300 hover:border-stone-900",
+          ]}
+        >
+          {header.newLabel}
+        </a>
+      )}
+    </div>
+    <div class="relative">
+      <Icon name="lucide:search" class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400 pointer-events-none" aria-hidden="true" />
+      <input
+        type="text"
+        class="w-full text-sm pl-8 pr-2.5 py-1.5 border border-stone-200 bg-stone-50 focus:bg-white focus:border-stone-900 focus:outline-none transition"
+        placeholder="Buscar…"
+        autocomplete="off"
+        spellcheck="false"
+        data-list-search
+      />
+    </div>
   </div>
 
   <nav class="flex-1 overflow-y-auto" data-list-nav>
@@ -343,6 +356,35 @@ const isNew = Astro.url.pathname.endsWith("/new");
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
+    // Lowercase + strip diacritics so 'ector' or 'Hector' both match 'Héctor'.
+    const normalize = (s) =>
+      String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+    const applySearch = (panel) => {
+      const input = panel.querySelector("[data-list-search]");
+      const list = panel.querySelector("[data-list-items]");
+      if (!input || !list) return;
+      const q = normalize(input.value.trim());
+      let visible = 0;
+      list.querySelectorAll("[data-list-row]").forEach((li) => {
+        const text = li.dataset.searchText || "";
+        const match = !q || text.includes(q);
+        li.classList.toggle("hidden", !match);
+        if (match) visible++;
+      });
+      // Toggle the empty state for the search-no-results case.
+      const empty = panel.querySelector("[data-list-empty]");
+      if (empty) {
+        if (q && visible === 0) {
+          empty.textContent = "Sin resultados.";
+          empty.classList.remove("hidden");
+        } else if (q) {
+          empty.classList.add("hidden");
+        }
+        // When q is empty, leave whatever state hydrate() set.
+      }
+    };
+
     // Derive the active id from the current URL (more reliable than the SSR
     // dataset attr, since the panel can be persisted across view transitions).
     const currentActiveId = (resource) => {
@@ -589,8 +631,12 @@ const isNew = Astro.url.pathname.endsWith("/new");
               <button type="button" class="lp-arrow" data-move="down" data-id="${escape(it.id)}" aria-label="Bajar"${idx === items.length - 1 ? " disabled" : ""}>${ARROW_DOWN}</button>
             </div>` : "";
 
+          // Pre-normalize search text once per item so the input filter
+          // can do a simple substring check.
+          const searchText = normalize(`${it.title || ""} ${it.subtitle || ""}`);
+
           return `
-            <li>
+            <li data-list-row data-search-text="${escape(searchText)}">
               <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch data-id="${escape(it.id)}">
                 <span class="lp-link-body">
                   ${grip}
@@ -611,6 +657,18 @@ const isNew = Astro.url.pathname.endsWith("/new");
         .join("");
 
       if (reorderable) wireReorder(panel, list);
+      // Re-apply any active search query so freshly-rendered rows get
+      // filtered the same way (e.g. after a background refetch).
+      applySearch(panel);
+    };
+
+    // Wire the search input on each panel. Idempotent — uses a flag so
+    // panels persisted across view transitions don't double-bind.
+    const wireSearch = (panel) => {
+      const input = panel.querySelector("[data-list-search]");
+      if (!input || input.dataset.casWired) return;
+      input.dataset.casWired = "1";
+      input.addEventListener("input", () => applySearch(panel));
     };
 
     const showError = (panel) => {
@@ -661,6 +719,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
 
     const hydrateAll = () => {
       document.querySelectorAll("[data-list-panel]").forEach((panel) => {
+        wireSearch(panel);
         // Only hydrate once per page load; activeId update is handled below.
         if (!panel.dataset.hydrated) {
           panel.dataset.hydrated = "1";

@@ -165,6 +165,10 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
           items?.classList.add("hidden");
           empty?.classList.add("hidden");
           errEl?.classList.add("hidden");
+
+          // Clear the search input so the new section starts unfiltered.
+          const search = panel.querySelector("[data-list-search]");
+          if (search instanceof HTMLInputElement) search.value = "";
         };
 
         const applyOptimistic = (toUrl) => {
