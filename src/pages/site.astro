@@ -30,6 +30,42 @@ const canEdit = guard.permission === "edit";
 
 let formError: string | null = null;
 
+// Auto-detected URL options for the manual content's CTA href picker.
+// Static routes mirror the file structure of apps/web/src/pages; the
+// dynamic ones come from Supabase so the dropdown auto-grows as the
+// editor publishes new posts / books / authors. Failures here just
+// degrade the picker to the static list — never block the page.
+type UrlOpt = { value: string; label: string; hint?: string; icon?: string };
+const URL_STATIC: UrlOpt[] = [
+  { value: "/",            label: "Inicio",     hint: "Página principal",        icon: "lucide:home" },
+  { value: "/catalogo",    label: "Catálogo",   hint: "Lista de libros",         icon: "lucide:book-open" },
+  { value: "/articulos",   label: "Artículos",  hint: "Lista de artículos",      icon: "lucide:newspaper" },
+  { value: "/autores",     label: "Autores",    hint: "Lista de autores",        icon: "lucide:users" },
+  { value: "/filosofia",   label: "Filosofía",  hint: "Sección filosofía",       icon: "lucide:scroll-text" },
+  { value: "/poesia",      label: "Poesía",     hint: "Sección poesía",          icon: "lucide:feather" },
+  { value: "/contacto",    label: "Contacto",   hint: "Formulario de contacto",  icon: "lucide:phone" },
+];
+let URL_OPTIONS: UrlOpt[] = [...URL_STATIC];
+try {
+  const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
+  const [postsRes, booksRes, authorsRes] = await Promise.all([
+    sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
+    sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
+    sb.from("authors").select("slug, name").order("name").limit(40),
+  ]);
+  const books = (booksRes.data ?? []).filter((r) => r?.slug);
+  const posts = (postsRes.data ?? []).filter((r) => r?.slug);
+  const authors = (authorsRes.data ?? []).filter((r) => r?.slug);
+  URL_OPTIONS = [
+    ...URL_STATIC,
+    ...books.map((b) => ({ value: `/catalogo/${b.slug}`,  label: b.title, hint: "Libro",    icon: "lucide:book" as const })),
+    ...posts.map((p) => ({ value: `/articulos/${p.slug}`, label: p.title, hint: "Artículo", icon: "lucide:file-text" as const })),
+    ...authors.map((a) => ({ value: `/autores/${a.slug}`, label: a.name,  hint: "Autor",    icon: "lucide:user" as const })),
+  ];
+} catch {
+  // Network / RLS hiccup — keep the static picker only.
+}
+
 if (Astro.request.method === "POST") {
   if (!canEdit) return Astro.redirect("/?error=no_permission&section=site");
   const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
@@ -261,25 +297,48 @@ const DEFAULT_HERO_CARD = {
             {/* Manual fields — only visible when content source is "manual".
                 JS toggles the [hidden] attribute based on the selected source. */}
             <div data-manual-fields class="space-y-4 pt-4 border-t border-stone-100" hidden>
-              <div>
-                <label class="label">Eyebrow (texto pequeño arriba)</label>
+              <div class="hcc-field">
+                <label class="hcc-field-label">
+                  <Icon name="lucide:tag" class="w-3.5 h-3.5" aria-hidden="true" />
+                  Eyebrow
+                </label>
+                <p class="hcc-hint">Texto corto en mayúsculas que aparece sobre el título. Ej: <em>Editorial</em>.</p>
                 <input type="text" data-bind="manual.eyebrow" class="hcc-input w-full" />
               </div>
-              <div>
-                <label class="label">Título</label>
+              <div class="hcc-field">
+                <label class="hcc-field-label">
+                  <Icon name="lucide:type" class="w-3.5 h-3.5" aria-hidden="true" />
+                  Título
+                </label>
+                <p class="hcc-hint">Frase principal de la card. Mantenla corta y elocuente — es lo primero que se lee.</p>
                 <input type="text" data-bind="manual.title" class="hcc-input w-full" />
               </div>
-              <div>
-                <label class="label">Cuerpo</label>
+              <div class="hcc-field">
+                <label class="hcc-field-label">
+                  <Icon name="lucide:align-left" class="w-3.5 h-3.5" aria-hidden="true" />
+                  Cuerpo
+                </label>
+                <p class="hcc-hint">Párrafo breve bajo el título (opcional). Una o dos frases máximo.</p>
                 <textarea data-bind="manual.body" rows="3" class="hcc-input w-full"></textarea>
               </div>
-              <div class="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="label">Texto del botón</label>
-                  <input type="text" data-bind="manual.cta_label" class="hcc-input w-full" />
-                </div>
-                <div>
-                  <label class="label">URL del botón</label>
+              <div class="hcc-field">
+                <label class="hcc-field-label">
+                  <Icon name="lucide:mouse-pointer-click" class="w-3.5 h-3.5" aria-hidden="true" />
+                  Texto del botón
+                </label>
+                <p class="hcc-hint">Llamada a la acción visible en el CTA. Ej: <em>Explorar el catálogo</em>.</p>
+                <input type="text" data-bind="manual.cta_label" class="hcc-input w-full" />
+              </div>
+              <div class="hcc-field">
+                <label class="hcc-field-label">
+                  <Icon name="lucide:link" class="w-3.5 h-3.5" aria-hidden="true" />
+                  URL del botón
+                </label>
+                <p class="hcc-hint">Elige una página detectada del sitio o escribe una ruta personalizada abajo.</p>
+                <div class="hcc-url-stack">
+                  <div data-cta-href-picker>
+                    <Dropdown name="__manual_cta_href_pick" value="" options={URL_OPTIONS} placeholder="Sugerencias del sitio…" searchable />
+                  </div>
                   <input type="text" data-bind="manual.cta_href" class="hcc-input w-full" placeholder="/catalogo" />
                 </div>
               </div>
@@ -869,6 +928,22 @@ const DEFAULT_HERO_CARD = {
   .hcc-checkbox-row input { width: 16px; height: 16px; }
 
   .hcc-hint { font-size: 0.75rem; color: rgb(120 113 108); }
+  .hcc-hint em { font-style: italic; color: rgb(68 64 60); }
+  /* Manual content fields: icon-prefixed labels + hint above the input */
+  .hcc-field { display: flex; flex-direction: column; gap: 0.25rem; }
+  .hcc-field-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(68 64 60);
+  }
+  .hcc-field-label > svg { color: rgb(120 113 108); flex: 0 0 auto; }
+  .hcc-field .hcc-hint { margin: 0 0 0.125rem; }
+  .hcc-url-stack { display: flex; flex-direction: column; gap: 0.5rem; }
   .hcc-bg-fallback {
     margin-top: 0.5rem;
     padding: 0.375rem 0.625rem;
@@ -1522,6 +1597,24 @@ const DEFAULT_HERO_CARD = {
           renderHeroPreview();
         });
       });
+      // CTA href picker: when the user picks a suggestion from the
+      // detected URLs, copy the chosen value into the editable text
+      // input so it becomes the manual.cta_href that gets persisted.
+      // The Dropdown's own visible label keeps showing the selected
+      // page name; the text input below is the source of truth.
+      const ctaPicker = $("[data-cta-href-picker]");
+      if (ctaPicker) {
+        const ctaText = document.querySelector('[data-bind="manual.cta_href"]');
+        const pickInput = ctaPicker.querySelector("[data-dd-input]");
+        if (ctaText && pickInput) {
+          pickInput.addEventListener("change", () => {
+            if (!pickInput.value) return;
+            ctaText.value = pickInput.value;
+            ctaText.dispatchEvent(new Event("input", { bubbles: true }));
+            ctaText.dispatchEvent(new Event("change", { bubbles: true }));
+          });
+        }
+      }
       // Auto-switch the preview tab when the user focuses or changes a
       // control inside one of the platform-scoped sections. Catches
       // mouse + keyboard interaction.
@@ -1532,34 +1625,55 @@ const DEFAULT_HERO_CARD = {
         sec.addEventListener("input", trigger);
         sec.addEventListener("change", trigger);
       });
-      // Scroll-spy: when the desktop / mobile editor section enters the
-      // top band of the viewport, swap the preview to that platform.
-      // The active band is roughly the top third (excludes the
-      // breadcrumb + sticky tab nav at the top, ~100px). We rely on
-      // IntersectionObserver and react to the most recent entering
-      // section so quick scrolls feel responsive.
+      // Scroll-spy for preview platform.
+      // The previous IntersectionObserver implementation switched
+      // erratically because multiple sections could intersect the
+      // band simultaneously and the chosen "best" entry depended on
+      // intersection ratio (which fluctuates with scroll velocity).
+      // Replaced with a deterministic rAF-throttled scroll handler:
+      // the active platform section is the LATEST one whose top has
+      // crossed below a fixed trigger line (≈30% from viewport top,
+      // skipping the sticky breadcrumb+tabs). A section is picked
+      // only when its top is at-or-above that line; the last one to
+      // qualify (by largest top value) wins. We only fire
+      // switchPreviewTab when the active section actually changes,
+      // so a user's explicit Web/Mobile click isn't fought by
+      // unrelated micro-scrolls.
       const platformSections = $$("[data-platform-section]");
-      if ("IntersectionObserver" in window && platformSections.length) {
-        const io = new IntersectionObserver((entries) => {
-          // Prefer the entry that became visible most recently AND has
-          // the largest intersection ratio inside the band.
-          let pick = null;
-          for (const e of entries) {
-            if (!e.isIntersecting) continue;
-            if (!pick || e.intersectionRatio > pick.intersectionRatio) pick = e;
+      if (platformSections.length) {
+        let lastActive = null;
+        let scrollScheduled = false;
+        const evaluate = () => {
+          scrollScheduled = false;
+          const triggerY = Math.max(140, window.innerHeight * 0.3);
+          let active = null;
+          let activeTop = -Infinity;
+          for (const sec of platformSections) {
+            const rect = sec.getBoundingClientRect();
+            // Pick the section whose top has most recently crossed
+            // (or is sitting at) the trigger line. rect.top must be
+            // ≤ triggerY (already scrolled into the band) and we
+            // want the maximum such top.
+            if (rect.top <= triggerY && rect.top > activeTop) {
+              active = sec;
+              activeTop = rect.top;
+            }
           }
-          if (pick) {
-            const platform = pick.target.getAttribute("data-platform-section");
+          if (active && active !== lastActive) {
+            const platform = active.getAttribute("data-platform-section");
             if (platform) switchPreviewTab(platform);
+            lastActive = active;
           }
-        }, {
-          // Top 100px reserved for breadcrumb+tabs; bottom 60% trimmed
-          // so only the upper portion of the viewport counts as
-          // "active". A section entering this band triggers the swap.
-          rootMargin: "-100px 0px -60% 0px",
-          threshold: [0, 0.15, 0.4, 0.7, 1],
-        });
-        platformSections.forEach(sec => io.observe(sec));
+        };
+        const onScroll = () => {
+          if (scrollScheduled) return;
+          scrollScheduled = true;
+          requestAnimationFrame(evaluate);
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        window.addEventListener("resize", onScroll, { passive: true });
+        // Initial run after layout settles.
+        requestAnimationFrame(evaluate);
       }
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
