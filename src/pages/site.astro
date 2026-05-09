@@ -1934,10 +1934,18 @@ const DEFAULT_HERO_CARD = {
         eyebrow.textContent = c.eyebrow || "";
         eyebrow.style.display = c.eyebrow ? "block" : "none";
       }
-      if (title) title.textContent = c.title || "";
+      if (title) {
+        title.textContent = c.title || "";
+        // Keep -webkit-box from CSS so -webkit-line-clamp applies.
+        // Inline styles win over CSS rules, so we MUST mirror the
+        // value from the platform-scoped CSS instead of setting
+        // "block" — otherwise long titles render unclamped on the
+        // right-side preview while the left mini-preview clamps.
+        title.style.display = c.title ? "-webkit-box" : "none";
+      }
       if (body) {
         body.textContent = c.body || "";
-        body.style.display = c.body ? "block" : "none";
+        body.style.display = c.body ? "-webkit-box" : "none";
       }
       if (cta) cta.textContent = c.cta_label || "";
       card.href = c.cta_href || "#";
