@@ -57,15 +57,17 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
       )}
       <main
         class:list={[
-          "flex-1 min-w-0 px-5 md:px-8 lg:px-10 py-6 md:py-10 max-w-[1100px] md:h-screen md:overflow-y-auto",
+          "flex-1 min-w-0 max-w-[1100px] md:h-screen md:overflow-y-auto",
           showListPanel && !isDetailRoute && "hidden md:block",
         ]}
       >
-        {/* Breadcrumb is a child of <main> so it can be sticky relative
-            to main's own scroll container on desktop, and stays visually
-            below the mobile header on small screens. */}
+        {/* Breadcrumb is the first child of <main> with no padding
+            above it so position:sticky top:0 sticks flush with main's
+            outer edge. Page content sits inside a padded wrapper. */}
         <MobileBreadcrumb currentLabel={breadcrumbLabel} />
-        <slot />
+        <div class="px-5 md:px-8 lg:px-10 py-6 md:py-10">
+          <slot />
+        </div>
       </main>
     </div>
     <ActionToasts transition:persist="action-toasts" />
