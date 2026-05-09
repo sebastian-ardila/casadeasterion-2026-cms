@@ -39,6 +39,7 @@ if (Astro.request.method === "POST") {
       { key: "twitter_handle",        value: (str(fd, "twitter_handle") ?? "") as never },
       { key: "og_image_default",      value: (str(fd, "og_image_default") ?? "") as never },
       { key: "organization_logo_url", value: (str(fd, "organization_logo_url") ?? "") as never },
+      { key: "hero_image_url",        value: (str(fd, "hero_image_url") ?? "") as never },
     ];
 
     const { error } = await supabase
@@ -75,9 +76,15 @@ if (Astro.request.method === "POST") {
 
     <section class="card space-y-5">
       <div>
-        <h2 class="card-section-title">Cita destacada del homepage</h2>
-        <p class="card-section-desc">Aparece en la sección entre el hero y los artículos. Es el centro visual de la portada.</p>
+        <h2 class="card-section-title">Hero del homepage</h2>
+        <p class="card-section-desc">Imagen de fondo del hero principal y la cita destacada que aparece bajo él.</p>
       </div>
+      <ImageUpload
+        name="hero_image_url"
+        label="Imagen del hero"
+        bucket="covers"
+        hint="Click o arrastra. Foto que se ve en la primera pantalla del sitio (ocupa la mitad derecha en desktop, fondo completo en mobile). Recomendado: 2400×1600px o más, formato horizontal."
+      />
       <Field label="Cita" name="hero_quote" type="textarea" rows={3} required description="Frase corta y elocuente. Sin comillas alrededor — el diseño las añade." />
       <Field label="Autor de la cita" name="hero_quote_author" required description="Nombre que firma la cita." />
     </section>
@@ -186,6 +193,7 @@ if (Astro.request.method === "POST") {
       };
       setImage("og_image_default", cfg.og_image_default ?? "");
       setImage("organization_logo_url", cfg.organization_logo_url ?? "");
+      setImage("hero_image_url", cfg.hero_image_url ?? "");
       // Enable submit once data is loaded.
       const btn = form.querySelector("[data-submit-btn]");
       if (btn) btn.disabled = false;
