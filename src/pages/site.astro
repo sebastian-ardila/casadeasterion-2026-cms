@@ -1893,21 +1893,107 @@ const DEFAULT_HERO_CARD = {
     };
 
     // ----- Tab switching -----
+    const TAB_LABELS = { hero: "Hero", editorial: "Editorial", contacto: "Contacto", seo: "SEO" };
+    const PAGE_LABELS = {
+      home: "Home", catalogo: "Catálogo", articulos: "Artículos",
+      filosofia: "Filosofía", poesia: "Poesía", autores: "Autores",
+      contacto: "Contacto",
+    };
+    // Rewrite the trailing crumbs of the breadcrumb (Webpage / Home / Hero
+    // chain) to match the current page-tab and inner tab. Mirrors the
+    // server-side logic in MobileBreadcrumb.astro so refresh and click
+    // produce the same trail.
+    const updateBreadcrumbCrumbs = (pageKey, tabKey) => {
+      const ol = document.querySelector(".cas-breadcrumb ol");
+      if (!ol) return;
+      const pagetabLi = ol.querySelector("[data-breadcrumb-pagetab]");
+      let tabLi = ol.querySelector("[data-breadcrumb-tab]");
+      const isHome = pageKey === "home";
+      const pageLabel = PAGE_LABELS[pageKey] || "Home";
+      const tabLabel = TAB_LABELS[tabKey] || "Hero";
+
+      // 1. Update the page-tab crumb label, and switch between
+      //    last-leaf (span) and link-to-/site depending on whether
+      //    there's a deeper tab crumb.
+      if (pagetabLi) {
+        const wantLink = isHome;     // a tab crumb will follow it
+        const inner = pagetabLi.querySelector("a, span");
+        const labelEl = pagetabLi.querySelector("[data-breadcrumb-label]");
+        if (labelEl) labelEl.textContent = pageLabel;
+        if (inner) {
+          const isAnchor = inner.tagName === "A";
+          if (wantLink && !isAnchor) {
+            const a = document.createElement("a");
+            a.href = "/site";
+            a.className = "text-stone-500 hover:text-stone-900 transition";
+            a.setAttribute("data-astro-prefetch", "");
+            const lbl = document.createElement("span");
+            lbl.setAttribute("data-breadcrumb-label", "");
+            lbl.textContent = pageLabel;
+            a.appendChild(lbl);
+            inner.replaceWith(a);
+          } else if (!wantLink && isAnchor) {
+            const sp = document.createElement("span");
+            sp.className = "text-stone-900 font-medium first-letter:capitalize";
+            const lbl = document.createElement("span");
+            lbl.setAttribute("data-breadcrumb-label", "");
+            lbl.textContent = pageLabel;
+            sp.appendChild(lbl);
+            inner.replaceWith(sp);
+          }
+        }
+      }
+
+      // 2. Add / update / remove the tab crumb (only when on Home).
+      if (isHome) {
+        if (!tabLi) {
+          tabLi = document.createElement("li");
+          tabLi.setAttribute("data-breadcrumb-tab", "");
+          tabLi.className = "flex items-center gap-1.5 shrink-0";
+          tabLi.innerHTML =
+            '<span aria-hidden="true" class="text-stone-300">›</span>' +
+            '<span class="text-stone-900 font-medium first-letter:capitalize">' +
+              '<span data-breadcrumb-label></span>' +
+            '</span>';
+          ol.appendChild(tabLi);
+        }
+        const tlbl = tabLi.querySelector("[data-breadcrumb-label]");
+        if (tlbl) tlbl.textContent = tabLabel;
+      } else if (tabLi) {
+        tabLi.remove();
+      }
+    };
+
     const switchTab = (name) => {
       $$("[data-tab]").forEach(b => b.classList.toggle("cas-tab-active", b.getAttribute("data-tab") === name));
       $$("[data-tab-panel]").forEach(p => p.hidden = p.getAttribute("data-tab-panel") !== name);
       // Mobile-only fullscreen preview launchers belong to the Hero
       // tab — Editorial/Contacto/SEO have no card preview to launch.
       $$("[data-fullscreen-launchers]").forEach(el => { el.hidden = name !== "hero"; });
-      try { history.replaceState(null, "", `#${name}`); } catch {}
+      try {
+        const url = new URL(window.location.href);
+        // "hero" is the implicit default — keep the URL clean by
+        // dropping the param when on it.
+        if (name === "hero") url.searchParams.delete("tab");
+        else url.searchParams.set("tab", name);
+        history.replaceState(null, "", url.toString());
+      } catch {}
+      // Sync the trailing breadcrumb crumb. We're always on page=home
+      // when the tab nav is visible.
+      updateBreadcrumbCrumbs("home", name);
       if (name === "hero") setTimeout(renderHeroPreview, 0);
     };
 
     const wireTabs = () => {
       $$("[data-tab]").forEach(btn => btn.addEventListener("click", () => switchTab(btn.getAttribute("data-tab"))));
-      // Honor URL hash on first load
-      const hash = (window.location.hash || "").replace("#", "");
-      if (["hero", "editorial", "contacto", "seo"].includes(hash)) switchTab(hash);
+      // Honor ?tab= on first load (legacy hash also supported).
+      const url = new URL(window.location.href);
+      const queryTab = (url.searchParams.get("tab") || "").toLowerCase();
+      const hashTab = (window.location.hash || "").replace("#", "").toLowerCase();
+      const initial = ["hero", "editorial", "contacto", "seo"].includes(queryTab)
+        ? queryTab
+        : (["hero", "editorial", "contacto", "seo"].includes(hashTab) ? hashTab : "hero");
+      switchTab(initial);
     };
 
     // ----- Hero card form ↔ config -----
@@ -3328,20 +3414,18 @@ const DEFAULT_HERO_CARD = {
       $$("[data-page-tab]").forEach(b => {
         b.classList.toggle("cas-pagechip-active", b.getAttribute("data-page-tab") === key);
       });
-      // Update breadcrumb sub-segment so it reads "Landing Page · Home" etc.
-      const pageLabelMap = {
-        home: "Home", catalogo: "Catálogo", articulos: "Artículos",
-        filosofia: "Filosofía", poesia: "Poesía", autores: "Autores",
-        contacto: "Contacto",
-      };
-      const bcExtra = document.querySelector("[data-breadcrumb-page]");
-      if (bcExtra) bcExtra.textContent = pageLabelMap[key] || "Home";
       if (push) {
         const url = new URL(window.location.href);
         if (key === "home") url.searchParams.delete("page");
         else url.searchParams.set("page", key);
+        // Switching off Home invalidates ?tab= (only Home has tabs).
+        if (key !== "home") url.searchParams.delete("tab");
         window.history.replaceState({}, "", url.toString());
       }
+      // Sync the breadcrumb's trailing crumbs.
+      const url = new URL(window.location.href);
+      const tabKey = (url.searchParams.get("tab") || "hero").toLowerCase();
+      updateBreadcrumbCrumbs(key, tabKey);
       window.dispatchEvent(new CustomEvent("cas:page-tab-change", { detail: { key } }));
     };
     const wirePageTabs = () => {

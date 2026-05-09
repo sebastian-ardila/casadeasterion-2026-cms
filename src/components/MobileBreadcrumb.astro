@@ -25,10 +25,13 @@ const segments = path.split("/").filter(Boolean);
 const showCrumbs = segments.length > 0;
 
 // Special-case /site: it's a single-route page that switches sub-views
-// via ?page= (Home / Catálogo / Artículos / …). When a sub-view is
-// active, append an extra crumb so the trail reads
-// "Inicio › Landing Page › Catálogo". The label can also be updated
-// client-side by JS as the user clicks a chip — see [data-breadcrumb-pagetab].
+// via ?page= (Home / Catálogo / Artículos / …) and ?tab= (Hero /
+// Editorial / Contacto / SEO inside Home). When the user is on Home,
+// the trail reads "Inicio › Webpage › Home › Hero". On any other
+// page-tab there's no inner tab nav so the trail stops at that
+// sub-page (e.g. "Inicio › Webpage › Catálogo"). Both extra crumbs
+// can be updated client-side as the user clicks a chip / tab —
+// see [data-breadcrumb-pagetab] / [data-breadcrumb-tab].
 const SITE_PAGE_LABELS: Record<string, string> = {
   home: "Home",
   catalogo: "Catálogo",
@@ -38,20 +41,30 @@ const SITE_PAGE_LABELS: Record<string, string> = {
   autores: "Autores",
   contacto: "Contacto",
 };
+const SITE_TAB_LABELS: Record<string, string> = {
+  hero: "Hero",
+  editorial: "Editorial",
+  contacto: "Contacto",
+  seo: "SEO",
+};
 const isSite = segments[0] === "site" && segments.length === 1;
 const sitePageKey = isSite
   ? (Astro.url.searchParams.get("page") || "home").toLowerCase()
   : null;
 const sitePageLabel = sitePageKey ? (SITE_PAGE_LABELS[sitePageKey] ?? "Home") : null;
+const siteTabKey = isSite && sitePageKey === "home"
+  ? (Astro.url.searchParams.get("tab") || "hero").toLowerCase()
+  : null;
+const siteTabLabel = siteTabKey ? (SITE_TAB_LABELS[siteTabKey] ?? "Hero") : null;
 
-type Crumb = { label: string; href: string | null };
+type Crumb = { label: string; href: string | null; dataKey?: string };
 const crumbs: Crumb[] = showCrumbs
   ? [
       { label: "Inicio", href: "/" },
       ...segments.map((seg, idx) => {
         const isLast = idx === segments.length - 1;
-        // On /site, demote the "Landing Page" segment to a link so the
-        // appended sub-page crumb is the actual leaf.
+        // On /site, demote the "Webpage" segment to a link so the
+        // appended sub-page / sub-tab crumbs are the actual leaf.
         const href = isLast && !isSite
           ? null
           : "/" + segments.slice(0, idx + 1).join("/");
@@ -60,7 +73,19 @@ const crumbs: Crumb[] = showCrumbs
           : labels[seg] ?? decodeURIComponent(seg).replace(/-/g, " ");
         return { label, href };
       }),
-      ...(isSite && sitePageLabel ? [{ label: sitePageLabel, href: null }] : []),
+      ...(isSite && sitePageLabel
+        ? [{
+            label: sitePageLabel,
+            // If there's a deeper crumb (sub-tab inside Home), this
+            // crumb is no longer the leaf so it becomes a link back
+            // to /site (?page= clears since it's the implicit home).
+            href: siteTabLabel ? "/site" : null,
+            dataKey: "pagetab",
+          }]
+        : []),
+      ...(siteTabLabel
+        ? [{ label: siteTabLabel, href: null, dataKey: "tab" }]
+        : []),
     ]
   : [];
 ---
@@ -73,15 +98,16 @@ const crumbs: Crumb[] = showCrumbs
     <ol class="px-5 md:px-8 lg:px-10 h-full flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] overflow-x-auto whitespace-nowrap">
       {crumbs.map((crumb, idx) => {
         const last = idx === crumbs.length - 1;
+        const dataAttr = crumb.dataKey ? { [`data-breadcrumb-${crumb.dataKey}`]: "" } : {};
         return (
-          <li class="flex items-center gap-1.5 shrink-0">
+          <li class="flex items-center gap-1.5 shrink-0" {...dataAttr}>
             {crumb.href ? (
               <a href={crumb.href} class="text-stone-500 hover:text-stone-900 transition" data-astro-prefetch>
-                {crumb.label}
+                <span data-breadcrumb-label>{crumb.label}</span>
               </a>
             ) : (
               <span class:list={[last ? "text-stone-900 font-medium" : "text-stone-500", "first-letter:capitalize"]}>
-                {crumb.label}
+                <span data-breadcrumb-label>{crumb.label}</span>
               </span>
             )}
             {!last && (
