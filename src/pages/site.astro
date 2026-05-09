@@ -2035,10 +2035,10 @@ const DEFAULT_HERO_CARD = {
       // ColorEditor: wire native picker, X reset, and editable hex
       // for every instance. We listen at the form root so newly
       // hydrated inputs work without per-element wiring.
-      const form = $("[data-site-form]");
-      if (form) {
+      const colorRoot = $("[data-site-form]");
+      if (colorRoot) {
         // Picker change — sync hidden input, mark editor "set", repaint.
-        form.addEventListener("input", (e) => {
+        colorRoot.addEventListener("input", (e) => {
           const inp = e.target.closest?.("[data-color-input]");
           if (!inp) return;
           const editor = inp.closest("[data-color-editor]");
@@ -2049,7 +2049,7 @@ const DEFAULT_HERO_CARD = {
           renderColorEditor(editor);
         });
         // X reset.
-        form.addEventListener("click", (e) => {
+        colorRoot.addEventListener("click", (e) => {
           const btn = e.target.closest?.("[data-color-reset]");
           if (!btn) return;
           e.preventDefault();
@@ -2081,7 +2081,7 @@ const DEFAULT_HERO_CARD = {
         // Editable hex — typing a valid #abc / #abcdef updates the
         // picker live. Enter blurs to commit; blur normalizes the
         // displayed text.
-        form.addEventListener("input", (e) => {
+        colorRoot.addEventListener("input", (e) => {
           const el = e.target.closest?.("[data-color-hex]");
           if (!el || !el.isContentEditable) return;
           const editor = el.closest("[data-color-editor]");
@@ -2108,7 +2108,7 @@ const DEFAULT_HERO_CARD = {
           inp.dispatchEvent(new Event("input", { bubbles: true }));
           inp.dispatchEvent(new Event("change", { bubbles: true }));
         });
-        form.addEventListener("keydown", (e) => {
+        colorRoot.addEventListener("keydown", (e) => {
           const el = e.target.closest?.("[data-color-hex]");
           if (!el || !el.isContentEditable) return;
           if (e.key === "Enter") {
@@ -2116,7 +2116,7 @@ const DEFAULT_HERO_CARD = {
             el.blur();
           }
         });
-        form.addEventListener("focusout", (e) => {
+        colorRoot.addEventListener("focusout", (e) => {
           const el = e.target.closest?.("[data-color-hex]");
           if (!el || !el.isContentEditable) return;
           const editor = el.closest("[data-color-editor]");
