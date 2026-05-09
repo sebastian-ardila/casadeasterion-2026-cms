@@ -274,6 +274,41 @@ const DEFAULT_HERO_CARD = {
     </button>
   </nav>
 
+  {/* Inner tab nav (Hero / Editorial / Contacto / SEO). Sits right
+      after the page-nav so the two stickies stack flush — putting
+      the h1 between them broke that contact: the cas-tabs natural
+      flow position was below the h1 and never reached the sticky
+      pin on its own. JS hides this nav when the user switches to a
+      sub-page that's not Home (it only applies to Home). */}
+  <nav class="cas-tabs flex items-stretch gap-1 border-b border-stone-200 overflow-x-auto bg-white" data-tab-nav data-page-only="home">
+    <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
+      <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
+      <span>Hero</span>
+    </button>
+    <button type="button" data-tab="editorial" class="cas-tab">
+      <Icon name="lucide:scroll-text" class="w-4 h-4" aria-hidden="true" />
+      <span>Editorial</span>
+    </button>
+    <button type="button" data-tab="contacto" class="cas-tab">
+      <Icon name="lucide:phone" class="w-4 h-4" aria-hidden="true" />
+      <span>Contacto</span>
+    </button>
+    <button type="button" data-tab="seo" class="cas-tab">
+      <Icon name="lucide:search" class="w-4 h-4" aria-hidden="true" />
+      <span>SEO</span>
+    </button>
+    <div class="md:hidden ml-auto flex items-center gap-1 pl-2 self-center" data-fullscreen-launchers>
+      <button type="button" data-fullscreen-tab="desktop" class="cas-fs-btn" aria-label="Vista web a pantalla completa" title="Vista web a pantalla completa">
+        <Icon name="lucide:monitor" class="w-4 h-4" aria-hidden="true" />
+        <span class="hidden sm:inline">Web</span>
+      </button>
+      <button type="button" data-fullscreen-tab="mobile" class="cas-fs-btn" aria-label="Vista mobile a pantalla completa" title="Vista mobile a pantalla completa">
+        <Icon name="lucide:smartphone" class="w-4 h-4" aria-hidden="true" />
+        <span class="hidden sm:inline">Mobile</span>
+      </button>
+    </div>
+  </nav>
+
   <div class="mb-6">
     <h1 class="font-serif text-3xl md:text-4xl mb-2">Webpage</h1>
     <p class="text-stone-500 max-w-2xl">
@@ -293,50 +328,6 @@ const DEFAULT_HERO_CARD = {
   )}
 
   <div data-page-tab-panel="home">
-
-  {/* Tab nav — sticky beneath the breadcrumb on scroll. The breadcrumb is
-      ~40px tall (py-2.5 + 11px text) on every breakpoint; on mobile we
-      add the 56px mobile-app header. So sticky top values: 96px mobile,
-      40px desktop (right under the breadcrumb's bottom edge). The
-      preview buttons on the right open a fullscreen overlay. */}
-  {/* Tab nav: sticky inside <main>'s scroll container. The
-      breadcrumb now lives OUTSIDE main (above ListPanel + main),
-      so on md+ main's scroll origin is at 0 — the tabs stick
-      flush at the top. On mobile the body scrolls and the
-      breadcrumb stays at top-14 (56px) so the tabs sit at 56+40=96. */}
-  <nav class="cas-tabs flex items-stretch gap-1 mb-6 border-b border-stone-200 overflow-x-auto bg-white -mx-5 md:-mx-8 lg:-mx-10 px-5 md:px-8 lg:px-10" data-tab-nav>
-    <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
-      <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
-      <span>Hero</span>
-    </button>
-    <button type="button" data-tab="editorial" class="cas-tab">
-      <Icon name="lucide:scroll-text" class="w-4 h-4" aria-hidden="true" />
-      <span>Editorial</span>
-    </button>
-    <button type="button" data-tab="contacto" class="cas-tab">
-      <Icon name="lucide:phone" class="w-4 h-4" aria-hidden="true" />
-      <span>Contacto</span>
-    </button>
-    <button type="button" data-tab="seo" class="cas-tab">
-      <Icon name="lucide:search" class="w-4 h-4" aria-hidden="true" />
-      <span>SEO</span>
-    </button>
-    {/* Right side: fullscreen preview launchers — only on phone-sized
-        screens AND only when the Hero tab is active (other tabs
-        don't have a card preview to launch). switchTab() toggles
-        the [hidden] attribute on this wrapper. */}
-    <div class="md:hidden ml-auto flex items-center gap-1 pl-2 self-center" data-fullscreen-launchers>
-      <button type="button" data-fullscreen-tab="desktop" class="cas-fs-btn" aria-label="Vista web a pantalla completa" title="Vista web a pantalla completa">
-        <Icon name="lucide:monitor" class="w-4 h-4" aria-hidden="true" />
-        <span class="hidden sm:inline">Web</span>
-      </button>
-      <button type="button" data-fullscreen-tab="mobile" class="cas-fs-btn" aria-label="Vista mobile a pantalla completa" title="Vista mobile a pantalla completa">
-        <Icon name="lucide:smartphone" class="w-4 h-4" aria-hidden="true" />
-        <span class="hidden sm:inline">Mobile</span>
-      </button>
-    </div>
-  </nav>
-
   <form method="POST" data-site-form>
     <input type="hidden" name="hero_card_config_json" data-hero-json>
     <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
@@ -886,18 +877,37 @@ const DEFAULT_HERO_CARD = {
   }
 
   /* === Tab nav (Hero / Editorial / Contacto / SEO) ===
-     Sticky beneath the page-nav. The page-nav height is measured by
-     JS and exposed as --cas-pagenav-h on the document root, so the
-     two stickies stack cleanly even when the user resizes the
-     window or the page-nav reflows. Fallback: 48px (≈ stuck pagenav). */
+     Sibling of the page-nav so it can sticky right beneath it
+     without an h1 in between blocking the natural-flow position
+     from reaching the sticky pin. Negative side margins extend the
+     bar to main's full content width (matching the page-nav's bar)
+     so the bottom border spans edge-to-edge. The page-nav height
+     is measured by JS and exposed as --cas-pagenav-h, so the two
+     stickies stack flush even when the page-nav reflows or
+     compacts. Fallback: 48px (≈ stuck pagenav height). */
   .cas-tabs {
     position: sticky;
-    top: calc(96px + var(--cas-pagenav-h, 48px));
     z-index: 10;
-    margin-bottom: 1.5rem;
+    top: calc(96px + var(--cas-pagenav-h, 48px));
+    margin: 0 -1.25rem 1.5rem;
+    padding: 0 1.25rem;
   }
   @media (min-width: 768px) {
-    .cas-tabs { top: var(--cas-pagenav-h, 48px); }
+    .cas-tabs {
+      top: var(--cas-pagenav-h, 48px);
+      margin-left: -2rem;
+      margin-right: -2rem;
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .cas-tabs {
+      margin-left: -2.5rem;
+      margin-right: -2.5rem;
+      padding-left: 2.5rem;
+      padding-right: 2.5rem;
+    }
   }
   .cas-tab {
     display: inline-flex;
@@ -3445,6 +3455,13 @@ const DEFAULT_HERO_CARD = {
       });
       $$("[data-page-tab]").forEach(b => {
         b.classList.toggle("cas-pagechip-active", b.getAttribute("data-page-tab") === key);
+      });
+      // Bars that only apply to a specific page (e.g. the inner
+      // Hero/Editorial/Contacto/SEO tab nav lives outside the panel
+      // now so it can stack flush under the page-nav, but it should
+      // only be visible while the user is on Home).
+      $$("[data-page-only]").forEach(el => {
+        el.hidden = el.getAttribute("data-page-only") !== key;
       });
       if (push) {
         const url = new URL(window.location.href);
