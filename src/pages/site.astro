@@ -259,8 +259,11 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
-  {/* Tab nav */}
-  <nav class="cas-tabs flex gap-1 mb-6 border-b border-stone-200 overflow-x-auto" data-tab-nav>
+  {/* Tab nav — sticky on mobile under the header+breadcrumb (top ≈ 88px),
+      and at the top of <main>'s scroll container on desktop. The
+      preview buttons on the right open a fullscreen overlay that
+      mirrors the inline preview at viewport size. */}
+  <nav class="cas-tabs sticky top-[88px] md:top-0 z-20 flex items-stretch gap-1 mb-6 border-b border-stone-200 overflow-x-auto bg-white -mx-5 md:-mx-8 lg:-mx-10 px-5 md:px-8 lg:px-10" data-tab-nav>
     <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
       <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
       <span>Hero</span>
@@ -277,6 +280,17 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       <Icon name="lucide:search" class="w-4 h-4" aria-hidden="true" />
       <span>SEO</span>
     </button>
+    {/* Right side: fullscreen preview launchers */}
+    <div class="ml-auto flex items-center gap-1 pl-2 self-center">
+      <button type="button" data-fullscreen-tab="desktop" class="cas-fs-btn" aria-label="Vista web a pantalla completa" title="Vista web a pantalla completa">
+        <Icon name="lucide:monitor" class="w-4 h-4" aria-hidden="true" />
+        <span class="hidden sm:inline">Web</span>
+      </button>
+      <button type="button" data-fullscreen-tab="mobile" class="cas-fs-btn" aria-label="Vista mobile a pantalla completa" title="Vista mobile a pantalla completa">
+        <Icon name="lucide:smartphone" class="w-4 h-4" aria-hidden="true" />
+        <span class="hidden sm:inline">Mobile</span>
+      </button>
+    </div>
   </nav>
 
   <form method="POST" data-site-form>
@@ -484,6 +498,38 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       )}
     </fieldset>
   </form>
+
+  {/* Fullscreen preview modal — outside the form so the submit button
+      doesn't pick up its inputs. Its DOM mirrors the inline preview
+      shape so the same render fns can target either. */}
+  <div data-fullscreen-modal hidden class="fixed inset-0 z-[60] bg-stone-900/96 flex flex-col">
+    <header class="flex items-center justify-between px-4 h-14 border-b border-stone-700 text-stone-100 shrink-0">
+      <div class="flex items-center gap-3 min-w-0">
+        <span data-fullscreen-platform class="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider px-2 py-1 rounded bg-stone-800">
+          <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
+          <span data-fullscreen-platform-label>Web</span>
+        </span>
+        <span data-fullscreen-meta class="text-[11px] text-stone-400 uppercase tracking-wider truncate">1440 × 720</span>
+      </div>
+      <button type="button" data-fullscreen-close class="text-stone-300 hover:text-white p-2 -mr-2 transition-colors cursor-pointer" aria-label="Cerrar preview">
+        <Icon name="lucide:x" class="w-5 h-5" aria-hidden="true" />
+      </button>
+    </header>
+    <div class="flex-1 relative overflow-hidden" data-fullscreen-frame>
+      <div class="relative" data-fullscreen-stage>
+        <div data-fullscreen-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
+        <a data-fullscreen-card class="z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
+          <div>
+            <p data-fullscreen-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
+            <h1 data-fullscreen-title class="leading-[1.1] mb-3"></h1>
+            <p data-fullscreen-body class="opacity-80 leading-relaxed"></p>
+          </div>
+          <span data-fullscreen-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
+        </a>
+        <img data-fullscreen-mobile-img alt="" class="block w-full" style="display:none;" />
+      </div>
+    </div>
+  </div>
 </AppLayout>
 
 <style is:global>
@@ -509,6 +555,30 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
   /* Compact tabs on mobile: smaller padding, smaller font, hide nothing */
   @media (max-width: 640px) {
     .cas-tab { padding: 0.5rem 0.625rem; font-size: 0.8125rem; gap: 0.375rem; }
+  }
+
+  /* Fullscreen preview launcher buttons sit at the right of the tabs nav */
+  .cas-fs-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(120 113 108);
+    background: rgb(245 245 244);
+    border: 1px solid rgb(214 211 209);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .cas-fs-btn:hover {
+    background: rgb(28 25 23);
+    color: white;
+    border-color: rgb(28 25 23);
   }
 
   /* === Inputs === */
@@ -881,15 +951,80 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       card.href = c.cta_href || "#";
     };
 
-    const renderHeroPreview = () => {
-      const stage = $("[data-preview-stage]");
-      const card = $("[data-preview-card]");
-      const bgImage = $("[data-preview-bg-image]");
-      const mobileImg = $("[data-preview-mobile-img]");
-      const meta = $("[data-preview-meta]");
-      const frame = $("[data-preview-frame]");
-      if (!stage || !card || !frame) return;
+    // Render into a target preview (inline or fullscreen). Pulls the
+    // current cfg from the form once at the top so both targets stay
+    // in sync.
+    const renderInto = (els, platform, cfg, heroImageUrl) => {
+      if (!els.stage || !els.card || !els.frame) return;
+      const layout = platform === "desktop" ? cfg.desktop : cfg.mobile;
+      applyVisuals(els.card, layout);
+      applyContent(els.card, cfg);
 
+      const titleEl = els.card.querySelector("[data-fullscreen-title], [data-preview-title]");
+      if (titleEl) titleEl.style.fontSize = platform === "desktop" ? "3rem" : "1.4rem";
+
+      if (platform === "desktop") {
+        els.stage.style.display = "block";
+        if (els.bgImage) {
+          els.bgImage.style.display = "block";
+          els.bgImage.style.backgroundImage = `url('${heroImageUrl}')`;
+        }
+        if (els.mobileImg) els.mobileImg.style.display = "none";
+        applyDesktopPos(els.card, layout);
+      } else {
+        els.stage.style.display = "flex";
+        els.stage.style.flexDirection = "column";
+        if (els.bgImage) els.bgImage.style.display = "none";
+        applyMobilePos(els.card, layout);
+        if (els.mobileImg) {
+          els.mobileImg.style.display = "block";
+          els.mobileImg.src = heroImageUrl;
+          els.mobileImg.style.width = "100%";
+          els.mobileImg.style.aspectRatio = "4 / 3";
+          els.mobileImg.style.objectFit = "cover";
+          els.mobileImg.style.marginTop = "24px";
+        }
+      }
+
+      const fw = els.frame.clientWidth - 16;
+      const fh = els.frame.clientHeight - 16;
+      const targetW = platform === "desktop" ? FRAME_DESKTOP_W : FRAME_MOBILE_W;
+      const targetH = platform === "desktop" ? FRAME_DESKTOP_H : FRAME_MOBILE_H;
+      const scale = platform === "desktop"
+        ? Math.min(fw / targetW, fh / targetH, 1)
+        : Math.min(fw / targetW, 1);
+      els.stage.style.width = `${targetW}px`;
+      els.stage.style.height = platform === "desktop" ? `${targetH}px` : "auto";
+      els.stage.style.minHeight = platform === "mobile" ? `${targetH}px` : "";
+      els.stage.style.transformOrigin = "top left";
+      els.stage.style.transform = `scale(${scale})`;
+      els.stage.style.position = "absolute";
+      els.stage.style.top = "8px";
+      const scaledW = targetW * scale;
+      const offsetLeft = (els.frame.clientWidth - scaledW) / 2;
+      els.stage.style.left = `${Math.max(8, offsetLeft)}px`;
+
+      if (els.meta) els.meta.textContent = `${platform} · ${targetW} × ${targetH}`;
+    };
+
+    const inlineEls = () => ({
+      stage: $("[data-preview-stage]"),
+      card: $("[data-preview-card]"),
+      bgImage: $("[data-preview-bg-image]"),
+      mobileImg: $("[data-preview-mobile-img]"),
+      frame: $("[data-preview-frame]"),
+      meta: $("[data-preview-meta]"),
+    });
+    const fullscreenEls = () => ({
+      stage: $("[data-fullscreen-stage]"),
+      card: $("[data-fullscreen-card]"),
+      bgImage: $("[data-fullscreen-bg-image]"),
+      mobileImg: $("[data-fullscreen-mobile-img]"),
+      frame: $("[data-fullscreen-frame]"),
+      meta: $("[data-fullscreen-meta]"),
+    });
+
+    const renderHeroPreview = () => {
       const cfg = readHeroForm();
       currentHeroCfg = cfg;
       const heroJson = $("[data-hero-json]");
@@ -903,64 +1038,39 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         if (mirror && mirror !== el) mirror.value = String(v);
       });
 
-      // The site's hero image visible in the preview (mobile + desktop both
-      // use the same uploaded image in their own way).
       const heroImgInput = document.querySelector('input[type="hidden"][name="hero_image_url"]');
       const heroImageUrl = (heroImgInput?.value || "").trim() || HERO_FALLBACK_URL;
 
-      const layout = currentPreviewTab === "desktop" ? cfg.desktop : cfg.mobile;
-      applyVisuals(card, layout);
-      applyContent(card, cfg);
+      // Inline preview (the right-side panel inside the Hero tab)
+      renderInto(inlineEls(), currentPreviewTab, cfg, heroImageUrl);
 
-      // Title size matches the public site
-      const t = card.querySelector("[data-preview-title]");
-      if (t) t.style.fontSize = currentPreviewTab === "desktop" ? "3rem" : "1.4rem";
-
-      if (currentPreviewTab === "desktop") {
-        // Stage: absolute-positioned children (right-half image + card)
-        stage.style.display = "block";
-        bgImage.style.display = "block";
-        bgImage.style.backgroundImage = `url('${heroImageUrl}')`;
-        mobileImg.style.display = "none";
-        applyDesktopPos(card, layout);
-      } else {
-        // Stage: vertical flex; card on top, image below — mirrors the
-        // public site's mobile flex-col stack.
-        stage.style.display = "flex";
-        stage.style.flexDirection = "column";
-        bgImage.style.display = "none";
-        applyMobilePos(card, layout);
-        mobileImg.style.display = "block";
-        mobileImg.src = heroImageUrl;
-        mobileImg.style.width = "100%";
-        mobileImg.style.aspectRatio = "4 / 3";
-        mobileImg.style.objectFit = "cover";
-        mobileImg.style.marginTop = "24px"; // matches mt-6 on the public site
+      // Fullscreen preview, when open
+      const modal = $("[data-fullscreen-modal]");
+      if (modal && !modal.hasAttribute("hidden")) {
+        const fsPlatform = modal.getAttribute("data-current-platform") || "desktop";
+        renderInto(fullscreenEls(), fsPlatform, cfg, heroImageUrl);
       }
+    };
 
-      // Scale the stage to fit the frame.
-      // Desktop: 1440 × 720 fixed. Mobile: 390 wide, height grows to fit
-      // the stacked card + image; we let it overflow visually but clip
-      // via the frame's overflow:hidden if absolutely necessary.
-      const fw = frame.clientWidth - 16;
-      const fh = frame.clientHeight - 16;
-      const targetW = currentPreviewTab === "desktop" ? FRAME_DESKTOP_W : FRAME_MOBILE_W;
-      const targetH = currentPreviewTab === "desktop" ? FRAME_DESKTOP_H : FRAME_MOBILE_H;
-      const scale = currentPreviewTab === "desktop"
-        ? Math.min(fw / targetW, fh / targetH, 1)
-        : Math.min(fw / targetW, 1);
-      stage.style.width = `${targetW}px`;
-      stage.style.height = currentPreviewTab === "desktop" ? `${targetH}px` : "auto";
-      stage.style.minHeight = currentPreviewTab === "mobile" ? `${targetH}px` : "";
-      stage.style.transformOrigin = "top left";
-      stage.style.transform = `scale(${scale})`;
-      stage.style.position = "absolute";
-      stage.style.top = "8px";
-      const scaledW = targetW * scale;
-      const offsetLeft = (frame.clientWidth - scaledW) / 2;
-      stage.style.left = `${Math.max(8, offsetLeft)}px`;
-
-      if (meta) meta.textContent = `${currentPreviewTab} · ${targetW} × ${targetH}`;
+    // Open / close fullscreen
+    const openFullscreen = (platform) => {
+      const modal = $("[data-fullscreen-modal]");
+      if (!modal) return;
+      modal.removeAttribute("hidden");
+      modal.setAttribute("data-current-platform", platform);
+      const label = $("[data-fullscreen-platform-label]");
+      if (label) label.textContent = platform === "desktop" ? "Web" : "Mobile";
+      document.body.style.overflow = "hidden";
+      // Render now and on next tick (to ensure layout is finalized)
+      renderHeroPreview();
+      requestAnimationFrame(renderHeroPreview);
+    };
+    const closeFullscreen = () => {
+      const modal = $("[data-fullscreen-modal]");
+      if (!modal) return;
+      modal.setAttribute("hidden", "");
+      modal.removeAttribute("data-current-platform");
+      document.body.style.overflow = "";
     };
 
     // ----- Hero fallback "En uso / Inactiva" badge -----
@@ -1101,6 +1211,19 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       });
       $$("[data-preview-tab]").forEach(btn => {
         btn.addEventListener("click", () => switchPreviewTab(btn.getAttribute("data-preview-tab")));
+      });
+
+      // Fullscreen launcher buttons in the tab nav
+      $$("[data-fullscreen-tab]").forEach(btn => {
+        btn.addEventListener("click", () => openFullscreen(btn.getAttribute("data-fullscreen-tab")));
+      });
+      const fsClose = $("[data-fullscreen-close]");
+      if (fsClose) fsClose.addEventListener("click", closeFullscreen);
+      // ESC closes the fullscreen modal
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const modal = $("[data-fullscreen-modal]");
+        if (modal && !modal.hasAttribute("hidden")) closeFullscreen();
       });
 
       // Border-radius "link corners" toggle: when on, editing one corner
