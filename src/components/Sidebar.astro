@@ -10,15 +10,18 @@ const { user, permissions } = Astro.props;
 const path = Astro.url.pathname;
 const isOwner = user?.role === "owner";
 
-const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean }> = [
-  { href: "/", label: "Inicio", icon: "lucide:home" },
-  { href: "/books", label: "Libros", icon: "lucide:book-open", resource: "books" },
-  { href: "/posts", label: "Artículos", icon: "lucide:newspaper", resource: "posts" },
-  { href: "/authors", label: "Autores", icon: "lucide:users", resource: "authors" },
-  { href: "/categories", label: "Categorías", icon: "lucide:folder-tree", resource: "categories" },
-  { href: "/site", label: "Landing Page", icon: "lucide:layout-template", resource: "site" },
-  { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail", ownerOnly: true },
-  { href: "/admins", label: "Usuarios", icon: "lucide:users-round", managerOnly: true },
+// `countKey`: identifies which value from /api/sidebar-counts the JS
+// should drop into this row's badge. Items without a key (Inicio,
+// Landing Page) just don't render a badge.
+const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string }> = [
+  { href: "/",            label: "Inicio",       icon: "lucide:home" },
+  { href: "/books",       label: "Libros",       icon: "lucide:book-open",       resource: "books",      countKey: "books" },
+  { href: "/posts",       label: "Artículos",    icon: "lucide:newspaper",       resource: "posts",      countKey: "posts" },
+  { href: "/authors",     label: "Autores",      icon: "lucide:users",           resource: "authors",    countKey: "authors" },
+  { href: "/categories",  label: "Categorías",   icon: "lucide:folder-tree",     resource: "categories", countKey: "categories" },
+  { href: "/site",        label: "Landing Page", icon: "lucide:layout-template", resource: "site" },
+  { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail",            ownerOnly: true,        countKey: "subscribers" },
+  { href: "/admins",      label: "Usuarios",     icon: "lucide:users-round",     managerOnly: true,      countKey: "admins" },
 ];
 
 const isManager = user?.role === "owner" || user?.role === "admin";
@@ -91,12 +94,15 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         href={item.href}
         data-astro-prefetch
         class:list={[
-          "nav-link inline-flex items-center gap-2.5",
+          "nav-link cas-nav-row",
           isActive(item.href) && "nav-link-active",
         ]}
       >
         <Icon name={item.icon} class="w-4 h-4 shrink-0" aria-hidden="true" />
-        <span>{item.label}</span>
+        <span class="cas-nav-label">{item.label}</span>
+        {item.countKey && (
+          <span class="cas-nav-count" data-count-key={item.countKey} aria-hidden="true"></span>
+        )}
       </a>
     ))}
   </nav>
@@ -147,6 +153,40 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
   .cms-sidebar { height: 100vh; }
   @supports (height: 100dvh) {
     .cms-sidebar { height: 100dvh; }
+  }
+
+  /* Sidebar row layout: icon · label · (optional count badge).
+     The label takes the remaining space and truncates if it's too
+     long; the badge sits flush right with a comfortable gap. */
+  .cas-nav-row { min-width: 0; }
+  .cas-nav-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cas-nav-count {
+    flex: 0 0 auto;
+    margin-left: 0.5rem;
+    padding: 0 0.5rem;
+    min-width: 1.5rem;
+    height: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    border-radius: 9999px;
+    background: rgb(231 229 228);          /* stone-200 */
+    color: rgb(68 64 60);                  /* stone-700 */
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .cas-nav-count:empty { display: none; }  /* hide until JS fills it */
+  .nav-link-active .cas-nav-count {
+    background: rgba(255,255,255,0.18);
+    color: rgb(245 245 244);
   }
 </style>
 
@@ -226,6 +266,68 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         iconClose?.classList.add("hidden");
       }
     });
+
+    // ---- Count badges -------------------------------------------------
+    // Format integers compactly so a 12 000-author catalog still fits the
+    // sidebar (12K) and a 1 234 567-row table doesn't blow the layout
+    // (1.2M). Single decimal kept only when it adds information; trailing
+    // ".0" is stripped.
+    const formatCount = (n) => {
+      if (!Number.isFinite(n) || n < 0) return "";
+      if (n < 1000) return String(n);
+      const fmt = (v, suffix) => {
+        const s = v.toFixed(1);
+        return (s.endsWith(".0") ? s.slice(0, -2) : s) + suffix;
+      };
+      if (n < 10_000)        return fmt(n / 1000, "K");
+      if (n < 1_000_000)     return Math.round(n / 1000) + "K";
+      if (n < 10_000_000)    return fmt(n / 1_000_000, "M");
+      if (n < 1_000_000_000) return Math.round(n / 1_000_000) + "M";
+      return fmt(n / 1_000_000_000, "B");
+    };
+
+    const SIDEBAR_COUNTS_CACHE_KEY = "cas:sidebar-counts";
+    const applyCounts = (counts) => {
+      if (!counts || typeof counts !== "object") return;
+      document.querySelectorAll("[data-count-key]").forEach((el) => {
+        const key = el.getAttribute("data-count-key");
+        if (!key) return;
+        const v = counts[key];
+        // Missing key (no permission) → leave empty so :empty CSS hides it.
+        el.textContent = typeof v === "number" ? formatCount(v) : "";
+        if (typeof v === "number") el.title = String(v);
+      });
+    };
+
+    // Read cached counts immediately so the badges show on first paint
+    // even before /api/sidebar-counts responds. Then refresh in the
+    // background.
+    try {
+      const cached = sessionStorage.getItem(SIDEBAR_COUNTS_CACHE_KEY);
+      if (cached) applyCounts(JSON.parse(cached));
+    } catch {}
+
+    let countsInflight = false;
+    const refreshCounts = async () => {
+      if (countsInflight) return;
+      countsInflight = true;
+      try {
+        const res = await fetch("/api/sidebar-counts", { credentials: "same-origin" });
+        if (!res.ok) return;
+        const data = await res.json();
+        applyCounts(data);
+        try { sessionStorage.setItem(SIDEBAR_COUNTS_CACHE_KEY, JSON.stringify(data)); } catch {}
+      } catch {
+        // Network hiccup — keep whatever's already rendered.
+      } finally {
+        countsInflight = false;
+      }
+    };
+
+    // Refresh on every navigation: a save in /posts/[id] may have just
+    // bumped the count, and persist:transitions don't re-render the
+    // sidebar so we have to re-fetch ourselves.
+    document.addEventListener("astro:page-load", refreshCounts);
 
     // Re-sync the active state of nav links. Called immediately on click and
     // again when a navigation completes — so the highlighted item updates the
