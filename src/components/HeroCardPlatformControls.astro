@@ -133,14 +133,26 @@ const FONT_OPTIONS = [
   <p class="hcc-hint mt-1">Ancho = 0 → se adapta al contenedor (recomendado para mobile).</p>
 </div>
 
-{/* Position: compact layout — pad + inputs side-by-side */}
+{/* Position editor.
+    The pad is sized to the platform's frame aspect ratio (1440×720
+    desktop / 390×720 mobile) and shows a card-shaped overlay scaled
+    to the actual card width/height. Dragging or clicking inside the
+    pad re-centers the card at the cursor, clamped so the card never
+    leaves the frame bounds — this prevents nonsensical positions
+    that would render the card off-screen on the public site. */}
 <div>
   <label class="label">Posición</label>
   <div class="hcc-position-block">
-    <div class="hcc-position-pad" data-position-pad={p} role="application" aria-label="Arrastra para posicionar la card">
-      <span class="hcc-position-axis hcc-position-axis-h" aria-hidden="true"></span>
-      <span class="hcc-position-axis hcc-position-axis-v" aria-hidden="true"></span>
-      <span class="hcc-position-dot" data-position-dot></span>
+    <div
+      class="hcc-position-pad"
+      data-position-pad={p}
+      data-frame-w={p === "desktop" ? "1440" : "390"}
+      data-frame-h={p === "desktop" ? "720" : "720"}
+      role="application"
+      aria-label="Arrastra la card para posicionarla dentro del frame"
+    >
+      <span class="hcc-position-frame-label" aria-hidden="true">{p === "desktop" ? "1440×720" : "390×720"}</span>
+      <span class="hcc-position-card" data-position-card aria-hidden="true"></span>
     </div>
     <div class="hcc-position-fields">
       <label class="hcc-num-cell hcc-num-cell-tight">
@@ -149,7 +161,7 @@ const FONT_OPTIONS = [
           X
         </span>
         <div class="hcc-num-input-wrap">
-          <input type="number" data-bind={`${p}.offset_x`} min="-400" max="1000" class="hcc-input hcc-num-input" />
+          <input type="number" data-bind={`${p}.offset_x`} min="0" max="2000" class="hcc-input hcc-num-input" />
           <span class="hcc-num-suffix">px</span>
         </div>
       </label>
@@ -159,13 +171,13 @@ const FONT_OPTIONS = [
           Y
         </span>
         <div class="hcc-num-input-wrap">
-          <input type="number" data-bind={`${p}.offset_y`} min="-300" max="300" class="hcc-input hcc-num-input" />
+          <input type="number" data-bind={`${p}.offset_y`} min="-2000" max="2000" class="hcc-input hcc-num-input" />
           <span class="hcc-num-suffix">px</span>
         </div>
       </label>
     </div>
   </div>
-  <p class="hcc-hint mt-1">Pad: X = 0–400, Y = -100–100. Para valores fuera de rango, edita directamente.</p>
+  <p class="hcc-hint mt-1">El rectángulo refleja el tamaño real de la card dentro del frame {p === "desktop" ? "1440×720" : "390×720"}.</p>
 </div>
 
 {/* Shadow */}
