@@ -121,6 +121,12 @@ const id = `up-${name}-${Math.random().toString(36).slice(2, 8)}`;
         action.textContent = "Seleccionar imagen";
         clearBtn.classList.add("hidden");
       }
+      wrapper.dispatchEvent(
+        new CustomEvent("cas:imageupload:change", {
+          bubbles: true,
+          detail: { url: url || "", name: urlInput.name },
+        }),
+      );
     };
 
     const upload = async (file) => {
