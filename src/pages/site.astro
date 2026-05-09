@@ -327,8 +327,10 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       <Icon name="lucide:search" class="w-4 h-4" aria-hidden="true" />
       <span>SEO</span>
     </button>
-    {/* Right side: fullscreen preview launchers */}
-    <div class="ml-auto flex items-center gap-1 pl-2 self-center">
+    {/* Right side: fullscreen preview launchers — only on phone-sized
+        screens. On md+ the inline preview pane is already visible, so
+        these buttons would be redundant. */}
+    <div class="md:hidden ml-auto flex items-center gap-1 pl-2 self-center">
       <button type="button" data-fullscreen-tab="desktop" class="cas-fs-btn" aria-label="Vista web a pantalla completa" title="Vista web a pantalla completa">
         <Icon name="lucide:monitor" class="w-4 h-4" aria-hidden="true" />
         <span class="hidden sm:inline">Web</span>
