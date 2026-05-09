@@ -5,6 +5,7 @@ import ImageUpload from "~/components/ImageUpload.astro";
 import CardHeader from "~/components/CardHeader.astro";
 import Dropdown from "~/components/Dropdown.astro";
 import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astro";
+import ColorEditor from "~/components/ColorEditor.astro";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
@@ -272,29 +273,17 @@ const DEFAULT_HERO_CARD = {
                   (per-platform, set in "Estilo de la card") and the
                   card's optional bg image (also per-platform). */}
               <div class="block min-w-0">
-                <span class="label flex items-center justify-between gap-2">
-                  <span class="flex items-center gap-1.5">
-                    <Icon name="lucide:paint-bucket" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
-                    Color de fondo del hero
-                  </span>
-                  <button type="button" class="text-[11px] uppercase tracking-wider text-stone-500 hover:text-stone-900 underline underline-offset-2" data-reset-hero-bg>
-                    Restablecer
-                  </button>
+                <span class="label flex items-center gap-1.5">
+                  <Icon name="lucide:paint-bucket" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                  Color de fondo del hero
                 </span>
-                <p class="hcc-hint mb-2">Color visible detrás de la card y alrededor de la imagen. Si lo dejas vacío usa el color por defecto del sitio.</p>
-                <div class="hcc-color-block hcc-color-block--solo" data-hero-bg-block>
-                  <label class="hcc-swatch-wrap" aria-label="Color de fondo del hero">
-                    <input type="color" data-hero-bg-input class="hcc-swatch-input" />
-                    <span class="hcc-swatch" data-hero-bg-swatch></span>
-                  </label>
-                  <div class="hcc-color-info">
-                    <span class="hcc-color-hex" data-hero-bg-hex>Por defecto</span>
-                  </div>
-                </div>
-                {/* Real submitted value lives in this hidden input; the
-                    color picker above only drives the UI so we can
-                    represent the "use site default" empty state. */}
-                <input type="hidden" name="hero_bg_color" value="" data-hero-bg-hidden />
+                <p class="hcc-hint mb-2">Color visible detrás de la card y alrededor de la imagen. Pulsa la X para volver al color por defecto del sitio.</p>
+                <ColorEditor
+                  hiddenName="hero_bg_color"
+                  defaultValue=""
+                  ariaLabel="Color de fondo del hero"
+                  editorId="hero-bg"
+                />
               </div>
               <ImageUpload
                 name="hero_image_url"
@@ -771,13 +760,61 @@ const DEFAULT_HERO_CARD = {
   .hcc-color-info {
     flex: 1;
     min-width: 0;
-    padding: 0 0.625rem;
+    padding: 0 0.4rem 0 0.625rem;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto auto;
     gap: 0.5rem;
     align-items: center;
   }
-  .hcc-color-block--solo .hcc-color-info { grid-template-columns: 1fr; }
+  /* Solo variant has just the hex + reset X — no range / no pct. */
+  .hcc-color-block--solo .hcc-color-info {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  /* Editable hex: looks like text by default; gets a tinted bg on
+     hover/focus so users discover the click affordance. */
+  .hcc-color-hex[contenteditable="true"] {
+    cursor: text;
+    padding: 1px 4px;
+    border-radius: 3px;
+    transition: background-color 0.12s;
+    outline: none;
+    user-select: text;
+    /* Truncate when there's not enough room rather than pushing the X */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .hcc-color-hex[contenteditable="true"]:hover { background: rgb(245 245 244); }
+  .hcc-color-hex[contenteditable="true"]:focus {
+    background: rgb(245 245 244);
+    box-shadow: inset 0 0 0 1px rgb(28 25 23);
+  }
+  /* Reset X button. Sits flush right inside the editor frame and
+     never wraps — has its own grid column above. */
+  .hcc-color-reset {
+    width: 22px;
+    height: 22px;
+    border: 0;
+    background: transparent;
+    color: rgb(168 162 158);
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.12s, color 0.12s;
+  }
+  .hcc-color-reset:hover {
+    background: rgb(245 245 244);
+    color: rgb(28 25 23);
+  }
+  .hcc-color-reset:focus-visible {
+    outline: none;
+    background: rgb(245 245 244);
+    color: rgb(28 25 23);
+    box-shadow: inset 0 0 0 1.5px rgb(28 25 23);
+  }
   .hcc-color-hex {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.75rem;
@@ -1676,32 +1713,35 @@ const DEFAULT_HERO_CARD = {
       }
     };
 
-    // Hero page-bg color control. The <input type="color"> always
-    // carries SOME value (browsers default to #000), so we use a
-    // data-set="true|false" flag on the wrapper to know whether the
-    // user actively chose a color or wants to fall back to the
-    // public site's default. This drives both the swatch + hex
-    // mirror and the inline preview frame's background.
+    // ColorEditor helpers — every <ColorEditor> renders the same
+    // [data-color-editor] wrapper with a child color input, swatch,
+    // hex span, optional X reset, and optional hidden form input.
+    // Behavior is centralized here so reset/edit-hex/swatch-paint
+    // work consistently across every instance.
     const HERO_BG_DEFAULT_PREVIEW = "#f5f1ea"; // matches public site --bg-alt
-    const getHeroBgState = () => {
-      const input = $("[data-hero-bg-input]");
-      const block = $("[data-hero-bg-block]");
-      const isSet = block?.dataset.set === "true";
-      const hex = (input?.value || "").trim() || HERO_BG_DEFAULT_PREVIEW;
-      return { input, block, isSet, hex };
+    const HEX_RX = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+    const expandHex = (s) => (s.length === 3 ? s.split("").map(c => c + c).join("") : s).toLowerCase();
+    const renderColorEditor = (editor) => {
+      const inp = editor.querySelector("[data-color-input]");
+      const swatch = editor.querySelector("[data-color-swatch]");
+      const hex = editor.querySelector("[data-color-hex]");
+      const isSet = editor.dataset.set !== "false";
+      const v = (inp?.value || "").toLowerCase();
+      if (swatch) swatch.style.setProperty("--swatch-color", isSet ? v : "transparent");
+      // Don't overwrite the hex text the user is currently editing.
+      if (hex && document.activeElement !== hex) {
+        hex.textContent = isSet ? v : "Por defecto";
+      }
+      // Special: the hero page bg editor mirrors itself onto the
+      // preview frames so the editor sees the public-site bg live.
+      if (editor.dataset.colorEditorId === "hero-bg") {
+        const applyTo = (el) => { if (el) el.style.background = isSet ? v : ""; };
+        applyTo($("[data-preview-frame]"));
+        applyTo($("[data-fullscreen-frame]"));
+      }
     };
-    const updateHeroBgPreview = () => {
-      const { isSet, hex } = getHeroBgState();
-      // Swatch + hex readout
-      const swatch = $("[data-hero-bg-swatch]");
-      const hexEl = $("[data-hero-bg-hex]");
-      if (swatch) swatch.style.setProperty("--swatch-color", isSet ? hex : "transparent");
-      if (hexEl) hexEl.textContent = isSet ? hex.toLowerCase() : "Por defecto";
-      // Apply to the inline + fullscreen preview frames so the editor
-      // sees the page bg the same way the public site will render it.
-      const applyTo = (el) => { if (el) el.style.background = isSet ? hex : ""; };
-      applyTo($("[data-preview-frame]"));
-      applyTo($("[data-fullscreen-frame]"));
+    const renderAllColorEditors = () => {
+      $$("[data-color-editor]").forEach(renderColorEditor);
     };
 
     // ----- Hydration of all site_configuration -----
@@ -1745,18 +1785,17 @@ const DEFAULT_HERO_CARD = {
       setImage("hero_image_url", cfg.hero_image_url ?? "");
       updateHeroFallbackStatus();
 
-      // Hero page bg color. The picker can't represent "empty", so a
-      // sibling hidden input is the real form value, and a
-      // data-set="true|false" flag on the wrapper distinguishes
-      // "user picked a color" from "use site default".
-      const heroBgInput = form.querySelector("[data-hero-bg-input]");
-      const heroBgHidden = form.querySelector("[data-hero-bg-hidden]");
-      const heroBgBlock = form.querySelector("[data-hero-bg-block]");
-      const stored = (cfg.hero_bg_color ?? "").trim();
-      if (heroBgInput) heroBgInput.value = stored || HERO_BG_DEFAULT_PREVIEW;
-      if (heroBgHidden) heroBgHidden.value = stored;
-      if (heroBgBlock) heroBgBlock.dataset.set = stored ? "true" : "false";
-      updateHeroBgPreview();
+      // Hero page bg color — find its ColorEditor and seed the value.
+      const heroBgEditor = form.querySelector('[data-color-editor-id="hero-bg"]');
+      if (heroBgEditor) {
+        const heroBgInput = heroBgEditor.querySelector("[data-color-input]");
+        const heroBgHidden = heroBgEditor.querySelector("[data-color-hidden]");
+        const stored = (cfg.hero_bg_color ?? "").trim();
+        if (heroBgInput) heroBgInput.value = stored || HERO_BG_DEFAULT_PREVIEW;
+        if (heroBgHidden) heroBgHidden.value = stored;
+        heroBgEditor.dataset.set = stored ? "true" : "false";
+        renderColorEditor(heroBgEditor);
+      }
 
       // Hero card config
       const persisted = cfg.hero_card_config;
@@ -1986,28 +2025,96 @@ const DEFAULT_HERO_CARD = {
           renderHeroPreview();
         });
       });
-      // Hero page-bg color: picker drives both the hidden form value
-      // and the live preview frame's background. The "Restablecer"
-      // link clears both so the public site falls back to its CSS
-      // default (--bg-alt).
-      const heroBgInput = $("[data-hero-bg-input]");
-      const heroBgHidden = $("[data-hero-bg-hidden]");
-      const heroBgBlock = $("[data-hero-bg-block]");
-      const heroBgReset = $("[data-reset-hero-bg]");
-      if (heroBgInput && heroBgHidden && heroBgBlock) {
-        heroBgInput.addEventListener("input", () => {
-          heroBgHidden.value = heroBgInput.value;
-          heroBgBlock.dataset.set = "true";
-          updateHeroBgPreview();
+      // ColorEditor: wire native picker, X reset, and editable hex
+      // for every instance. We listen at the form root so newly
+      // hydrated inputs work without per-element wiring.
+      const form = $("[data-site-form]");
+      if (form) {
+        // Picker change — sync hidden input, mark editor "set", repaint.
+        form.addEventListener("input", (e) => {
+          const inp = e.target.closest?.("[data-color-input]");
+          if (!inp) return;
+          const editor = inp.closest("[data-color-editor]");
+          if (!editor) return;
+          editor.dataset.set = "true";
+          const hidden = editor.querySelector("[data-color-hidden]");
+          if (hidden) hidden.value = inp.value;
+          renderColorEditor(editor);
         });
-      }
-      if (heroBgReset && heroBgHidden && heroBgBlock && heroBgInput) {
-        heroBgReset.addEventListener("click", (ev) => {
-          ev.preventDefault();
-          heroBgHidden.value = "";
-          heroBgBlock.dataset.set = "false";
-          heroBgInput.value = HERO_BG_DEFAULT_PREVIEW;
-          updateHeroBgPreview();
+        // X reset.
+        form.addEventListener("click", (e) => {
+          const btn = e.target.closest?.("[data-color-reset]");
+          if (!btn) return;
+          e.preventDefault();
+          const editor = btn.closest("[data-color-editor]");
+          if (!editor) return;
+          const def = editor.getAttribute("data-color-default-value") ?? "";
+          const inp = editor.querySelector("[data-color-input]");
+          const hidden = editor.querySelector("[data-color-hidden]");
+          if (def === "") {
+            // "Use site default" mode — clear the hidden input and
+            // mark unset; the swatch goes transparent, hex shows
+            // "Por defecto", and any preview-frame mirror clears.
+            editor.dataset.set = "false";
+            if (hidden) hidden.value = "";
+            if (inp) inp.value = HERO_BG_DEFAULT_PREVIEW;
+          } else {
+            // Typed-default mode — restore the documented default hex.
+            editor.dataset.set = "true";
+            if (hidden) hidden.value = def;
+            if (inp) inp.value = def;
+          }
+          renderColorEditor(editor);
+          // Trigger downstream listeners (hero card preview etc.)
+          if (inp) {
+            inp.dispatchEvent(new Event("input", { bubbles: true }));
+            inp.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        // Editable hex — typing a valid #abc / #abcdef updates the
+        // picker live. Enter blurs to commit; blur normalizes the
+        // displayed text.
+        form.addEventListener("input", (e) => {
+          const el = e.target.closest?.("[data-color-hex]");
+          if (!el || !el.isContentEditable) return;
+          const editor = el.closest("[data-color-editor]");
+          const inp = editor?.querySelector("[data-color-input]");
+          if (!editor || !inp) return;
+          const raw = (el.textContent || "").trim();
+          const m = HEX_RX.exec(raw);
+          if (!m) return;
+          const next = "#" + expandHex(m[1]);
+          if (inp.value === next && editor.dataset.set === "true") return;
+          inp.value = next;
+          editor.dataset.set = "true";
+          const hidden = editor.querySelector("[data-color-hidden]");
+          if (hidden) hidden.value = next;
+          // Repaint swatch + propagate to bind listeners (don't
+          // rewrite the hex span — the user is editing it).
+          const swatch = editor.querySelector("[data-color-swatch]");
+          if (swatch) swatch.style.setProperty("--swatch-color", next);
+          if (editor.dataset.colorEditorId === "hero-bg") {
+            const applyTo = (frame) => { if (frame) frame.style.background = next; };
+            applyTo($("[data-preview-frame]"));
+            applyTo($("[data-fullscreen-frame]"));
+          }
+          inp.dispatchEvent(new Event("input", { bubbles: true }));
+          inp.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        form.addEventListener("keydown", (e) => {
+          const el = e.target.closest?.("[data-color-hex]");
+          if (!el || !el.isContentEditable) return;
+          if (e.key === "Enter") {
+            e.preventDefault();
+            el.blur();
+          }
+        });
+        form.addEventListener("focusout", (e) => {
+          const el = e.target.closest?.("[data-color-hex]");
+          if (!el || !el.isContentEditable) return;
+          const editor = el.closest("[data-color-editor]");
+          if (!editor) return;
+          renderColorEditor(editor);
         });
       }
 

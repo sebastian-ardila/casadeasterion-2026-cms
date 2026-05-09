@@ -1,6 +1,7 @@
 ---
 import Dropdown from "~/components/Dropdown.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
+import ColorEditor from "~/components/ColorEditor.astro";
 
 interface Props {
   platform: "desktop" | "mobile";
@@ -26,17 +27,12 @@ const FONT_OPTIONS = [
 {/* Background color + alpha */}
 <div class="hcc-stack">
   <label class="label">Fondo</label>
-  <div class="hcc-color-block">
-    <label class="hcc-swatch-wrap" aria-label="Color de fondo">
-      <input type="color" data-bind={`${p}.bg_color`} class="hcc-swatch-input" />
-      <span class="hcc-swatch" data-color-swatch></span>
-    </label>
-    <div class="hcc-color-info">
-      <span class="hcc-color-hex" data-bind-mirror={`${p}.bg_color`}>#1a1715</span>
-      <input type="range" data-bind={`${p}.bg_alpha`} min="0" max="1" step="0.05" class="hcc-range" aria-label="Opacidad" />
-      <span class="hcc-color-pct" data-alpha-pct={`${p}.bg_alpha`}>100%</span>
-    </div>
-  </div>
+  <ColorEditor
+    bind={`${p}.bg_color`}
+    defaultValue="#1a1715"
+    alphaBind={`${p}.bg_alpha`}
+    ariaLabel="Color de fondo"
+  />
   <p class="hcc-hint">Si subes una imagen de fondo, el color actúa como overlay encima.</p>
 </div>
 
@@ -54,15 +50,11 @@ const FONT_OPTIONS = [
 <div class="grid sm:grid-cols-2 gap-3">
   <div class="hcc-stack">
     <label class="label">Color del texto</label>
-    <div class="hcc-color-block hcc-color-block--solo">
-      <label class="hcc-swatch-wrap" aria-label="Color del texto">
-        <input type="color" data-bind={`${p}.text_color`} class="hcc-swatch-input" />
-        <span class="hcc-swatch" data-color-swatch></span>
-      </label>
-      <div class="hcc-color-info">
-        <span class="hcc-color-hex" data-bind-mirror={`${p}.text_color`}>#f5f1ea</span>
-      </div>
-    </div>
+    <ColorEditor
+      bind={`${p}.text_color`}
+      defaultValue="#f5f1ea"
+      ariaLabel="Color del texto"
+    />
   </div>
   <div class="hcc-stack" data-bind-dd={`${p}.title_font`}>
     <label class="label">Fuente del título</label>

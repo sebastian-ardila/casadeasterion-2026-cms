@@ -1,0 +1,139 @@
+---
+// Reusable color editor used everywhere a hex color is picked in the
+// CMS. Wraps a native <input type="color"> with:
+// - A checkered swatch + colored fill (so transparent / "use default"
+//   states read clearly).
+// - A hex readout that mirrors the picker's value (live).
+// - An optional alpha range slider + percent readout (used by the
+//   per-platform card "Fondo").
+// - An X reset button on the right that restores the default value.
+//   The default behaves in two modes:
+//     • defaultValue="#hex" → reset writes that hex back into the
+//       input. Used for typed defaults like the card bg color.
+//     • defaultValue=""     → reset clears the value. The wrapper
+//       gains data-set="false" so the swatch goes transparent and
+//       the hex readout shows "Por defecto". Used for top-level
+//       config that falls back to the public site's CSS variable.
+//
+// Two ways to bind a value to the form:
+//   • bind="path"        — for hero_card_config JSONB blobs. The
+//                          color input itself gets data-bind so the
+//                          existing readHeroForm loop picks it up.
+//   • hiddenName="key"   — for top-level site_configuration keys.
+//                          A separate hidden input carries the
+//                          empty-or-hex value to the server.
+
+interface Props {
+  /** Hero-card-config bind path (e.g. "desktop.bg_color"). */
+  bind?: string;
+  /** Form name to set directly on the <input type="color">. Rarely
+   *  needed when `hiddenName` is used (it'd send a value even when
+   *  the user wants the empty/default state). */
+  name?: string;
+  /** Hidden input name. Set this when the field can be "use default"
+   *  (empty). The picker's UI value drives this hidden input. */
+  hiddenName?: string;
+  /** Initial color in #hex form. */
+  value?: string;
+  /** Color to restore on reset. Empty string means "clear / use site
+   *  default". Defaults to value when unset. */
+  defaultValue?: string;
+  /** Show the X reset button. */
+  resettable?: boolean;
+  /** Aria-label on the swatch. */
+  ariaLabel?: string;
+  /** Bind path of the alpha (0–1) value, when this is the "Fondo"
+   *  variant with an opacity slider. */
+  alphaBind?: string;
+  /** Initial alpha. */
+  alphaValue?: number;
+  /** Optional id surfaced on the wrapper so JS can target one
+   *  specific editor (e.g. hero page bg). */
+  editorId?: string;
+}
+
+const {
+  bind,
+  name,
+  hiddenName,
+  value = "",
+  defaultValue,
+  resettable = true,
+  ariaLabel = "Color",
+  alphaBind,
+  alphaValue = 1,
+  editorId,
+} = Astro.props;
+
+const hasAlpha = !!alphaBind;
+const def = defaultValue ?? value ?? "";
+// "Active" means: the user has actually picked a color. When
+// defaultValue is "" (empty), an empty value means "use site default".
+const isActive = !(def === "" && (value ?? "") === "");
+const initialPickerHex = value || def || "#1a1715";
+---
+
+<div
+  class={hasAlpha ? "hcc-color-block" : "hcc-color-block hcc-color-block--solo"}
+  data-color-editor
+  data-color-default-value={def}
+  data-set={isActive ? "true" : "false"}
+  data-color-editor-id={editorId}
+>
+  <label class="hcc-swatch-wrap" aria-label={ariaLabel}>
+    <input
+      type="color"
+      value={initialPickerHex}
+      class="hcc-swatch-input"
+      data-color-input
+      {...(bind ? { "data-bind": bind } : {})}
+      {...(name ? { name } : {})}
+    />
+    <span class="hcc-swatch" data-color-swatch></span>
+  </label>
+  <div class="hcc-color-info">
+    {/* Editable hex. Click to edit; the JS handler validates as the
+        user types and syncs back to the color picker when the input
+        is a valid 3- or 6-digit hex. Pressing Enter or blurring
+        normalizes the text to the actual picker value. */}
+    <span
+      class="hcc-color-hex"
+      data-color-hex
+      contenteditable="true"
+      spellcheck="false"
+      role="textbox"
+      tabindex="0"
+      aria-label="Editar color hexadecimal"
+      {...(bind ? { "data-bind-mirror": bind } : {})}
+    >{value || (def ? def : "Por defecto")}</span>
+    {hasAlpha && (
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        value={alphaValue}
+        class="hcc-range"
+        data-bind={alphaBind}
+        aria-label="Opacidad"
+      />
+      <span class="hcc-color-pct" data-alpha-pct={alphaBind}>{Math.round(alphaValue * 100)}%</span>
+    )}
+    {resettable && (
+      <button
+        type="button"
+        class="hcc-color-reset"
+        data-color-reset
+        title="Restablecer al valor por defecto"
+        aria-label="Restablecer al valor por defecto"
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    )}
+  </div>
+  {hiddenName && (
+    <input type="hidden" name={hiddenName} value={value} data-color-hidden />
+  )}
+</div>
