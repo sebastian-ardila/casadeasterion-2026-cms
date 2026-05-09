@@ -298,14 +298,6 @@ const DEFAULT_HERO_CARD = {
             <HeroCardPlatformControls platform="mobile" />
           </section>
 
-          {/* Card bg images */}
-          <section class="card space-y-4">
-            <CardHeader icon="lucide:image-plus" title="Imágenes de fondo de la card" desc="Opcional. Se mezcla con el color y la opacidad de arriba." />
-            <div class="grid sm:grid-cols-2 gap-4">
-              <ImageUpload name="desktop_bg_image" label="Web" hint="Solo aparece en desktop." bucket="covers" />
-              <ImageUpload name="mobile_bg_image" label="Mobile" hint="Solo aparece en mobile." bucket="covers" />
-            </div>
-          </section>
         </div>
 
         {/* Live preview pane.
@@ -877,6 +869,36 @@ const DEFAULT_HERO_CARD = {
   .hcc-checkbox-row input { width: 16px; height: 16px; }
 
   .hcc-hint { font-size: 0.75rem; color: rgb(120 113 108); }
+  .hcc-bg-fallback {
+    margin-top: 0.5rem;
+    padding: 0.375rem 0.625rem;
+    background: rgb(254 252 232); /* amber-50 */
+    border: 1px solid rgb(253 230 138); /* amber-200 */
+    border-radius: 4px;
+    color: rgb(120 53 15); /* amber-900 */
+  }
+  .hcc-bg-fallback strong { font-weight: 600; }
+  /* Stepper buttons disabled state — used when at min/max bound. */
+  .hcc-step:disabled {
+    background: rgb(245 245 244);
+    border-color: rgb(231 229 228);
+    color: rgb(214 211 209);
+    cursor: not-allowed;
+    transform: none !important;
+  }
+  .hcc-step:disabled:hover {
+    background: rgb(245 245 244);
+    border-color: rgb(231 229 228);
+    color: rgb(214 211 209);
+  }
+  .hcc-input:disabled {
+    background: rgb(245 245 244);
+    color: rgb(168 162 158);
+    cursor: not-allowed;
+  }
+  .hcc-pos-row[data-locked="true"] .hcc-num-cell-label {
+    color: rgb(168 162 158);
+  }
 </style>
 
 <script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL }}>
@@ -1190,11 +1212,126 @@ const DEFAULT_HERO_CARD = {
       meta: $("[data-fullscreen-meta]"),
     });
 
+    // Cross-platform fallback for the card's bg image. If only one
+    // side has an image set, the other reuses it. Mirrors the same
+    // logic in apps/web/src/lib/hero-card.ts so the preview matches
+    // what visitors will see.
+    const applyBgImageFallback = (cfg) => {
+      const dImg = (cfg.desktop?.bg_image_url || "").trim();
+      const mImg = (cfg.mobile?.bg_image_url || "").trim();
+      const merged = dImg || mImg;
+      const out = structuredClone(cfg);
+      out.desktop.bg_image_url = dImg || merged;
+      out.mobile.bg_image_url = mImg || merged;
+      return out;
+    };
+
+    // Show / hide each platform's "using fallback" hint based on
+    // whether that platform's own bg_image_url is empty while the
+    // other one has a value.
+    const updateBgFallbackHints = (cfg) => {
+      const dImg = (cfg.desktop?.bg_image_url || "").trim();
+      const mImg = (cfg.mobile?.bg_image_url || "").trim();
+      $$("[data-bg-image-row]").forEach(row => {
+        const platform = row.getAttribute("data-bg-image-row");
+        const own = platform === "desktop" ? dImg : mImg;
+        const other = platform === "desktop" ? mImg : dImg;
+        const hint = row.querySelector("[data-bg-fallback-hint]");
+        if (hint) hint.hidden = !(own === "" && other !== "");
+      });
+    };
+
+    // Frame sizes reused across position bounds + preview render.
+    const PLATFORM_FRAMES = { desktop: { w: 1440, h: 720 }, mobile: { w: 390, h: 720 } };
+
+    // Compute the valid range for each X / Y input given the current
+    // card width/height, then sync the input's min/max attrs, clamp
+    // the value if it's out of range, and disable the appropriate
+    // stepper buttons. If both bounds collapse to the same number
+    // (the card is wider/taller than the frame so it can't move at
+    // all on that axis) the input itself is disabled too.
+    const updatePositionBounds = () => {
+      ["desktop", "mobile"].forEach(platform => {
+        const frame = PLATFORM_FRAMES[platform];
+        const xInput = document.querySelector(`[data-bind="${platform}.offset_x"]`);
+        const yInput = document.querySelector(`[data-bind="${platform}.offset_y"]`);
+        const wInput = document.querySelector(`[data-bind="${platform}.width"]`);
+        const hInput = document.querySelector(`[data-bind="${platform}.height"]`);
+        if (!xInput || !yInput) return;
+
+        const w = Number(wInput?.value) || 0;
+        const h = Number(hInput?.value) || 0;
+        const xCur = Number(xInput.value) || 0;
+        const yCur = Number(yInput.value) || 0;
+
+        // Effective card dimensions matching the public-site layout.
+        let effW;
+        if (w > 0) {
+          effW = Math.min(w, frame.w);
+        } else if (platform === "mobile") {
+          effW = Math.max(0, frame.w - xCur * 2);
+        } else {
+          effW = Math.max(0, frame.w - xCur);
+        }
+        const effH = Math.max(0, Math.min(h, frame.h));
+
+        let xMin, xMax, yMin, yMax;
+        if (platform === "desktop") {
+          xMin = 0;
+          xMax = Math.max(0, frame.w - effW);
+          const ySpan = Math.max(0, (frame.h - effH) / 2);
+          yMin = -ySpan;
+          yMax = ySpan;
+        } else {
+          xMin = 0;
+          if (w > 0) xMax = Math.max(0, Math.floor((frame.w - effW) / 2));
+          else xMax = Math.max(0, Math.floor((frame.w - 80) / 2));
+          yMin = 0;
+          yMax = Math.max(0, frame.h - effH);
+        }
+
+        // Clamp current value if it slipped out of bounds (e.g. the
+        // user enlarged the card after moving it).
+        const newX = Math.max(xMin, Math.min(xMax, xCur));
+        const newY = Math.max(yMin, Math.min(yMax, yCur));
+        if (newX !== xCur) xInput.value = String(newX);
+        if (newY !== yCur) yInput.value = String(newY);
+
+        xInput.min = String(xMin);
+        xInput.max = String(xMax);
+        yInput.min = String(yMin);
+        yInput.max = String(yMax);
+
+        const xLocked = xMin === xMax;
+        const yLocked = yMin === yMax;
+        xInput.disabled = xLocked;
+        yInput.disabled = yLocked;
+        xInput.closest(".hcc-pos-row")?.setAttribute("data-locked", xLocked ? "true" : "false");
+        yInput.closest(".hcc-pos-row")?.setAttribute("data-locked", yLocked ? "true" : "false");
+
+        const xMinusBtn = document.querySelector(`[data-step-target="${platform}.offset_x"][data-step="-8"]`);
+        const xPlusBtn = document.querySelector(`[data-step-target="${platform}.offset_x"][data-step="8"]`);
+        const yMinusBtn = document.querySelector(`[data-step-target="${platform}.offset_y"][data-step="-8"]`);
+        const yPlusBtn = document.querySelector(`[data-step-target="${platform}.offset_y"][data-step="8"]`);
+        if (xMinusBtn) xMinusBtn.disabled = newX <= xMin;
+        if (xPlusBtn) xPlusBtn.disabled = newX >= xMax;
+        if (yMinusBtn) yMinusBtn.disabled = newY <= yMin;
+        if (yPlusBtn) yPlusBtn.disabled = newY >= yMax;
+      });
+    };
+
     const renderHeroPreview = () => {
+      // Raw cfg — preserves empty bg_image_url so the user's intent
+      // ("no image set on this side") is what we save to Supabase.
       const cfg = readHeroForm();
       currentHeroCfg = cfg;
+      updateBgFallbackHints(cfg);
+      updatePositionBounds();
       const heroJson = $("[data-hero-json]");
       if (heroJson) heroJson.value = JSON.stringify(cfg);
+      // Preview cfg — bg image falls back across platforms so the
+      // CMS preview matches what the public site will render.
+      const previewCfg = applyBgImageFallback(cfg);
 
       // Mirror inputs (read-only labels next to color/range)
       $$("[data-bind]").forEach(el => {
@@ -1229,13 +1366,13 @@ const DEFAULT_HERO_CARD = {
       const heroImageUrl = (heroImgInput?.value || "").trim() || HERO_FALLBACK_URL;
 
       // Inline preview (the right-side panel inside the Hero tab)
-      renderInto(inlineEls(), currentPreviewTab, cfg, heroImageUrl);
+      renderInto(inlineEls(), currentPreviewTab, previewCfg, heroImageUrl);
 
       // Fullscreen preview, when open
       const modal = $("[data-fullscreen-modal]");
       if (modal && !modal.hasAttribute("hidden")) {
         const fsPlatform = modal.getAttribute("data-current-platform") || "desktop";
-        renderInto(fullscreenEls(), fsPlatform, cfg, heroImageUrl);
+        renderInto(fullscreenEls(), fsPlatform, previewCfg, heroImageUrl);
       }
     };
 

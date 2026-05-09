@@ -1,11 +1,14 @@
 ---
 import Dropdown from "~/components/Dropdown.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
 
 interface Props {
   platform: "desktop" | "mobile";
 }
 
 const { platform: p } = Astro.props;
+const BG_IMAGE_NAME = p === "desktop" ? "desktop_bg_image" : "mobile_bg_image";
+const OTHER_LABEL = p === "desktop" ? "mobile" : "web";
 
 // Title fonts — kept in sync with apps/web/src/lib/hero-card.ts
 // HERO_CARD_FONTS map. The hint text is what the CMS shows in the
@@ -175,3 +178,19 @@ const FONT_OPTIONS = [
   <input type="checkbox" data-bind={`${p}.shadow`} />
   <span>Sombra</span>
 </label>
+
+{/* Background image — colocated per platform. If only one of the
+    two platforms has an image set, the other falls back to it
+    automatically (handled in renderHeroPreview + the public site's
+    buildHeroCardCss). The fallback hint below is shown live. */}
+<div data-bg-image-row={p}>
+  <ImageUpload
+    name={BG_IMAGE_NAME}
+    label="Imagen de fondo"
+    hint={`Opcional. Se mezcla con el color y la opacidad. Si la dejas vacía y el modo ${OTHER_LABEL} sí tiene imagen, se reusa la del otro.`}
+    bucket="covers"
+  />
+  <p class="hcc-hint hcc-bg-fallback" data-bg-fallback-hint hidden>
+    Sin imagen propia: usando la imagen de <strong>{OTHER_LABEL}</strong> como fallback.
+  </p>
+</div>
