@@ -351,13 +351,6 @@ const DEFAULT_HERO_CARD = {
             </div>
           </section>
 
-          {/* Hero quote */}
-          <section class="card space-y-5">
-            <CardHeader icon="lucide:quote" title="Cita destacada" desc="Aparece debajo del hero, sobre fondo claro." />
-            <Field label="Cita" name="hero_quote" type="textarea" rows={3} required description="Frase corta y elocuente. Sin comillas alrededor — el diseño las añade." />
-            <Field label="Autor de la cita" name="hero_quote_author" required description="Nombre que firma la cita." />
-          </section>
-
           {/* Hero card content */}
           <section class="card space-y-4">
             <CardHeader icon="lucide:newspaper" title="Contenido de la card" desc="Qué se muestra dentro del recuadro principal del hero." />
@@ -496,6 +489,12 @@ const DEFAULT_HERO_CARD = {
           <CardHeader icon="lucide:scroll-text" title="Editorial" desc="Información general que aparece en footer, meta tags y al compartir." />
           <Field label="Descripción de la editorial" name="editorial_description" type="textarea" rows={3} required description="Aparece en el footer y como meta description del sitio. 1-2 frases." />
           <Field label="Línea legal del footer" name="footer_legal" required description="Texto pequeño abajo del footer (ej: '© 2026 Casa de Asterión Ediciones')." />
+        </section>
+
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:quote" title="Cita destacada" desc="Aparece debajo del hero en la página de inicio, sobre fondo claro." />
+          <Field label="Cita" name="hero_quote" type="textarea" rows={3} required description="Frase corta y elocuente. Sin comillas alrededor — el diseño las añade." />
+          <Field label="Autor de la cita" name="hero_quote_author" required description="Nombre que firma la cita." />
         </section>
       </div>
 
