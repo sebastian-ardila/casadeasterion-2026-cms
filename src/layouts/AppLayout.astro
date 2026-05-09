@@ -45,7 +45,6 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
   </head>
   <body class="min-h-screen md:flex md:h-screen md:overflow-hidden">
     <Sidebar user={user} permissions={permissions} transition:persist="cms-sidebar" />
-    <MobileBreadcrumb currentLabel={breadcrumbLabel} />
     <div class="md:flex md:flex-1 md:min-w-0 md:h-screen md:overflow-hidden">
       {showListPanel && (
         <ListPanel
@@ -62,6 +61,10 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
           showListPanel && !isDetailRoute && "hidden md:block",
         ]}
       >
+        {/* Breadcrumb is a child of <main> so it can be sticky relative
+            to main's own scroll container on desktop, and stays visually
+            below the mobile header on small screens. */}
+        <MobileBreadcrumb currentLabel={breadcrumbLabel} />
         <slot />
       </main>
     </div>

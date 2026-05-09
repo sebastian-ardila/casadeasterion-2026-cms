@@ -305,11 +305,12 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
-  {/* Tab nav — sticky on mobile under the header+breadcrumb (top ≈ 88px),
-      and at the top of <main>'s scroll container on desktop. The
-      preview buttons on the right open a fullscreen overlay that
-      mirrors the inline preview at viewport size. */}
-  <nav class="cas-tabs sticky top-[88px] md:top-0 z-20 flex items-stretch gap-1 mb-6 border-b border-stone-200 overflow-x-auto bg-white -mx-5 md:-mx-8 lg:-mx-10 px-5 md:px-8 lg:px-10" data-tab-nav>
+  {/* Tab nav — sticky beneath the breadcrumb on scroll. The breadcrumb is
+      ~40px tall (py-2.5 + 11px text) on every breakpoint; on mobile we
+      add the 56px mobile-app header. So sticky top values: 96px mobile,
+      40px desktop (right under the breadcrumb's bottom edge). The
+      preview buttons on the right open a fullscreen overlay. */}
+  <nav class="cas-tabs sticky top-[96px] md:top-[40px] z-10 flex items-stretch gap-1 mb-6 border-b border-stone-200 overflow-x-auto bg-white -mx-5 md:-mx-8 lg:-mx-10 px-5 md:px-8 lg:px-10" data-tab-nav>
     <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
       <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
       <span>Hero</span>
@@ -538,8 +539,10 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       </div>
 
       {canEdit && (
-        <div class="sticky bottom-0 bg-white py-3 mt-6 border-t border-stone-200 z-10 flex gap-3">
-          <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
+        <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+          <div class="px-5 md:px-8 lg:px-10 py-3 flex gap-3 max-w-[1100px]">
+            <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
+          </div>
         </div>
       )}
     </fieldset>

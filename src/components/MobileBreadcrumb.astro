@@ -1,6 +1,9 @@
 ---
-// Mobile-only sticky breadcrumb that lives just under the header so users can
-// jump back up the navigation tree without opening the drawer.
+// Sticky breadcrumb that lives at the top of <main>. On mobile it sits
+// below the mobile header (top-14); on desktop it sticks to the top of
+// main's own scroll container (top-0). Negative horizontal + top
+// margins make it extend to main's full content area and absorb main's
+// top padding so it sits flush at the very top.
 interface Props {
   currentLabel?: string;
 }
@@ -11,7 +14,7 @@ const labels: Record<string, string> = {
   books: "Libros",
   authors: "Autores",
   categories: "Categorías",
-  site: "Configuración",
+  site: "Landing Page",
   admins: "Administradores",
   subscribers: "Suscriptores",
   new: "Nuevo",
@@ -40,9 +43,9 @@ const crumbs: Crumb[] = showCrumbs
 {showCrumbs && (
   <nav
     aria-label="Breadcrumb"
-    class="md:hidden sticky top-14 z-20 bg-white/95 backdrop-blur border-b border-stone-200"
+    class="cas-breadcrumb sticky top-14 md:top-0 z-20 bg-white/95 backdrop-blur border-b border-stone-200 -mx-5 md:-mx-8 lg:-mx-10 -mt-6 md:-mt-10 mb-6 md:mb-8"
   >
-    <ol class="px-4 py-2 flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] overflow-x-auto whitespace-nowrap">
+    <ol class="px-5 md:px-8 lg:px-10 py-2.5 flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] overflow-x-auto whitespace-nowrap">
       {crumbs.map((crumb, idx) => {
         const last = idx === crumbs.length - 1;
         return (
