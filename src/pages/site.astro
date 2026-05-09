@@ -524,11 +524,11 @@ const DEFAULT_HERO_CARD = {
               {/* The card. Position is computed at render time per platform. */}
               <a data-preview-card class="cas-preview-noninteractive z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-disabled="true">
                 <div>
-                  <p data-preview-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
-                  <h1 data-preview-title class="leading-[1.1] mb-3"></h1>
-                  <p data-preview-body class="opacity-80 leading-relaxed"></p>
+                  <p data-preview-eyebrow class="hcc-eyebrow uppercase tracking-[0.2em] opacity-70"></p>
+                  <h1 data-preview-title class="hcc-title leading-[1.1]"></h1>
+                  <p data-preview-body class="hcc-body opacity-80 leading-relaxed"></p>
                 </div>
-                <span data-preview-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
+                <span data-preview-cta class="hcc-cta uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
               </a>
               {/* Stacked mobile image — only visible in mobile preview */}
               <img data-preview-mobile-img alt="" class="block w-full" style="display:none;" />
@@ -702,13 +702,13 @@ const DEFAULT_HERO_CARD = {
     <div class="flex-1 relative overflow-hidden bg-stone-100" data-fullscreen-frame>
       <div class="relative" data-fullscreen-stage>
         <div data-fullscreen-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
-        <a data-fullscreen-card class="z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
+        <a data-fullscreen-card class="cas-preview-noninteractive z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-disabled="true">
           <div>
-            <p data-preview-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
-            <h1 data-preview-title class="leading-[1.1] mb-3"></h1>
-            <p data-preview-body class="opacity-80 leading-relaxed"></p>
+            <p data-preview-eyebrow class="hcc-eyebrow uppercase tracking-[0.2em] opacity-70"></p>
+            <h1 data-preview-title class="hcc-title leading-[1.1]"></h1>
+            <p data-preview-body class="hcc-body opacity-80 leading-relaxed"></p>
           </div>
-          <span data-preview-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
+          <span data-preview-cta class="hcc-cta uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
         </a>
         <img data-fullscreen-mobile-img alt="" class="block w-full" style="display:none;" />
       </div>
@@ -813,6 +813,56 @@ const DEFAULT_HERO_CARD = {
      card and its descendants. */
   .cas-preview-noninteractive,
   .cas-preview-noninteractive * { pointer-events: none; }
+
+  /* Preview text sizing + truncation, scoped per simulated platform.
+     Mirror of the Tailwind classes used on the public hero card so
+     the inline + fullscreen previews show exactly the same line
+     count, font sizes, and clamp behavior visitors will see at
+     each breakpoint. data-platform is set on the stage in renderInto. */
+  [data-preview-stage] [data-preview-title],
+  [data-preview-stage] [data-preview-body],
+  [data-fullscreen-stage] [data-preview-title],
+  [data-fullscreen-stage] [data-preview-body] {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  /* DESKTOP variant — matches md:* breakpoint utilities on the public site */
+  [data-platform="desktop"] [data-preview-eyebrow] {
+    font-size: 0.75rem;     /* text-xs */
+    margin-bottom: 1.25rem; /* mb-5 */
+  }
+  [data-platform="desktop"] [data-preview-title] {
+    font-size: 3rem;        /* text-5xl */
+    line-height: 1.1;
+    margin-bottom: 1.25rem; /* mb-5 */
+    -webkit-line-clamp: 4;
+  }
+  [data-platform="desktop"] [data-preview-body] {
+    font-size: 1rem;        /* text-base */
+    -webkit-line-clamp: 3;
+  }
+  [data-platform="desktop"] [data-preview-cta] {
+    font-size: 0.75rem;     /* text-xs */
+  }
+  /* MOBILE variant — base (pre-sm) sizes on the public site */
+  [data-platform="mobile"] [data-preview-eyebrow] {
+    font-size: 10px;        /* text-[10px] */
+    margin-bottom: 0.75rem; /* mb-3 */
+  }
+  [data-platform="mobile"] [data-preview-title] {
+    font-size: 1.4rem;      /* text-[1.4rem] */
+    line-height: 1.1;
+    margin-bottom: 0.75rem; /* mb-3 */
+    -webkit-line-clamp: 3;
+  }
+  [data-platform="mobile"] [data-preview-body] {
+    font-size: 0.75rem;     /* text-xs */
+    -webkit-line-clamp: 2;
+  }
+  [data-platform="mobile"] [data-preview-cta] {
+    font-size: 11px;        /* text-[11px] */
+  }
 
   /* When the user clicks Web / Mobile in the preview, auto-scroll
      stops short by this much so the sticky tab nav (and on mobile
@@ -1940,6 +1990,7 @@ const DEFAULT_HERO_CARD = {
       els.stage.style.width = `${targetW}px`;
       els.stage.style.height = platform === "desktop" ? `${targetH}px` : "auto";
       els.stage.style.minHeight = platform === "mobile" ? `${targetH}px` : "";
+      els.stage.dataset.platform = platform;
       els.stage.style.transformOrigin = "top left";
       els.stage.style.transform = `scale(${finalScale})`;
       els.stage.style.position = "absolute";
