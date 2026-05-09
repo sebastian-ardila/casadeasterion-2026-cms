@@ -58,31 +58,36 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
   </head>
   <body class="min-h-screen md:flex md:h-screen md:overflow-hidden">
     <Sidebar user={user} permissions={permissions} transition:persist="cms-sidebar" />
-    <div class="md:flex md:flex-1 md:min-w-0 md:h-screen md:overflow-hidden">
-      {showListPanel && (
-        <ListPanel
-          resource={resource!}
-          activeId={activeId}
-          permission={resource === "admins" ? "edit" : permissions![resource!]}
-          hideOnMobile={isDetailRoute}
-          transition:persist={`list-panel-${resource}`}
-        />
-      )}
-      <main
-        class:list={[
-          "flex-1 min-w-0 md:h-screen md:overflow-y-auto",
-          wide ? "max-w-none" : "max-w-[1100px]",
-          showListPanel && !isDetailRoute && "hidden md:block",
-        ]}
-      >
-        {/* Breadcrumb is the first child of <main> with no padding
-            above it so position:sticky top:0 sticks flush with main's
-            outer edge. Page content sits inside a padded wrapper. */}
-        <MobileBreadcrumb currentLabel={breadcrumbLabel} />
-        <div class="px-5 md:px-8 lg:px-10 py-6 md:py-10">
-          <slot />
-        </div>
-      </main>
+    {/* Right of the sidebar: a vertical column with the breadcrumb
+        as a top banner spanning the full content area, then a flex
+        row underneath holding the ListPanel + the main view. This
+        lets the breadcrumb cover both columns (matching the
+        Landing Page layout where there's no ListPanel) and gives
+        every section a consistent, full-width breadcrumb header. */}
+    <div class="md:flex md:flex-col md:flex-1 md:min-w-0 md:h-screen md:overflow-hidden">
+      <MobileBreadcrumb currentLabel={breadcrumbLabel} />
+      <div class="md:flex md:flex-1 md:min-w-0 md:overflow-hidden">
+        {showListPanel && (
+          <ListPanel
+            resource={resource!}
+            activeId={activeId}
+            permission={resource === "admins" ? "edit" : permissions![resource!]}
+            hideOnMobile={isDetailRoute}
+            transition:persist={`list-panel-${resource}`}
+          />
+        )}
+        <main
+          class:list={[
+            "flex-1 min-w-0 md:h-full md:overflow-y-auto",
+            wide ? "max-w-none" : "max-w-[1100px]",
+            showListPanel && !isDetailRoute && "hidden md:block",
+          ]}
+        >
+          <div class="px-5 md:px-8 lg:px-10 py-6 md:py-10">
+            <slot />
+          </div>
+        </main>
+      </div>
     </div>
     <ActionToasts transition:persist="action-toasts" />
     <BuildStatusBar transition:persist="build-status-bar" />
