@@ -552,9 +552,36 @@ const DEFAULT_HERO_CARD = {
         <section class="card space-y-5">
           <CardHeader icon="lucide:share-2" title="Redes sociales" desc="Las tres principales (Facebook, Instagram, Twitter) se enlazan también desde el footer; las demás solo aparecen en /contacto." />
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="Facebook" name="social_facebook" type="url" description="URL pública del perfil." />
-            <Field label="Instagram" name="social_instagram" type="url" description="URL pública del perfil." />
-            <Field label="Twitter / X" name="social_twitter" type="url" description="URL pública del perfil." />
+            <div class="block min-w-0">
+              <label for="f-social_facebook" class="block">
+                <span class="label flex items-center gap-1.5">
+                  <Icon name="lucide:facebook" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                  Facebook
+                </span>
+              </label>
+              <input id="f-social_facebook" type="url" name="social_facebook" class="input" placeholder="https://www.facebook.com/..." />
+              <p class="text-xs text-stone-500 mt-1.5 leading-relaxed">URL pública del perfil.</p>
+            </div>
+            <div class="block min-w-0">
+              <label for="f-social_instagram" class="block">
+                <span class="label flex items-center gap-1.5">
+                  <Icon name="lucide:instagram" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                  Instagram
+                </span>
+              </label>
+              <input id="f-social_instagram" type="url" name="social_instagram" class="input" placeholder="https://www.instagram.com/..." />
+              <p class="text-xs text-stone-500 mt-1.5 leading-relaxed">URL pública del perfil.</p>
+            </div>
+            <div class="block min-w-0">
+              <label for="f-social_twitter" class="block">
+                <span class="label flex items-center gap-1.5">
+                  <Icon name="lucide:twitter" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                  Twitter / X
+                </span>
+              </label>
+              <input id="f-social_twitter" type="url" name="social_twitter" class="input" placeholder="https://x.com/..." />
+              <p class="text-xs text-stone-500 mt-1.5 leading-relaxed">URL pública del perfil.</p>
+            </div>
           </div>
           <div class="pt-4 border-t border-stone-100">
             <p class="label">Otras redes / enlaces</p>
@@ -1305,28 +1332,38 @@ const DEFAULT_HERO_CARD = {
 
     let currentPreviewTab = "desktop";
     // Editor-controlled zoom factor multiplied on top of the auto-fit
-    // scale. 1 = fits the frame; >1 lets editors inspect details, with
-    // the frame switching to overflow:auto so they can pan.
-    let previewZoom = 1;
+    // scale. Stored on [data-preview-frame] as a data-attr (not a
+    // closure variable!) so Astro view transitions don't carry stale
+    // state from the previous IIFE: when the user navigates away and
+    // back, document-level listeners installed by the old IIFE still
+    // fire and still close over the OLD `previewZoom`. Reading from
+    // the DOM each time makes any IIFE see the live value.
     const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4];
+    const getPreviewZoom = () => {
+      const frame = $("[data-preview-frame]");
+      const v = Number(frame?.dataset.previewZoom ?? "1");
+      return Number.isFinite(v) && v > 0 ? v : 1;
+    };
+    const writePreviewZoomUI = (zoom) => {
+      const frame = $("[data-preview-frame]");
+      if (frame) frame.dataset.previewZoom = String(zoom);
+      $$("[data-preview-zoom-value]").forEach(el => { el.textContent = `${Math.round(zoom * 100)}%`; });
+      $$("[data-preview-zoom-out]").forEach(b => { b.disabled = zoom <= ZOOM_STEPS[0]; });
+      $$("[data-preview-zoom-in]").forEach(b => { b.disabled = zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]; });
+    };
     const setPreviewZoom = (z) => {
       const next = Math.max(ZOOM_STEPS[0], Math.min(ZOOM_STEPS[ZOOM_STEPS.length - 1], z));
-      if (next === previewZoom) return;
-      previewZoom = next;
-      const labels = $$("[data-preview-zoom-value]");
-      labels.forEach(el => { el.textContent = `${Math.round(previewZoom * 100)}%`; });
-      $$("[data-preview-zoom-out]").forEach(b => { b.disabled = previewZoom <= ZOOM_STEPS[0]; });
-      $$("[data-preview-zoom-in]").forEach(b => { b.disabled = previewZoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]; });
+      if (next === getPreviewZoom()) return;
+      writePreviewZoomUI(next);
       renderHeroPreview();
     };
     const stepZoom = (dir) => {
-      const idx = ZOOM_STEPS.indexOf(previewZoom);
+      const cur = getPreviewZoom();
+      const idx = ZOOM_STEPS.indexOf(cur);
       if (idx === -1) {
-        // Current zoom isn't on the discrete scale — pick the nearest
-        // step in the requested direction.
         const next = dir > 0
-          ? ZOOM_STEPS.find(z => z > previewZoom)
-          : [...ZOOM_STEPS].reverse().find(z => z < previewZoom);
+          ? ZOOM_STEPS.find(z => z > cur)
+          : [...ZOOM_STEPS].reverse().find(z => z < cur);
         if (next != null) setPreviewZoom(next);
         return;
       }
@@ -1613,7 +1650,8 @@ const DEFAULT_HERO_CARD = {
       const fitScale = platform === "desktop"
         ? Math.min(fw / targetW, fh / targetH, 1)
         : Math.min(fw / targetW, 1);
-      const finalScale = fitScale * previewZoom;
+      const zoom = getPreviewZoom();
+      const finalScale = fitScale * zoom;
       els.stage.style.width = `${targetW}px`;
       els.stage.style.height = platform === "desktop" ? `${targetH}px` : "auto";
       els.stage.style.minHeight = platform === "mobile" ? `${targetH}px` : "";
@@ -1623,16 +1661,11 @@ const DEFAULT_HERO_CARD = {
       els.stage.style.top = "8px";
       const scaledW = targetW * finalScale;
       const offsetLeft = (els.frame.clientWidth - scaledW) / 2;
-      // When zoomed in, anchor at the frame's left edge so panning
-      // by scroll feels natural; otherwise keep it horizontally
-      // centered as before.
-      els.stage.style.left = previewZoom > 1
+      els.stage.style.left = zoom > 1
         ? "8px"
         : `${Math.max(8, offsetLeft)}px`;
-      // Flip the frame's overflow so the user can scroll when the
-      // staged content is bigger than the frame.
       if (els.frame) {
-        if (previewZoom > 1) els.frame.setAttribute("data-preview-zoomed", "true");
+        if (zoom > 1) els.frame.setAttribute("data-preview-zoomed", "true");
         else els.frame.removeAttribute("data-preview-zoomed");
       }
 
@@ -2019,6 +2052,13 @@ const DEFAULT_HERO_CARD = {
     ];
     const REMOVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     const attachListEditor = (root) => {
+      // Reuse the cached instance if this root was already wired
+      // earlier in this page's lifetime. Without this guard, every
+      // call to wireForm (DOMContentLoaded + astro:page-load +
+      // astro:after-swap) re-attached a new "Agregar" listener,
+      // so a single click added 2+ rows. Same pattern used to
+      // exist for phones / addresses / emails / social.
+      if (root.__listEditor) return root.__listEditor;
       const tpl = root.getAttribute("data-list-template");
       const rowsEl = root.querySelector("[data-list-rows]");
       const addBtn = root.querySelector("[data-list-add]");
@@ -2141,13 +2181,15 @@ const DEFAULT_HERO_CARD = {
         rowsEl.lastElementChild?.querySelector("input, textarea, select")?.focus();
       });
 
-      return {
+      const instance = {
         setData(items) {
           data = Array.isArray(items) ? items.map(x => ({ ...x })) : [];
           render();
         },
         getData() { return [...data]; },
       };
+      root.__listEditor = instance;
+      return instance;
     };
     // listEditors is rebuilt on every boot so Astro view transitions
     // re-attach to the freshly swapped-in DOM nodes.
@@ -2155,11 +2197,21 @@ const DEFAULT_HERO_CARD = {
 
     // ----- Wire events -----
     const wireForm = () => {
+      // Boot is called for both DOMContentLoaded and astro:page-load
+      // (and astro:after-swap on transitions), so wireForm runs 2+
+      // times per page life. Without a guard, every addEventListener
+      // call below stacks up — clicking "Agregar otro …" added two
+      // rows because two listeners fired. Mark the form once and
+      // skip subsequent runs; listEditors are cached on their root
+      // elements so re-querying still works for hydrate(). */
+      const wireFormRoot = $("[data-site-form]");
       listEditors = new Map();
       $$("[data-list-editor]").forEach(root => {
         const name = root.getAttribute("data-list-editor");
         if (name) listEditors.set(name, attachListEditor(root));
       });
+      if (wireFormRoot?.dataset.wired === "1") return;
+      if (wireFormRoot) wireFormRoot.dataset.wired = "1";
       $$("[data-bind]").forEach(el => {
         el.addEventListener("input", renderHeroPreview);
         el.addEventListener("change", renderHeroPreview);
