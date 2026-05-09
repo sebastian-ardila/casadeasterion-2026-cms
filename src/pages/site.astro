@@ -11,6 +11,20 @@ import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq, tags as parseTags } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
 
+// Reads a hidden JSON-encoded list from FormData. Returns [] on
+// missing / malformed input so a corrupt list can never block a
+// site-config save.
+function parseJsonArray(fd: FormData, key: string): unknown[] {
+  const raw = fd.get(key)?.toString() ?? "";
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 const CONTENT_SOURCE_OPTIONS = [
   { value: "editorial",   label: "Descripción editorial",   hint: "Default — usa la descripción global del sitio", icon: "lucide:file-text" },
   { value: "manual",      label: "Manual",                  hint: "Define el texto y la URL aquí mismo",            icon: "lucide:pencil" },
@@ -82,6 +96,10 @@ if (Astro.request.method === "POST") {
       { key: "contact_email",             value: str(fd, "contact_email") ?? "" },
       { key: "contact_address",           value: str(fd, "contact_address") ?? "" },
       { key: "contact_hours",             value: str(fd, "contact_hours") ?? "" },
+      { key: "contact_emails_extra",      value: parseJsonArray(fd, "contact_emails_extra_json") },
+      { key: "contact_addresses_extra",   value: parseJsonArray(fd, "contact_addresses_extra_json") },
+      { key: "contact_phones",            value: parseJsonArray(fd, "contact_phones_json") },
+      { key: "social_accounts",           value: parseJsonArray(fd, "social_accounts_json") },
       {
         key: "social_links",
         value: {
@@ -413,28 +431,72 @@ const DEFAULT_HERO_CARD = {
       {/* === CONTACTO TAB === */}
       <div data-tab-panel="contacto" class="space-y-6 max-w-3xl" hidden>
         <section class="card space-y-5">
-          <CardHeader icon="lucide:mail" title="Email y datos generales" desc="Estos datos aparecen en la página /contacto del sitio público." />
-          <Field label="Correo electrónico" name="contact_email" type="email" description="Email principal de contacto. Se muestra como tarjeta en la página de contacto." />
-          <div class="grid sm:grid-cols-2 gap-4">
-            <Field label="Dirección física" name="contact_address" type="textarea" rows={2} description="Opcional. Soporta varias líneas (presiona Enter para separar)." />
-            <Field label="Horario de atención" name="contact_hours" type="textarea" rows={2} description="Opcional. Ej: 'Lun a Vie · 9:00 — 18:00'." />
+          <CardHeader icon="lucide:mail" title="Correos electrónicos" desc="El primer email se considera el principal. Puedes agregar todos los que necesites (prensa, ventas, derechos, etc.)." />
+          <Field label="Email principal" name="contact_email" type="email" description="Aparece como primera tarjeta en /contacto." />
+          <div class="cl-list" data-list-editor="contact_emails_extra" data-list-template="email">
+            <div class="cl-list-rows" data-list-rows></div>
+            <button type="button" class="cl-list-add" data-list-add>
+              <Icon name="lucide:plus" class="w-3.5 h-3.5" aria-hidden="true" />
+              Agregar otro correo
+            </button>
+            <input type="hidden" name="contact_emails_extra_json" data-list-json />
           </div>
         </section>
 
         <section class="card space-y-5">
-          <CardHeader icon="lucide:phone" title="WhatsApp (compras)" desc="El botón Comprar en cada libro abre WhatsApp con un mensaje pre-llenado a este número." />
-          <div class="grid sm:grid-cols-2 gap-4">
-            <Field label="Número en formato E.164" name="whatsapp_phone" required description="Ej: +573117462759 (con + y código país)." />
+          <CardHeader icon="lucide:map-pin" title="Direcciones" desc="Si tu editorial tiene varias sedes o apartado postal, agrégalos todos aquí." />
+          <Field label="Dirección principal" name="contact_address" type="textarea" rows={2} description="Soporta varias líneas." />
+          <div class="cl-list" data-list-editor="contact_addresses_extra" data-list-template="address">
+            <div class="cl-list-rows" data-list-rows></div>
+            <button type="button" class="cl-list-add" data-list-add>
+              <Icon name="lucide:plus" class="w-3.5 h-3.5" aria-hidden="true" />
+              Agregar otra dirección
+            </button>
+            <input type="hidden" name="contact_addresses_extra_json" data-list-json />
           </div>
-          <Field label="Plantilla del mensaje" name="whatsapp_message_template" type="textarea" rows={3} required description="Variables: {{title}}, {{author}}, {{isbn}}, {{slug}}. Se usa cuando un libro no define un mensaje propio." />
+          <Field label="Horario de atención" name="contact_hours" type="textarea" rows={2} description="Opcional. Ej: 'Lun a Vie · 9:00 — 18:00'." />
         </section>
 
         <section class="card space-y-5">
-          <CardHeader icon="lucide:share-2" title="Redes sociales" desc="URLs completas de los perfiles oficiales. Se enlazan desde el footer y la página de contacto." />
+          <CardHeader icon="lucide:phone" title="Teléfonos y WhatsApp" desc="El número de compras (abajo) se usa en cada libro para abrir WhatsApp; los demás aparecen en /contacto." />
+          <div class="cl-list" data-list-editor="contact_phones" data-list-template="phone">
+            <div class="cl-list-rows" data-list-rows></div>
+            <button type="button" class="cl-list-add" data-list-add>
+              <Icon name="lucide:plus" class="w-3.5 h-3.5" aria-hidden="true" />
+              Agregar otro teléfono
+            </button>
+            <input type="hidden" name="contact_phones_json" data-list-json />
+          </div>
+          <div class="pt-4 border-t border-stone-100 space-y-4">
+            <p class="label flex items-center gap-1.5">
+              <Icon name="lucide:shopping-cart" class="w-3.5 h-3.5" aria-hidden="true" />
+              WhatsApp dedicado a compras
+            </p>
+            <div class="grid sm:grid-cols-2 gap-4">
+              <Field label="Número en formato E.164" name="whatsapp_phone" required description="Ej: +573117462759 (con + y código país)." />
+            </div>
+            <Field label="Plantilla del mensaje" name="whatsapp_message_template" type="textarea" rows={3} required description="Variables: {{title}}, {{author}}, {{isbn}}, {{slug}}. Se usa cuando un libro no define un mensaje propio." />
+          </div>
+        </section>
+
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:share-2" title="Redes sociales" desc="Las tres principales (Facebook, Instagram, Twitter) se enlazan también desde el footer; las demás solo aparecen en /contacto." />
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Field label="Facebook" name="social_facebook" type="url" description="URL pública del perfil." />
             <Field label="Instagram" name="social_instagram" type="url" description="URL pública del perfil." />
             <Field label="Twitter / X" name="social_twitter" type="url" description="URL pública del perfil." />
+          </div>
+          <div class="pt-4 border-t border-stone-100">
+            <p class="label">Otras redes / enlaces</p>
+            <p class="hcc-hint mb-3">YouTube, LinkedIn, TikTok, sitio web, etc.</p>
+            <div class="cl-list" data-list-editor="social_accounts" data-list-template="social">
+              <div class="cl-list-rows" data-list-rows></div>
+              <button type="button" class="cl-list-add" data-list-add>
+                <Icon name="lucide:plus" class="w-3.5 h-3.5" aria-hidden="true" />
+                Agregar otra red
+              </button>
+              <input type="hidden" name="social_accounts_json" data-list-json />
+            </div>
           </div>
         </section>
       </div>
@@ -956,6 +1018,83 @@ const DEFAULT_HERO_CARD = {
   .hcc-field-label > svg { color: rgb(120 113 108); flex: 0 0 auto; }
   .hcc-field .hcc-hint { margin: 0 0 0.125rem; }
   .hcc-url-stack { display: flex; flex-direction: column; gap: 0.5rem; }
+
+  /* === Contact list editor (emails / phones / addresses / social) === */
+  .cl-list { display: flex; flex-direction: column; gap: 0.625rem; }
+  .cl-list-rows { display: flex; flex-direction: column; gap: 0.625rem; }
+  .cl-list-rows:empty { display: none; }
+  .cl-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    align-items: start;
+    padding: 0.625rem;
+    border: 1px solid rgb(231 229 228);
+    background: rgb(250 250 249);
+    border-radius: 4px;
+  }
+  .cl-row-fields {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .cl-row-fields > .cl-row-field-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(120 113 108);
+    margin-bottom: 0.125rem;
+  }
+  .cl-row-remove {
+    background: transparent;
+    border: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    color: rgb(168 162 158);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s;
+    flex-shrink: 0;
+  }
+  .cl-row-remove:hover {
+    background: rgb(254 226 226);
+    color: rgb(127 29 29);
+  }
+  .cl-row-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    color: rgb(68 64 60);
+    cursor: pointer;
+    margin-top: 0.25rem;
+  }
+  .cl-list-add {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px dashed rgb(214 211 209);
+    background: white;
+    color: rgb(68 64 60);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s, background-color 0.12s;
+  }
+  .cl-list-add:hover { border-color: rgb(28 25 23); color: rgb(28 25 23); }
+  .cl-row .hcc-input { font-size: 0.8125rem; padding: 0.4rem 0.55rem; }
+  .cl-row select.hcc-input {
+    appearance: none;
+    background:
+      url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2378716c' stroke-width='1.5'%3E%3Cpath d='M3 5l3 3 3-3'/%3E%3C/svg%3E")
+      right 0.5rem center / 12px no-repeat white;
+    padding-right: 1.75rem;
+  }
   .hcc-bg-fallback {
     margin-top: 0.5rem;
     padding: 0.375rem 0.625rem;
@@ -1524,6 +1663,11 @@ const DEFAULT_HERO_CARD = {
       set("contact_email", cfg.contact_email ?? "");
       set("contact_address", cfg.contact_address ?? "");
       set("contact_hours", cfg.contact_hours ?? "");
+      // Multi-row contact / social lists
+      listEditors.get("contact_emails_extra")?.setData(Array.isArray(cfg.contact_emails_extra) ? cfg.contact_emails_extra : []);
+      listEditors.get("contact_addresses_extra")?.setData(Array.isArray(cfg.contact_addresses_extra) ? cfg.contact_addresses_extra : []);
+      listEditors.get("contact_phones")?.setData(Array.isArray(cfg.contact_phones) ? cfg.contact_phones : []);
+      listEditors.get("social_accounts")?.setData(Array.isArray(cfg.social_accounts) ? cfg.social_accounts : []);
       const social = (cfg.social_links ?? {});
       set("social_facebook", social.facebook ?? "");
       set("social_instagram", social.instagram ?? "");
@@ -1594,8 +1738,167 @@ const DEFAULT_HERO_CARD = {
       renderHeroPreview();
     };
 
+    // ----- Contact list editors (emails / phones / addresses / social) -----
+    // One generic helper builds and wires a list editor based on its
+    // [data-list-template] attribute. Each row is a typed object;
+    // every input/change syncs the array into a hidden JSON input
+    // that the form POST submits as foo_json. The Astro handler
+    // parses each foo_json and upserts under its real config key.
+    const SOCIAL_PLATFORMS = [
+      { value: "instagram", label: "Instagram" },
+      { value: "facebook",  label: "Facebook" },
+      { value: "twitter",   label: "Twitter / X" },
+      { value: "youtube",   label: "YouTube" },
+      { value: "linkedin",  label: "LinkedIn" },
+      { value: "tiktok",    label: "TikTok" },
+      { value: "threads",   label: "Threads" },
+      { value: "bluesky",   label: "Bluesky" },
+      { value: "website",   label: "Sitio web" },
+      { value: "other",     label: "Otro" },
+    ];
+    const REMOVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    const attachListEditor = (root) => {
+      const tpl = root.getAttribute("data-list-template");
+      const rowsEl = root.querySelector("[data-list-rows]");
+      const addBtn = root.querySelector("[data-list-add]");
+      const json = root.querySelector("[data-list-json]");
+      let data = [];
+
+      const makeInput = (type, k, value, placeholder) => {
+        const el = type === "textarea" ? document.createElement("textarea") : document.createElement("input");
+        if (type !== "textarea") el.type = type;
+        el.className = "hcc-input";
+        el.dataset.k = k;
+        el.value = value ?? "";
+        if (placeholder) el.placeholder = placeholder;
+        if (type === "textarea") el.rows = 2;
+        return el;
+      };
+
+      const buildRow = (item) => {
+        const row = document.createElement("div");
+        row.className = "cl-row";
+        row.dataset.listRow = "";
+        const fields = document.createElement("div");
+        fields.className = "cl-row-fields";
+
+        if (tpl === "email") {
+          fields.style.gridTemplateColumns = "minmax(0, 1.6fr) minmax(0, 1fr)";
+          fields.append(
+            makeInput("email", "email", item.email, "ventas@ediciones.com"),
+            makeInput("text",  "label", item.label, "Etiqueta (opcional)"),
+          );
+        } else if (tpl === "phone") {
+          fields.style.gridTemplateColumns = "minmax(0, 1.4fr) minmax(0, 1fr)";
+          fields.append(
+            makeInput("tel",  "phone", item.phone, "+57 311 ..."),
+            makeInput("text", "label", item.label, "Etiqueta (ej: prensa)"),
+          );
+          const cb = document.createElement("label");
+          cb.className = "cl-row-checkbox";
+          cb.style.gridColumn = "1 / -1";
+          const cbIn = document.createElement("input");
+          cbIn.type = "checkbox";
+          cbIn.dataset.k = "whatsapp";
+          cbIn.checked = !!item.whatsapp;
+          const txt = document.createTextNode(" Es WhatsApp (abre wa.me en lugar de tel:)");
+          cb.append(cbIn, txt);
+          fields.appendChild(cb);
+        } else if (tpl === "address") {
+          fields.style.gridTemplateColumns = "minmax(0, 1fr)";
+          fields.append(
+            makeInput("text",     "label",   item.label,   "Etiqueta (ej: Sede principal)"),
+            makeInput("textarea", "address", item.address, "Calle ..."),
+          );
+        } else if (tpl === "social") {
+          fields.style.gridTemplateColumns = "minmax(120px, 150px) minmax(0, 1.4fr) minmax(0, 1fr)";
+          const sel = document.createElement("select");
+          sel.className = "hcc-input";
+          sel.dataset.k = "platform";
+          for (const p of SOCIAL_PLATFORMS) {
+            const opt = document.createElement("option");
+            opt.value = p.value;
+            opt.textContent = p.label;
+            if (p.value === (item.platform || "instagram")) opt.selected = true;
+            sel.appendChild(opt);
+          }
+          fields.append(
+            sel,
+            makeInput("url",  "url",   item.url,   "https://..."),
+            makeInput("text", "label", item.label, "Etiqueta (opcional)"),
+          );
+        }
+        row.appendChild(fields);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "cl-row-remove";
+        remove.dataset.listRemove = "";
+        remove.setAttribute("aria-label", "Quitar");
+        remove.innerHTML = REMOVE_SVG;
+        row.appendChild(remove);
+        return row;
+      };
+
+      const sync = () => {
+        const next = [];
+        rowsEl.querySelectorAll("[data-list-row]").forEach(row => {
+          const obj = {};
+          row.querySelectorAll("[data-k]").forEach(el => {
+            const k = el.dataset.k;
+            obj[k] = el.type === "checkbox" ? el.checked : el.value;
+          });
+          next.push(obj);
+        });
+        data = next;
+        if (json) json.value = JSON.stringify(data);
+      };
+
+      const render = () => {
+        rowsEl.innerHTML = "";
+        data.forEach(item => rowsEl.appendChild(buildRow(item)));
+        if (json) json.value = JSON.stringify(data);
+      };
+
+      rowsEl.addEventListener("input", sync);
+      rowsEl.addEventListener("change", sync);
+      rowsEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-list-remove]");
+        if (!btn) return;
+        btn.closest("[data-list-row]")?.remove();
+        sync();
+      });
+      addBtn?.addEventListener("click", () => {
+        const empty = tpl === "email"   ? { email: "", label: "" }
+                    : tpl === "phone"   ? { phone: "", label: "", whatsapp: false }
+                    : tpl === "address" ? { label: "", address: "" }
+                    : tpl === "social"  ? { platform: "instagram", url: "", label: "" }
+                    : {};
+        data.push(empty);
+        rowsEl.appendChild(buildRow(empty));
+        if (json) json.value = JSON.stringify(data);
+        rowsEl.lastElementChild?.querySelector("input, textarea, select")?.focus();
+      });
+
+      return {
+        setData(items) {
+          data = Array.isArray(items) ? items.map(x => ({ ...x })) : [];
+          render();
+        },
+        getData() { return [...data]; },
+      };
+    };
+    // listEditors is rebuilt on every boot so Astro view transitions
+    // re-attach to the freshly swapped-in DOM nodes.
+    let listEditors = new Map();
+
     // ----- Wire events -----
     const wireForm = () => {
+      listEditors = new Map();
+      $$("[data-list-editor]").forEach(root => {
+        const name = root.getAttribute("data-list-editor");
+        if (name) listEditors.set(name, attachListEditor(root));
+      });
       $$("[data-bind]").forEach(el => {
         el.addEventListener("input", renderHeroPreview);
         el.addEventListener("change", renderHeroPreview);
