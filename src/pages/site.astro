@@ -546,9 +546,12 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
   </form>
 
   {/* Fullscreen preview modal — outside the form so the submit button
-      doesn't pick up its inputs. Its DOM mirrors the inline preview
-      shape so the same render fns can target either. */}
-  <div data-fullscreen-modal hidden class="fixed inset-0 z-[60] bg-stone-900/96 flex flex-col">
+      doesn't pick up its inputs. The card content elements use the
+      same data-preview-{eyebrow,title,body,cta} attribute names as
+      the inline preview because applyContent() queries by those
+      selectors on whatever card it gets — keeping them consistent
+      lets one set of render fns target either preview. */}
+  <div data-fullscreen-modal hidden class="fixed inset-0 z-[60] bg-stone-900 flex flex-col">
     <header class="flex items-center justify-between px-4 h-14 border-b border-stone-700 text-stone-100 shrink-0">
       <div class="flex items-center gap-3 min-w-0">
         <span data-fullscreen-platform class="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider px-2 py-1 rounded bg-stone-800">
@@ -561,16 +564,16 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         <Icon name="lucide:x" class="w-5 h-5" aria-hidden="true" />
       </button>
     </header>
-    <div class="flex-1 relative overflow-hidden" data-fullscreen-frame>
+    <div class="flex-1 relative overflow-hidden bg-stone-100" data-fullscreen-frame>
       <div class="relative" data-fullscreen-stage>
         <div data-fullscreen-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
         <a data-fullscreen-card class="z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
           <div>
-            <p data-fullscreen-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
-            <h1 data-fullscreen-title class="leading-[1.1] mb-3"></h1>
-            <p data-fullscreen-body class="opacity-80 leading-relaxed"></p>
+            <p data-preview-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
+            <h1 data-preview-title class="leading-[1.1] mb-3"></h1>
+            <p data-preview-body class="opacity-80 leading-relaxed"></p>
           </div>
-          <span data-fullscreen-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
+          <span data-preview-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
         </a>
         <img data-fullscreen-mobile-img alt="" class="block w-full" style="display:none;" />
       </div>
@@ -1171,12 +1174,16 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       const title = card.querySelector("[data-preview-title]");
       const body = card.querySelector("[data-preview-body]");
       const cta = card.querySelector("[data-preview-cta]");
-      eyebrow.textContent = c.eyebrow || "";
-      eyebrow.style.display = c.eyebrow ? "block" : "none";
-      title.textContent = c.title || "";
-      body.textContent = c.body || "";
-      body.style.display = c.body ? "block" : "none";
-      cta.textContent = c.cta_label || "";
+      if (eyebrow) {
+        eyebrow.textContent = c.eyebrow || "";
+        eyebrow.style.display = c.eyebrow ? "block" : "none";
+      }
+      if (title) title.textContent = c.title || "";
+      if (body) {
+        body.textContent = c.body || "";
+        body.style.display = c.body ? "block" : "none";
+      }
+      if (cta) cta.textContent = c.cta_label || "";
       card.href = c.cta_href || "#";
     };
 
@@ -1189,7 +1196,7 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       applyVisuals(els.card, layout);
       applyContent(els.card, cfg);
 
-      const titleEl = els.card.querySelector("[data-fullscreen-title], [data-preview-title]");
+      const titleEl = els.card.querySelector("[data-preview-title]");
       if (titleEl) titleEl.style.fontSize = platform === "desktop" ? "3rem" : "1.4rem";
 
       if (platform === "desktop") {
