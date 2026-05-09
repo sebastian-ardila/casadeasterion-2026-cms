@@ -237,12 +237,13 @@ const DEFAULT_HERO_CARD = {
 ---
 
 <AppLayout title="Webpage" wide>
-  {/* Page chooser sits FIRST so it can pin flush to the bottom of
-      the breadcrumb (the wrapper's py-6/py-10 padding-top is
-      cancelled by the negative margin in .cas-pagenav, so there's
-      no visible gap between breadcrumb and chips, even before the
-      first scroll). The bar swaps to compact form once the user
-      scrolls past a small threshold. */}
+  {/* Sticky wrapper that holds BOTH the page-nav (Home/Catálogo/…)
+      and the inner tab nav (Hero/Editorial/…) together. The wrapper
+      is the single sticky element, so the two bars travel as one
+      unit — no per-element sticky math, no gaps. Negative margins
+      cancel the surrounding wrapper's padding so the stack pins
+      flush to the breadcrumb at all scroll positions. */}
+  <div class="cas-stickystack" data-stickystack>
   <nav class="cas-pagenav" data-pagenav aria-label="Páginas del sitio">
     <button type="button" data-page-tab="home" class="cas-pagechip">
       <Icon name="lucide:home" class="w-4 h-4" aria-hidden="true" />
@@ -308,6 +309,7 @@ const DEFAULT_HERO_CARD = {
       </button>
     </div>
   </nav>
+  </div>{/* /.cas-stickystack */}
 
   <div class="mb-6">
     <h1 class="font-serif text-3xl md:text-4xl mb-2">Webpage</h1>
@@ -793,49 +795,54 @@ const DEFAULT_HERO_CARD = {
      scrolls horizontally if needed, with a hairline bottom border so
      it visually separates from the inner tab nav. Both states share
      the same chip sizing so chips don't reflow when stickying. */
-  .cas-pagenav {
+  /* The sticky wrapper around the page-nav + tab-nav. Negative
+     margins cancel main's wrapper padding so the stack pins flush
+     to the breadcrumb at scroll=0 AND when stuck. Inner padding
+     reproduces the visual padding of the original layout. */
+  .cas-stickystack {
     position: sticky;
     z-index: 11;
-    /* Negative margins (top + sides) cancel the surrounding wrapper
-       padding so the chips bar pins flush against the breadcrumb
-       (no gap before scroll, no gap after scroll).
-       margin-bottom = 0 so the next sticky (the Hero/Editorial/...
-       tab nav) snaps directly under it; the breathing room visible
-       in the unstuck state is provided via padding-bottom instead,
-       which collapses to 0 when stuck. */
-    margin: -1.5rem -1.25rem 0;
-    padding: 1.5rem 1.25rem 1.5rem;
-    top: 96px;                                /* mobile: below mobile header + breadcrumb */
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
+    top: 96px;
+    margin: -1.5rem -1.25rem 1.5rem;
     background: white;
-    border-bottom: 1px solid transparent;
-    transition: padding 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
   @media (min-width: 768px) {
-    .cas-pagenav {
+    .cas-stickystack {
       top: 0;
-      margin-top: -2.5rem;                    /* cancel md:py-10 (= 2.5rem) */
+      margin-top: -2.5rem;
       margin-left: -2rem;
       margin-right: -2rem;
-      padding: 2.5rem 2rem 1.5rem;
     }
   }
   @media (min-width: 1024px) {
-    .cas-pagenav {
+    .cas-stickystack {
       margin-left: -2.5rem;
       margin-right: -2.5rem;
-      padding-left: 2.5rem;
-      padding-right: 2.5rem;
     }
+  }
+
+  .cas-pagenav {
+    /* No own sticky — the wrapper is sticky. Padding-top creates
+       the visible breathing room above the chips that compensates
+       for the wrapper's negative margin-top. */
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 1.5rem 1.25rem 1.5rem;
+    background: white;
+    transition: padding 0.15s ease;
+  }
+  @media (min-width: 768px) {
+    .cas-pagenav { padding: 2.5rem 2rem 1.5rem; }
+  }
+  @media (min-width: 1024px) {
+    .cas-pagenav { padding-left: 2.5rem; padding-right: 2.5rem; }
   }
   .cas-pagenav[data-stuck="1"] {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-top: 0.5rem;
-    padding-bottom: 0.5rem;                   /* simétrico, da respiro a los chips */
-    border-bottom-color: rgb(231 229 228);
+    padding-bottom: 0.5rem;
     scrollbar-width: thin;
   }
   .cas-pagenav[data-stuck="1"]::-webkit-scrollbar { height: 4px; }
@@ -877,37 +884,18 @@ const DEFAULT_HERO_CARD = {
   }
 
   /* === Tab nav (Hero / Editorial / Contacto / SEO) ===
-     Sibling of the page-nav so it can sticky right beneath it
-     without an h1 in between blocking the natural-flow position
-     from reaching the sticky pin. Negative side margins extend the
-     bar to main's full content width (matching the page-nav's bar)
-     so the bottom border spans edge-to-edge. The page-nav height
-     is measured by JS and exposed as --cas-pagenav-h, so the two
-     stickies stack flush even when the page-nav reflows or
-     compacts. Fallback: 48px (≈ stuck pagenav height). */
+     Lives inside the .cas-stickystack so it travels together with
+     the page-nav. No own sticky. Padding mirrors the page-nav so
+     the row aligns visually. */
   .cas-tabs {
-    position: sticky;
-    z-index: 10;
-    top: calc(96px + var(--cas-pagenav-h, 48px));
-    margin: 0 -1.25rem 1.5rem;
     padding: 0 1.25rem;
+    background: white;
   }
   @media (min-width: 768px) {
-    .cas-tabs {
-      top: var(--cas-pagenav-h, 48px);
-      margin-left: -2rem;
-      margin-right: -2rem;
-      padding-left: 2rem;
-      padding-right: 2rem;
-    }
+    .cas-tabs { padding: 0 2rem; }
   }
   @media (min-width: 1024px) {
-    .cas-tabs {
-      margin-left: -2.5rem;
-      margin-right: -2.5rem;
-      padding-left: 2.5rem;
-      padding-right: 2.5rem;
-    }
+    .cas-tabs { padding: 0 2.5rem; }
   }
   .cas-tab {
     display: inline-flex;
@@ -1109,26 +1097,26 @@ const DEFAULT_HERO_CARD = {
   }
 
   /* When the user clicks Web / Mobile in the preview, auto-scroll
-     stops short by this much so the sticky stack (mobile header +
-     breadcrumb on mobile, plus pagenav + tabs on every breakpoint)
-     doesn't cover the top of the target editor section. Values use
-     the COMPACT (stuck) pagenav height — by the time scrollIntoView
-     finishes, the user has scrolled past 0 so the bar is stuck.
-     - mobile: 56 (mobile header) + 40 (breadcrumb) + 48 (pagenav stuck)
-              + 46 (tabs) + 14 (breathing) = 204
-     - md+:    48 (pagenav stuck) + 46 (tabs) + 14 (breathing) = 108 */
-  [data-platform-section] { scroll-margin-top: 204px; }
+     stops short by this much so the sticky stack doesn't cover the
+     top of the target editor section. Reads the live stack height
+     (--cas-stickystack-h) so the offset adapts when the bar
+     compacts. Mobile adds the 56 mobile header + 40 breadcrumb. */
+  [data-platform-section] {
+    scroll-margin-top: calc(96px + var(--cas-stickystack-h, 92px) + 14px);
+  }
   @media (min-width: 768px) {
-    [data-platform-section] { scroll-margin-top: 108px; }
+    [data-platform-section] {
+      scroll-margin-top: calc(var(--cas-stickystack-h, 92px) + 14px);
+    }
   }
 
-  /* Right-side preview aside on lg+: pinned below pagenav + tabs
-     so it never gets covered by the sticky stack. */
+  /* Right-side preview aside on lg+: pinned below the sticky stack
+     so it never gets covered. */
   .cas-preview-aside { /* base: nothing — sticky kicks in at lg */ }
   @media (min-width: 1024px) {
     .cas-preview-aside {
       position: sticky;
-      top: calc(var(--cas-pagenav-h, 48px) + 60px);
+      top: calc(var(--cas-stickystack-h, 92px) + 16px);
     }
   }
 
@@ -3493,21 +3481,24 @@ const DEFAULT_HERO_CARD = {
       });
       setPageTab(currentPageKey(), false);
 
-      // Expose the pagenav's current height as a CSS var so the
-      // Hero/Editorial/Contacto/SEO tab nav can stack right below
-      // it, regardless of stuck/unstuck state.
-      const updatePagenavHeight = () => {
-        const h = nav.getBoundingClientRect().height;
+      // Expose the sticky stack's current height as a CSS var so
+      // any element that needs to clear the stickies (preview-aside,
+      // scroll-margin-top of platform sections) can stay below it
+      // regardless of expanded/compact state.
+      const stack = $("[data-stickystack]");
+      const updateStackHeight = () => {
+        const target = stack || nav;
+        const h = target.getBoundingClientRect().height;
         if (h > 0) {
-          document.documentElement.style.setProperty("--cas-pagenav-h", `${h}px`);
+          document.documentElement.style.setProperty("--cas-stickystack-h", `${h}px`);
         }
       };
-      updatePagenavHeight();
+      updateStackHeight();
       if (typeof ResizeObserver !== "undefined") {
-        const ro = new ResizeObserver(updatePagenavHeight);
-        ro.observe(nav);
+        const ro = new ResizeObserver(updateStackHeight);
+        ro.observe(stack || nav);
       } else {
-        window.addEventListener("resize", updatePagenavHeight);
+        window.addEventListener("resize", updateStackHeight);
       }
 
       // Stuck-state detection. The pagenav is glued to the top of
@@ -3527,10 +3518,10 @@ const DEFAULT_HERO_CARD = {
         const wasStuck = nav.hasAttribute("data-stuck");
         if (stuck && !wasStuck) {
           nav.setAttribute("data-stuck", "1");
-          requestAnimationFrame(updatePagenavHeight);
+          requestAnimationFrame(updateStackHeight);
         } else if (!stuck && wasStuck) {
           nav.removeAttribute("data-stuck");
-          requestAnimationFrame(updatePagenavHeight);
+          requestAnimationFrame(updateStackHeight);
         }
       };
       const onScroll = () => {
