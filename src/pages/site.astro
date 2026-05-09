@@ -237,31 +237,12 @@ const DEFAULT_HERO_CARD = {
 ---
 
 <AppLayout title="Webpage" wide>
-  <div class="mb-6">
-    <h1 class="font-serif text-3xl md:text-4xl mb-2">Webpage</h1>
-    <p class="text-stone-500 max-w-2xl">
-      Todo el contenido editable de cada página del sitio público.
-      Elige una sub-página arriba o desde el panel lateral.
-    </p>
-  </div>
-
-  {!canEdit && (
-    <p class="bg-amber-50 border border-amber-200 text-amber-900 text-sm p-3 mb-6 flex items-center gap-2">
-      <Icon name="lucide:lock" class="w-4 h-4" aria-hidden="true" />
-      <span>Solo lectura — tienes permiso de ver pero no de editar la configuración del sitio.</span>
-    </p>
-  )}
-  {formError && (
-    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
-  )}
-
-  {/* Page chooser — wraps to multiple lines on narrow screens, each
-      chip sized to its content. Mirrors the sub-nav under "Webpage"
-      in the sidebar so editors can switch from either place. Becomes
-      sticky on scroll (sits below the breadcrumb, above the inner
-      Hero/Editorial/Contacto/SEO tab nav) and compacts to a single
-      horizontally-scrollable row in that state. */}
-  <div data-pagenav-sentinel aria-hidden="true" class="h-px -mt-px"></div>
+  {/* Page chooser sits FIRST so it can pin flush to the bottom of
+      the breadcrumb (the wrapper's py-6/py-10 padding-top is
+      cancelled by the negative margin in .cas-pagenav, so there's
+      no visible gap between breadcrumb and chips, even before the
+      first scroll). The bar swaps to compact form once the user
+      scrolls past a small threshold. */}
   <nav class="cas-pagenav" data-pagenav aria-label="Páginas del sitio">
     <button type="button" data-page-tab="home" class="cas-pagechip">
       <Icon name="lucide:home" class="w-4 h-4" aria-hidden="true" />
@@ -292,6 +273,24 @@ const DEFAULT_HERO_CARD = {
       <span>Contacto</span>
     </button>
   </nav>
+
+  <div class="mb-6">
+    <h1 class="font-serif text-3xl md:text-4xl mb-2">Webpage</h1>
+    <p class="text-stone-500 max-w-2xl">
+      Todo el contenido editable de cada página del sitio público.
+      Elige una sub-página arriba o desde el panel lateral.
+    </p>
+  </div>
+
+  {!canEdit && (
+    <p class="bg-amber-50 border border-amber-200 text-amber-900 text-sm p-3 mb-6 flex items-center gap-2">
+      <Icon name="lucide:lock" class="w-4 h-4" aria-hidden="true" />
+      <span>Solo lectura — tienes permiso de ver pero no de editar la configuración del sitio.</span>
+    </p>
+  )}
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
 
   <div data-page-tab-panel="home">
 
@@ -541,7 +540,7 @@ const DEFAULT_HERO_CARD = {
             md:top-0 inside main). 60px ≈ tab nav + small breathing
             room. The breadcrumb lives outside main now, so it does
             NOT count against this offset. */}
-        <aside class="lg:sticky lg:top-[60px] space-y-3 lg:order-2 order-1">
+        <aside class="cas-preview-aside lg:sticky space-y-3 lg:order-2 order-1">
           <div class="flex items-center gap-2 flex-wrap">
             <button type="button" data-preview-tab="desktop" class="cas-preview-tab cas-preview-tab-active">
               <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
@@ -806,12 +805,19 @@ const DEFAULT_HERO_CARD = {
   .cas-pagenav {
     position: sticky;
     z-index: 11;
-    top: calc(96px + var(--cas-pagenav-offset, 0px));
+    /* Negative margins (top + sides) cancel the surrounding wrapper
+       padding so the chips bar pins flush against the breadcrumb
+       (no gap before scroll, no gap after scroll).
+       margin-bottom = 0 so the next sticky (the Hero/Editorial/...
+       tab nav) snaps directly under it; the breathing room visible
+       in the unstuck state is provided via padding-bottom instead,
+       which collapses to 0 when stuck. */
+    margin: -1.5rem -1.25rem 0;
+    padding: 1.5rem 1.25rem 1.5rem;
+    top: 96px;                                /* mobile: below mobile header + breadcrumb */
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    margin: 0 -1.25rem 1.5rem;
-    padding: 0.625rem 1.25rem;
     background: white;
     border-bottom: 1px solid transparent;
     transition: padding 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -819,10 +825,10 @@ const DEFAULT_HERO_CARD = {
   @media (min-width: 768px) {
     .cas-pagenav {
       top: 0;
+      margin-top: -2.5rem;                    /* cancel md:py-10 (= 2.5rem) */
       margin-left: -2rem;
       margin-right: -2rem;
-      padding-left: 2rem;
-      padding-right: 2rem;
+      padding: 2.5rem 2rem 1.5rem;
     }
   }
   @media (min-width: 1024px) {
@@ -837,9 +843,8 @@ const DEFAULT_HERO_CARD = {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0;                        /* glue the next sticky under it */
     border-bottom-color: rgb(231 229 228);
-    margin-bottom: 0;
     scrollbar-width: thin;
   }
   .cas-pagenav[data-stuck="1"]::-webkit-scrollbar { height: 4px; }
@@ -1094,14 +1099,27 @@ const DEFAULT_HERO_CARD = {
   }
 
   /* When the user clicks Web / Mobile in the preview, auto-scroll
-     stops short by this much so the sticky tab nav (and on mobile
-     also the sticky mobile header + breadcrumb) doesn't cover the
-     top of the target editor section.
-     - mobile: 56 (mobile header) + 40 (breadcrumb) + 46 (tabs) ≈ 144
-     - md+:    46 (only the tab nav is sticky inside main)         */
-  [data-platform-section] { scroll-margin-top: 144px; }
+     stops short by this much so the sticky stack (mobile header +
+     breadcrumb on mobile, plus pagenav + tabs on every breakpoint)
+     doesn't cover the top of the target editor section. Values use
+     the COMPACT (stuck) pagenav height — by the time scrollIntoView
+     finishes, the user has scrolled past 0 so the bar is stuck.
+     - mobile: 56 (mobile header) + 40 (breadcrumb) + 48 (pagenav stuck)
+              + 46 (tabs) + 14 (breathing) = 204
+     - md+:    48 (pagenav stuck) + 46 (tabs) + 14 (breathing) = 108 */
+  [data-platform-section] { scroll-margin-top: 204px; }
   @media (min-width: 768px) {
-    [data-platform-section] { scroll-margin-top: 60px; }
+    [data-platform-section] { scroll-margin-top: 108px; }
+  }
+
+  /* Right-side preview aside on lg+: pinned below pagenav + tabs
+     so it never gets covered by the sticky stack. */
+  .cas-preview-aside { /* base: nothing — sticky kicks in at lg */ }
+  @media (min-width: 1024px) {
+    .cas-preview-aside {
+      position: sticky;
+      top: calc(var(--cas-pagenav-h, 48px) + 60px);
+    }
   }
 
   /* Zoom controls */
@@ -3255,9 +3273,23 @@ const DEFAULT_HERO_CARD = {
           switchPreviewTab(platform);
           const target = $(`[data-platform-section="${platform}"]`);
           if (target) {
+            // Pre-collapse the pagenav to its stuck (compact) form
+            // BEFORE scrollIntoView calculates the destination, so the
+            // target lines up with the smaller sticky stack instead of
+            // ending up partially hidden behind it.
+            const pagenav = $("[data-pagenav]");
+            pagenav?.setAttribute("data-stuck", "1");
+            const pagenavLast = pagenav?.getAttribute("data-stuck-forced");
+            pagenav?.setAttribute("data-stuck-forced", "1");
             scrollSpyPaused = true;
-            target.scrollIntoView({ behavior: "smooth", block: "start" });
-            setTimeout(() => { scrollSpyPaused = false; }, 800);
+            // Wait one frame so the layout reflects the stuck state.
+            requestAnimationFrame(() => {
+              target.scrollIntoView({ behavior: "smooth", block: "start" });
+              setTimeout(() => {
+                scrollSpyPaused = false;
+                if (!pagenavLast) pagenav?.removeAttribute("data-stuck-forced");
+              }, 800);
+            });
           }
         });
       });
@@ -3461,32 +3493,36 @@ const DEFAULT_HERO_CARD = {
         window.addEventListener("resize", updatePagenavHeight);
       }
 
-      // Stuck-state detection: a 1px sentinel sits right above the
-      // pagenav. When it scrolls out of the viewport (or out of the
-      // main scroll container on desktop), the pagenav has reached
-      // its sticky pin position — flag it as stuck so CSS can
-      // compact it to a single horizontally-scrollable row.
-      const sentinel = $("[data-pagenav-sentinel]");
-      if (sentinel) {
-        const rootEl =
-          window.matchMedia("(min-width: 768px)").matches
-            ? nav.closest("main")
-            : null;
-        const observer = new IntersectionObserver(
-          ([entry]) => {
-            const stuck = !entry.isIntersecting;
-            if (stuck) nav.setAttribute("data-stuck", "1");
-            else nav.removeAttribute("data-stuck");
-            requestAnimationFrame(updatePagenavHeight);
-          },
-          {
-            root: rootEl,
-            rootMargin: rootEl ? "0px 0px 0px 0px" : "-96px 0px 0px 0px",
-            threshold: [0, 1],
-          },
-        );
-        observer.observe(sentinel);
-      }
+      // Stuck-state detection. The pagenav is glued to the top of
+      // the scroll container from y=0 (negative margin cancels the
+      // wrapper padding-top). So "stuck" really means "the user
+      // scrolled past a small threshold" — at which point we
+      // compact the bar to a single horizontally-scrollable row.
+      const main = nav.closest("main");
+      const scroller =
+        main && window.matchMedia("(min-width: 768px)").matches ? main : window;
+      const STUCK_THRESHOLD = 8;
+      let rafPending = false;
+      const updateStuck = () => {
+        rafPending = false;
+        const y = scroller === window ? window.scrollY : scroller.scrollTop;
+        const stuck = y > STUCK_THRESHOLD;
+        const wasStuck = nav.hasAttribute("data-stuck");
+        if (stuck && !wasStuck) {
+          nav.setAttribute("data-stuck", "1");
+          requestAnimationFrame(updatePagenavHeight);
+        } else if (!stuck && wasStuck) {
+          nav.removeAttribute("data-stuck");
+          requestAnimationFrame(updatePagenavHeight);
+        }
+      };
+      const onScroll = () => {
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(updateStuck);
+      };
+      scroller.addEventListener("scroll", onScroll, { passive: true });
+      updateStuck();
     };
 
     const boot = () => {
