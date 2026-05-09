@@ -2,6 +2,7 @@
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
+import CardHeader from "~/components/CardHeader.astro";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
@@ -26,31 +27,45 @@ if (Astro.request.method === "POST") {
   try {
     const fd = await Astro.request.formData();
 
-    const rows = [
-      { key: "hero_quote",                value: strReq(fd, "hero_quote") as never },
-      { key: "hero_quote_author",         value: strReq(fd, "hero_quote_author") as never },
-      { key: "editorial_description",     value: strReq(fd, "editorial_description") as never },
-      { key: "footer_legal",              value: strReq(fd, "footer_legal") as never },
-      { key: "whatsapp_phone",            value: strReq(fd, "whatsapp_phone") as never },
-      { key: "whatsapp_message_template", value: strReq(fd, "whatsapp_message_template") as never },
+    const rows: Array<{ key: string; value: unknown }> = [
+      { key: "hero_quote",                value: strReq(fd, "hero_quote") },
+      { key: "hero_quote_author",         value: strReq(fd, "hero_quote_author") },
+      { key: "editorial_description",     value: strReq(fd, "editorial_description") },
+      { key: "footer_legal",              value: strReq(fd, "footer_legal") },
+      { key: "whatsapp_phone",            value: strReq(fd, "whatsapp_phone") },
+      { key: "whatsapp_message_template", value: strReq(fd, "whatsapp_message_template") },
       {
         key: "social_links",
         value: {
           facebook: str(fd, "social_facebook") ?? "",
           instagram: str(fd, "social_instagram") ?? "",
           twitter: str(fd, "social_twitter") ?? "",
-        } as never,
+        },
       },
-      { key: "default_keywords",      value: parseTags(fd, "default_keywords") as never },
-      { key: "twitter_handle",        value: (str(fd, "twitter_handle") ?? "") as never },
-      { key: "og_image_default",      value: (str(fd, "og_image_default") ?? "") as never },
-      { key: "organization_logo_url", value: (str(fd, "organization_logo_url") ?? "") as never },
-      { key: "hero_image_url",        value: (str(fd, "hero_image_url") ?? "") as never },
+      { key: "default_keywords",      value: parseTags(fd, "default_keywords") },
+      { key: "twitter_handle",        value: str(fd, "twitter_handle") ?? "" },
+      { key: "og_image_default",      value: str(fd, "og_image_default") ?? "" },
+      { key: "organization_logo_url", value: str(fd, "organization_logo_url") ?? "" },
+      { key: "hero_image_url",        value: str(fd, "hero_image_url") ?? "" },
     ];
+
+    // Hero card config travels as a single JSON blob in a hidden input.
+    // If parsing fails or shape is wrong, skip it (don't block the rest).
+    const heroJson = fd.get("hero_card_config_json")?.toString() ?? "";
+    if (heroJson) {
+      try {
+        const parsed = JSON.parse(heroJson);
+        if (parsed && typeof parsed === "object" && parsed.content_source && parsed.desktop && parsed.mobile) {
+          rows.push({ key: "hero_card_config", value: parsed });
+        }
+      } catch {
+        // Malformed JSON — skip silently.
+      }
+    }
 
     const { error } = await supabase
       .from("site_configuration")
-      .upsert(rows, { onConflict: "key" });
+      .upsert(rows as never, { onConflict: "key" });
     if (error) throw error;
 
     return Astro.redirect("/site?saved=1&action=updated&entity=site&publish=1");
@@ -58,18 +73,153 @@ if (Astro.request.method === "POST") {
     formError = friendlyError(err);
   }
 }
+
+// Default hero card config — kept in sync with apps/web/src/lib/site-config.ts
+// and migration 0030. Used when no value is persisted yet, and to fill
+// missing keys from a partial save.
+const DEFAULT_HERO_CARD = {
+  content_source: "editorial",
+  manual: {
+    eyebrow: "Editorial",
+    title: "Casa de Asterión Ediciones",
+    body: "",
+    cta_label: "Explorar el catálogo",
+    cta_href: "/catalogo",
+  },
+  desktop: {
+    bg_color: "#1a1715",
+    bg_alpha: 1,
+    bg_image_url: "",
+    bg_blur: 0,
+    text_color: "#f5f1ea",
+    title_font: "serif",
+    border_radius_tl: 0,
+    border_radius_tr: 0,
+    border_radius_br: 0,
+    border_radius_bl: 0,
+    width: 760,
+    height: 520,
+    padding: 56,
+    offset_x: 96,
+    offset_y: 0,
+    shadow: true,
+  },
+  mobile: {
+    bg_color: "#1a1715",
+    bg_alpha: 1,
+    bg_image_url: "",
+    bg_blur: 0,
+    text_color: "#f5f1ea",
+    title_font: "serif",
+    border_radius_tl: 0,
+    border_radius_tr: 0,
+    border_radius_br: 0,
+    border_radius_bl: 0,
+    width: 0,
+    height: 280,
+    padding: 24,
+    offset_x: 16,
+    offset_y: 32,
+    shadow: true,
+  },
+};
+
+function renderPlatformControls(p: "desktop" | "mobile"): string {
+  return `
+    <div>
+      <label class="label">Fondo</label>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div class="hcc-color-row">
+          <input type="color" data-bind="${p}.bg_color" />
+          <input type="text" data-bind-mirror="${p}.bg_color" class="hcc-input flex-1" placeholder="#1a1715" disabled />
+        </div>
+        <div>
+          <label class="label" style="margin-top:0">Opacidad del color</label>
+          <div class="hcc-color-row">
+            <input type="range" data-bind="${p}.bg_alpha" min="0" max="1" step="0.05" class="flex-1" />
+            <input type="number" data-bind-mirror="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-input w-16" disabled />
+          </div>
+        </div>
+      </div>
+      <p class="hcc-hint mt-1">Si subes una imagen de fondo, el color actúa como overlay encima.</p>
+    </div>
+
+    <div>
+      <label class="label">Blur del fondo (px)</label>
+      <div class="hcc-color-row">
+        <input type="range" data-bind="${p}.bg_blur" min="0" max="40" step="1" class="flex-1" />
+        <input type="number" data-bind-mirror="${p}.bg_blur" min="0" max="40" step="1" class="hcc-input w-16" disabled />
+      </div>
+      <p class="hcc-hint mt-1">Aplica blur a lo que está detrás de la card (efecto frosted glass — útil con opacidad &lt; 1).</p>
+    </div>
+
+    <div>
+      <label class="label">Color del texto</label>
+      <div class="hcc-color-row">
+        <input type="color" data-bind="${p}.text_color" />
+        <input type="text" data-bind-mirror="${p}.text_color" class="hcc-input flex-1" placeholder="#f5f1ea" disabled />
+      </div>
+    </div>
+
+    <div>
+      <label class="label">Tipografía del título</label>
+      <select data-bind="${p}.title_font" class="hcc-input w-full">
+        <option value="serif">Serif (Cormorant Garamond)</option>
+        <option value="sans">Sans (Inter)</option>
+      </select>
+    </div>
+
+    <div>
+      <label class="label">Bordes redondeados (px) — por esquina</label>
+      <div class="hcc-num-row">
+        <div><label>Sup. izq.</label><input type="number" data-bind="${p}.border_radius_tl" min="0" max="200" class="hcc-input w-full" /></div>
+        <div><label>Sup. der.</label><input type="number" data-bind="${p}.border_radius_tr" min="0" max="200" class="hcc-input w-full" /></div>
+        <div><label>Inf. der.</label><input type="number" data-bind="${p}.border_radius_br" min="0" max="200" class="hcc-input w-full" /></div>
+        <div><label>Inf. izq.</label><input type="number" data-bind="${p}.border_radius_bl" min="0" max="200" class="hcc-input w-full" /></div>
+      </div>
+    </div>
+
+    <div>
+      <label class="label">Tamaño y padding (px)</label>
+      <div class="hcc-num-row">
+        <div><label>Ancho</label><input type="number" data-bind="${p}.width" min="0" max="1400" class="hcc-input w-full" /></div>
+        <div><label>Alto mínimo</label><input type="number" data-bind="${p}.height" min="0" max="1000" class="hcc-input w-full" /></div>
+        <div><label>Padding interno</label><input type="number" data-bind="${p}.padding" min="0" max="120" class="hcc-input w-full" /></div>
+        <div></div>
+      </div>
+      <p class="hcc-hint mt-1">Ancho = 0 → se adapta al contenedor (recomendado para mobile).</p>
+    </div>
+
+    <div>
+      <label class="label">Posición</label>
+      <div class="hcc-num-row">
+        <div><label>Offset X</label><input type="number" data-bind="${p}.offset_x" min="-400" max="1000" class="hcc-input w-full" /></div>
+        <div><label>Offset Y</label><input type="number" data-bind="${p}.offset_y" min="-300" max="300" class="hcc-input w-full" /></div>
+        <div></div>
+        <div></div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input type="checkbox" data-bind="${p}.shadow" id="${p}-shadow" class="w-4 h-4" />
+      <label for="${p}-shadow" class="text-sm">Sombra</label>
+    </div>
+  `;
+}
 ---
 
-<AppLayout title="Configuración">
-  <h1 class="font-serif text-3xl md:text-4xl mb-2">Configuración del sitio</h1>
-  <p class="text-stone-500 mb-8">Textos, contacto y redes que aparecen en el frontend público.</p>
+<AppLayout title="Landing Page">
+  <div class="mb-6">
+    <h1 class="font-serif text-3xl md:text-4xl mb-2">Landing Page</h1>
+    <p class="text-stone-500 max-w-2xl">
+      Todo lo que controla la portada y los textos globales del sitio público.
+      Cada pestaña agrupa una parte distinta de la página.
+    </p>
+  </div>
 
   {!canEdit && (
     <p class="bg-amber-50 border border-amber-200 text-amber-900 text-sm p-3 mb-6 flex items-center gap-2">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="11" width="18" height="11" rx="2"/>
-        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-      </svg>
+      <Icon name="lucide:lock" class="w-4 h-4" aria-hidden="true" />
       <span>Solo lectura — tienes permiso de ver pero no de editar la configuración del sitio.</span>
     </p>
   )}
@@ -77,142 +227,319 @@ if (Astro.request.method === "POST") {
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
-  <form method="POST" class="space-y-6 max-w-3xl" data-site-form>
-    <fieldset disabled={!canEdit} class="space-y-6 m-0 p-0 border-0 min-w-0">
+  {/* Tab nav */}
+  <nav class="cas-tabs flex gap-1 mb-6 border-b border-stone-200 overflow-x-auto" data-tab-nav>
+    <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
+      <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
+      <span>Hero</span>
+    </button>
+    <button type="button" data-tab="editorial" class="cas-tab">
+      <Icon name="lucide:scroll-text" class="w-4 h-4" aria-hidden="true" />
+      <span>Editorial</span>
+    </button>
+    <button type="button" data-tab="contacto" class="cas-tab">
+      <Icon name="lucide:phone" class="w-4 h-4" aria-hidden="true" />
+      <span>Contacto</span>
+    </button>
+    <button type="button" data-tab="seo" class="cas-tab">
+      <Icon name="lucide:search" class="w-4 h-4" aria-hidden="true" />
+      <span>SEO</span>
+    </button>
+  </nav>
 
-    <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Hero del homepage</h2>
-        <p class="card-section-desc">Imagen de fondo del hero principal y la cita destacada que aparece bajo él.</p>
-      </div>
+  <form method="POST" data-site-form>
+    <input type="hidden" name="hero_card_config_json" data-hero-json>
+    <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
 
-      <div class="grid gap-4 md:grid-cols-2">
-        <ImageUpload
-          name="hero_image_url"
-          label="Tu imagen"
-          bucket="covers"
-          hint="Click o arrastra. Foto que se ve en la primera pantalla del sitio (mitad derecha en desktop, fondo completo en mobile). Recomendado: 2400×1600px o más, horizontal."
-        />
+      {/* === HERO TAB === */}
+      <div data-tab-panel="hero" class="grid lg:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
+        <div class="space-y-6 min-w-0">
 
-        {/* Read-only fallback preview. Mirrors ImageUpload's layout for
-            visual coherence but is locked. JS toggles the "En uso" badge
-            below based on whether `hero_image_url` is empty. */}
-        <div class="block min-w-0">
-          <span class="label flex items-center justify-between gap-2">
-            <span>Imagen por defecto</span>
-            <span
-              class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded-sm bg-stone-100 text-stone-500 border border-stone-200"
-              title="Esta imagen no se puede modificar desde el CMS"
-            >
-              <Icon name="lucide:lock" class="w-3 h-3" aria-hidden="true" />
-              Bloqueado
-            </span>
-          </span>
-
-          <div
-            class="relative flex items-stretch gap-4 border border-stone-200 bg-stone-50/60 p-3"
-            data-hero-fallback
-          >
-            <div class="relative w-24 h-24 shrink-0 bg-stone-100 border border-stone-200 overflow-hidden">
-              <img
-                src={HERO_FALLBACK_URL}
-                alt="Imagen por defecto del hero"
-                loading="lazy"
-                class="w-full h-full object-cover"
+          {/* Hero image */}
+          <section class="card space-y-5">
+            <CardHeader icon="lucide:image" title="Imagen del hero" desc="Foto que ocupa la mitad derecha en desktop y aparece debajo de la card en mobile." />
+            <div class="grid gap-4 md:grid-cols-2">
+              <ImageUpload
+                name="hero_image_url"
+                label="Tu imagen"
+                bucket="covers"
+                hint="Click o arrastra. Recomendado: 2400×1600px o más, horizontal."
               />
+              <div class="block min-w-0">
+                <span class="label flex items-center justify-between gap-2">
+                  <span>Imagen por defecto</span>
+                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded-sm bg-stone-100 text-stone-500 border border-stone-200" title="Esta imagen no se puede modificar desde el CMS">
+                    <Icon name="lucide:lock" class="w-3 h-3" aria-hidden="true" />
+                    Bloqueado
+                  </span>
+                </span>
+                <div class="relative flex items-stretch gap-4 border border-stone-200 bg-stone-50/60 p-3" data-hero-fallback>
+                  <div class="relative w-24 h-24 shrink-0 bg-stone-100 border border-stone-200 overflow-hidden">
+                    <img src={HERO_FALLBACK_URL} alt="Imagen por defecto del hero" loading="lazy" class="w-full h-full object-cover" />
+                  </div>
+                  <div class="flex-1 min-w-0 flex flex-col justify-center text-sm text-stone-700">
+                    <span class="inline-flex items-center gap-1.5 font-medium text-stone-800">
+                      <Icon name="lucide:image" class="w-4 h-4" aria-hidden="true" />
+                      <span>Foto editorial de respaldo</span>
+                    </span>
+                    <span class="text-xs text-stone-500 mt-1 leading-snug">Aparece automáticamente si no defines una propia.</span>
+                    <span class="mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 self-start text-[10px] font-medium uppercase tracking-wider rounded-sm border" data-hero-fallback-status>
+                      <span data-hero-fallback-dot class="w-1.5 h-1.5 rounded-full"></span>
+                      <span data-hero-fallback-label>—</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
+          </section>
 
-            <div class="flex-1 min-w-0 flex flex-col justify-center text-sm text-stone-700">
-              <span class="inline-flex items-center gap-1.5 font-medium text-stone-800">
-                <Icon name="lucide:image" class="w-4 h-4" aria-hidden="true" />
-                <span>Foto editorial de respaldo</span>
-              </span>
-              <span class="text-xs text-stone-500 mt-1 leading-snug">
-                Esta imagen aparece automáticamente si no defines una propia.
-              </span>
-              <span
-                class="mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 self-start text-[10px] font-medium uppercase tracking-wider rounded-sm border"
-                data-hero-fallback-status
-              >
-                <span data-hero-fallback-dot class="w-1.5 h-1.5 rounded-full"></span>
-                <span data-hero-fallback-label>—</span>
-              </span>
+          {/* Hero quote */}
+          <section class="card space-y-5">
+            <CardHeader icon="lucide:quote" title="Cita destacada" desc="Aparece debajo del hero, sobre fondo claro." />
+            <Field label="Cita" name="hero_quote" type="textarea" rows={3} required description="Frase corta y elocuente. Sin comillas alrededor — el diseño las añade." />
+            <Field label="Autor de la cita" name="hero_quote_author" required description="Nombre que firma la cita." />
+          </section>
+
+          {/* Hero card content */}
+          <section class="card space-y-4">
+            <CardHeader icon="lucide:newspaper" title="Contenido de la card" desc="Qué se muestra dentro del recuadro principal del hero." />
+            <div>
+              <label class="label">Fuente del contenido</label>
+              <select data-bind="content_source" class="hcc-input w-full">
+                <option value="editorial">Descripción editorial (default)</option>
+                <option value="manual">Manual (definir texto abajo)</option>
+                <option value="latest_post">Último artículo publicado</option>
+                <option value="latest_book">Último libro publicado</option>
+              </select>
+              <p class="hcc-hint mt-1">Si eliges artículo o libro pero aún no hay nada publicado, se usa la descripción editorial como fallback.</p>
+            </div>
+            <div data-manual-fields class="space-y-4 pt-2 border-t border-stone-100">
+              <p class="text-[11px] uppercase tracking-wider text-stone-400">Sólo cuando "Manual"</p>
+              <div>
+                <label class="label">Eyebrow (texto pequeño arriba)</label>
+                <input type="text" data-bind="manual.eyebrow" class="hcc-input w-full" />
+              </div>
+              <div>
+                <label class="label">Título</label>
+                <input type="text" data-bind="manual.title" class="hcc-input w-full" />
+              </div>
+              <div>
+                <label class="label">Cuerpo</label>
+                <textarea data-bind="manual.body" rows="3" class="hcc-input w-full"></textarea>
+              </div>
+              <div class="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="label">Texto del botón</label>
+                  <input type="text" data-bind="manual.cta_label" class="hcc-input w-full" />
+                </div>
+                <div>
+                  <label class="label">URL del botón</label>
+                  <input type="text" data-bind="manual.cta_href" class="hcc-input w-full" placeholder="/catalogo" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Hero card style: desktop */}
+          <section class="card space-y-4" data-platform-section="desktop">
+            <CardHeader icon="lucide:monitor" title="Estilo de la card (Web)" desc="Cómo se ve la card en pantallas medianas y grandes." />
+            <Fragment set:html={renderPlatformControls("desktop")} />
+          </section>
+
+          {/* Hero card style: mobile */}
+          <section class="card space-y-4" data-platform-section="mobile">
+            <CardHeader icon="lucide:smartphone" title="Estilo de la card (Mobile)" desc="Cómo se ve la card en celulares." />
+            <Fragment set:html={renderPlatformControls("mobile")} />
+          </section>
+
+          {/* Card bg images */}
+          <section class="card space-y-4">
+            <CardHeader icon="lucide:image-plus" title="Imágenes de fondo de la card" desc="Opcional. Se mezcla con el color y la opacidad de arriba." />
+            <div class="grid sm:grid-cols-2 gap-4">
+              <ImageUpload name="desktop_bg_image" label="Web" hint="Solo aparece en desktop." bucket="covers" />
+              <ImageUpload name="mobile_bg_image" label="Mobile" hint="Solo aparece en mobile." bucket="covers" />
+            </div>
+          </section>
+        </div>
+
+        {/* Live preview pane */}
+        <aside class="lg:sticky lg:top-6 space-y-3">
+          <div class="flex items-center gap-2">
+            <button type="button" data-preview-tab="desktop" class="cas-preview-tab cas-preview-tab-active">
+              <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
+              Web
+            </button>
+            <button type="button" data-preview-tab="mobile" class="cas-preview-tab">
+              <Icon name="lucide:smartphone" class="w-3.5 h-3.5" aria-hidden="true" />
+              Mobile
+            </button>
+            <span class="ml-auto text-[11px] uppercase tracking-wider text-stone-400" data-preview-meta>desktop · 1440 × 720</span>
+          </div>
+          <div class="cas-preview-frame border border-stone-200 bg-stone-100 overflow-hidden" data-preview-frame>
+            <div class="relative w-full h-full" data-preview-stage>
+              <div data-preview-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
+              <a data-preview-card class="absolute z-10 block flex flex-col justify-between" target="_blank" rel="noopener noreferrer">
+                <div>
+                  <p data-preview-eyebrow class="uppercase tracking-[0.2em] opacity-70 mb-3"></p>
+                  <h1 data-preview-title class="leading-[1.1] mb-3"></h1>
+                  <p data-preview-body class="opacity-80 leading-relaxed"></p>
+                </div>
+                <span data-preview-cta class="uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
+              </a>
             </div>
           </div>
+          <button type="button" class="text-xs text-stone-500 hover:text-stone-900 underline underline-offset-4" data-reset-hero-btn>
+            Restablecer estilos del hero a default
+          </button>
+        </aside>
+      </div>
+
+      {/* === EDITORIAL TAB === */}
+      <div data-tab-panel="editorial" class="space-y-6 max-w-3xl" hidden>
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:scroll-text" title="Editorial" desc="Información general que aparece en footer, meta tags y al compartir." />
+          <Field label="Descripción de la editorial" name="editorial_description" type="textarea" rows={3} required description="Aparece en el footer y como meta description del sitio. 1-2 frases." />
+          <Field label="Línea legal del footer" name="footer_legal" required description="Texto pequeño abajo del footer (ej: '© 2026 Casa de Asterión Ediciones')." />
+        </section>
+      </div>
+
+      {/* === CONTACTO TAB === */}
+      <div data-tab-panel="contacto" class="space-y-6 max-w-3xl" hidden>
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:phone" title="WhatsApp (compras)" desc="El botón Comprar en cada libro abre WhatsApp con un mensaje pre-llenado a este número." />
+          <div class="grid sm:grid-cols-2 gap-4">
+            <Field label="Número en formato E.164" name="whatsapp_phone" required description="Ej: +573117462759 (con + y código país)." />
+          </div>
+          <Field label="Plantilla del mensaje" name="whatsapp_message_template" type="textarea" rows={3} required description="Variables: {{title}}, {{author}}, {{isbn}}, {{slug}}. Se usa cuando un libro no define un mensaje propio." />
+        </section>
+
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:share-2" title="Redes sociales" desc="URLs completas de los perfiles oficiales. Se enlazan desde el footer." />
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Field label="Facebook" name="social_facebook" type="url" description="URL pública del perfil." />
+            <Field label="Instagram" name="social_instagram" type="url" description="URL pública del perfil." />
+            <Field label="Twitter / X" name="social_twitter" type="url" description="URL pública del perfil." />
+          </div>
+        </section>
+      </div>
+
+      {/* === SEO TAB === */}
+      <div data-tab-panel="seo" class="space-y-6 max-w-3xl" hidden>
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:search" title="SEO global y schema.org" desc="Defaults para cada página del sitio público y datos para JSON-LD." />
+          <div class="grid sm:grid-cols-2 gap-4">
+            <Field label="Palabras clave globales" name="default_keywords" description="Términos que describen la editorial. Separadas por coma." />
+            <Field label="Handle de Twitter / X" name="twitter_handle" description="Con la @ inicial (ej: @casadeasterion)." />
+          </div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <ImageUpload name="og_image_default" label="Imagen al compartir (Open Graph)" bucket="covers" hint="Click o arrastra. 1200×630px recomendado. Se usa cuando un post/libro no tiene portada." />
+            <ImageUpload name="organization_logo_url" label="Logo de la editorial (JSON-LD)" bucket="covers" hint="Click o arrastra. Cuadrado o casi cuadrado. Lo lee Google." />
+          </div>
+        </section>
+      </div>
+
+      {canEdit && (
+        <div class="sticky bottom-0 bg-white py-3 mt-6 border-t border-stone-200 z-10 flex gap-3">
+          <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
         </div>
-      </div>
-
-      <Field label="Cita" name="hero_quote" type="textarea" rows={3} required description="Frase corta y elocuente. Sin comillas alrededor — el diseño las añade." />
-      <Field label="Autor de la cita" name="hero_quote_author" required description="Nombre que firma la cita." />
-    </section>
-
-    <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Editorial</h2>
-        <p class="card-section-desc">Información general que aparece en footer, meta tags y al compartir el sitio.</p>
-      </div>
-      <Field label="Descripción de la editorial" name="editorial_description" type="textarea" rows={3} required description="Aparece en el footer y como meta description del sitio. 1-2 frases." />
-      <Field label="Línea legal del footer" name="footer_legal" required description="Texto pequeño abajo del footer (ej: '© 2026 Casa de Asterión Ediciones')." />
-    </section>
-
-    <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">WhatsApp (compras)</h2>
-        <p class="card-section-desc">El botón "Comprar" en cada libro abre WhatsApp con un mensaje pre-llenado a este número.</p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <Field label="Número en formato E.164" name="whatsapp_phone" required description="Ej: +573117462759 (con + y código país)." />
-      </div>
-      <Field label="Plantilla del mensaje" name="whatsapp_message_template" type="textarea" rows={3} required description="Variables disponibles: {{title}}, {{author}}, {{isbn}}, {{slug}}. Se usa cuando un libro no define un mensaje propio." />
-    </section>
-
-    <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">Redes sociales</h2>
-        <p class="card-section-desc">URLs completas de los perfiles oficiales. Se enlazan desde el footer.</p>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Field label="Facebook" name="social_facebook" type="url" description="URL pública del perfil." />
-        <Field label="Instagram" name="social_instagram" type="url" description="URL pública del perfil." />
-        <Field label="Twitter / X" name="social_twitter" type="url" description="URL pública del perfil." />
-      </div>
-    </section>
-
-    <section class="card space-y-5">
-      <div>
-        <h2 class="card-section-title">SEO global y schema.org</h2>
-        <p class="card-section-desc">Defaults para cada página del sitio público (cuando un artículo, libro o autor no define los suyos) y datos de la editorial para JSON-LD.</p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <Field label="Palabras clave globales" name="default_keywords" description="Términos que describen la editorial. Separadas por coma." />
-        <Field label="Handle de Twitter / X" name="twitter_handle" description="Con la @ inicial (ej: @casadeasterion)." />
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <ImageUpload
-          name="og_image_default"
-          label="Imagen al compartir (Open Graph)"
-          bucket="covers"
-          hint="Click o arrastra. 1200×630px recomendado. Se usa cuando un post/libro no tiene portada."
-        />
-        <ImageUpload
-          name="organization_logo_url"
-          label="Logo de la editorial (JSON-LD)"
-          bucket="covers"
-          hint="Click o arrastra. Cuadrado o casi cuadrado. Lo lee Google."
-        />
-      </div>
-    </section>
-
-    {canEdit && (
-      <div class="flex gap-3 pt-4 border-t border-stone-200">
-        <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
-      </div>
-    )}
+      )}
     </fieldset>
   </form>
 </AppLayout>
 
-<script is:inline>
+<style is:global>
+  .cas-tabs {
+    margin-bottom: 1.5rem;
+  }
+  .cas-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgb(120 113 108);
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .cas-tab:hover { color: rgb(28 25 23); }
+  .cas-tab-active {
+    color: rgb(28 25 23);
+    border-bottom-color: rgb(28 25 23);
+  }
+
+  .hcc-input {
+    border: 1px solid rgb(214 211 209);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    background: white;
+    transition: border-color 0.15s;
+  }
+  .hcc-input:focus { outline: none; border-color: rgb(28 25 23); }
+
+  .cas-preview-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+    border: 1px solid rgb(214 211 209);
+    color: rgb(120 113 108);
+    background: white;
+    cursor: pointer;
+  }
+  .cas-preview-tab-active {
+    background: rgb(28 25 23);
+    color: white;
+    border-color: rgb(28 25 23);
+  }
+  .cas-preview-frame {
+    height: clamp(420px, 56vh, 720px);
+    position: relative;
+  }
+
+  [data-platform-section] .hcc-num-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  @media (min-width: 640px) {
+    [data-platform-section] .hcc-num-row {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  [data-platform-section] .hcc-num-row label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(120 113 108);
+    margin-bottom: 0.25rem;
+  }
+  [data-platform-section] .hcc-color-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  [data-platform-section] input[type="color"] {
+    width: 44px; height: 32px; padding: 0;
+    border: 1px solid rgb(214 211 209);
+    cursor: pointer; background: white;
+  }
+  [data-platform-section] input[type="range"] {
+    accent-color: rgb(28 25 23);
+  }
+  .hcc-hint { font-size: 0.75rem; color: rgb(120 113 108); }
+</style>
+
+<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL }}>
   (() => {
     if (window.__casSiteInit) return;
     window.__casSiteInit = true;
@@ -220,8 +547,235 @@ if (Astro.request.method === "POST") {
     const cacheKey = "cas:site";
     const TTL = 60_000;
 
+    const FRAME_DESKTOP_W = 1440;
+    const FRAME_DESKTOP_H = 720;
+    const FRAME_MOBILE_W = 390;
+    const FRAME_MOBILE_H = 720;
+
+    let currentPreviewTab = "desktop";
+    let currentHeroCfg = structuredClone(DEFAULT_HERO_CARD);
+
+    const $ = (s, p = document) => p.querySelector(s);
+    const $$ = (s, p = document) => Array.from(p.querySelectorAll(s));
+
+    // ----- Path helpers for hero card config -----
+    const setByPath = (obj, path, val) => {
+      const parts = path.split(".");
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (typeof cur[parts[i]] !== "object" || cur[parts[i]] === null) cur[parts[i]] = {};
+        cur = cur[parts[i]];
+      }
+      cur[parts[parts.length - 1]] = val;
+    };
+    const getByPath = (obj, path) => {
+      const parts = path.split(".");
+      let cur = obj;
+      for (const p of parts) { if (cur == null) return undefined; cur = cur[p]; }
+      return cur;
+    };
+
+    // ----- Color helper -----
+    const hexToRgba = (hex, alpha) => {
+      const c = String(hex || "").replace("#", "").trim();
+      const full = c.length === 3 ? c.split("").map(x => x + x).join("") : c;
+      if (full.length !== 6) return `rgba(26,23,21,${alpha})`;
+      const r = parseInt(full.slice(0, 2), 16);
+      const g = parseInt(full.slice(2, 4), 16);
+      const b = parseInt(full.slice(4, 6), 16);
+      if ([r, g, b].some(Number.isNaN)) return `rgba(26,23,21,${alpha})`;
+      return `rgba(${r},${g},${b},${alpha})`;
+    };
+
+    // ----- Tab switching -----
+    const switchTab = (name) => {
+      $$("[data-tab]").forEach(b => b.classList.toggle("cas-tab-active", b.getAttribute("data-tab") === name));
+      $$("[data-tab-panel]").forEach(p => p.hidden = p.getAttribute("data-tab-panel") !== name);
+      // Keep URL hash in sync for shareability
+      try { history.replaceState(null, "", `#${name}`); } catch {}
+      // Re-render preview if the hero tab becomes active (sizing relies on offsetWidth)
+      if (name === "hero") setTimeout(renderHeroPreview, 0);
+    };
+
+    const wireTabs = () => {
+      $$("[data-tab]").forEach(btn => btn.addEventListener("click", () => switchTab(btn.getAttribute("data-tab"))));
+      // Honor URL hash on first load
+      const hash = (window.location.hash || "").replace("#", "");
+      if (["hero", "editorial", "contacto", "seo"].includes(hash)) switchTab(hash);
+    };
+
+    // ----- Hero card form ↔ config -----
+    const readHeroForm = () => {
+      const cfg = structuredClone(currentHeroCfg);
+      $$("[data-bind]").forEach(el => {
+        const path = el.getAttribute("data-bind");
+        let v;
+        if (el.type === "checkbox") v = el.checked;
+        else if (el.type === "number" || el.type === "range") {
+          v = el.value === "" ? 0 : parseFloat(el.value);
+          if (Number.isNaN(v)) v = 0;
+        } else v = el.value;
+        setByPath(cfg, path, v);
+      });
+      // ImageUpload bg images live in dedicated hidden inputs.
+      const dImg = document.querySelector('input[type="hidden"][name="desktop_bg_image"]');
+      const mImg = document.querySelector('input[type="hidden"][name="mobile_bg_image"]');
+      if (dImg) cfg.desktop.bg_image_url = dImg.value || "";
+      if (mImg) cfg.mobile.bg_image_url = mImg.value || "";
+      return cfg;
+    };
+
+    const writeHeroForm = (cfg) => {
+      $$("[data-bind]").forEach(el => {
+        const path = el.getAttribute("data-bind");
+        const v = getByPath(cfg, path);
+        if (v === undefined || v === null) return;
+        if (el.type === "checkbox") el.checked = !!v;
+        else el.value = String(v);
+      });
+      // Push bg image URLs into ImageUpload wrappers via __casSetImage.
+      const set = (name, url) => {
+        const hidden = document.querySelector(`input[type="hidden"][name="${name}"]`);
+        const wrap = hidden?.closest("[data-image-upload]");
+        if (wrap?.__casSetImage) wrap.__casSetImage(url || "");
+      };
+      set("desktop_bg_image", cfg.desktop?.bg_image_url || "");
+      set("mobile_bg_image", cfg.mobile?.bg_image_url || "");
+      // Toggle visibility of manual fields wrapper
+      const manual = document.querySelector("[data-manual-fields]");
+      if (manual) manual.style.opacity = cfg.content_source === "manual" ? "1" : "0.45";
+    };
+
+    // ----- Preview render -----
+    const applyLayout = (card, layout) => {
+      const bg = hexToRgba(layout.bg_color, layout.bg_alpha);
+      const bgRule = layout.bg_image_url
+        ? `linear-gradient(${bg}, ${bg}), url('${layout.bg_image_url}') center/cover no-repeat`
+        : bg;
+      card.style.background = bgRule;
+      card.style.color = layout.text_color;
+      card.style.borderRadius = `${layout.border_radius_tl}px ${layout.border_radius_tr}px ${layout.border_radius_br}px ${layout.border_radius_bl}px`;
+      card.style.padding = `${layout.padding}px`;
+      card.style.width = layout.width > 0 ? `${layout.width}px` : "auto";
+      card.style.maxWidth = layout.width > 0 ? "100%" : `calc(100% - ${layout.offset_x * 2}px)`;
+      card.style.minHeight = `${layout.height}px`;
+      card.style.left = `${layout.offset_x}px`;
+      card.style.top = `calc(50% + ${layout.offset_y}px)`;
+      card.style.transform = "translateY(-50%)";
+      card.style.boxShadow = layout.shadow ? "0 25px 50px -12px rgba(0,0,0,0.25)" : "none";
+      card.style.backdropFilter = layout.bg_blur > 0 ? `blur(${layout.bg_blur}px)` : "none";
+      card.style.webkitBackdropFilter = layout.bg_blur > 0 ? `blur(${layout.bg_blur}px)` : "none";
+      const titleFont = layout.title_font === "serif"
+        ? `"Cormorant Garamond","EB Garamond",Georgia,serif`
+        : `"Inter",system-ui,-apple-system,sans-serif`;
+      const t = card.querySelector("[data-preview-title]");
+      if (t) t.style.fontFamily = titleFont;
+    };
+
+    const applyContent = (card, cfg) => {
+      let c;
+      if (cfg.content_source === "manual") c = cfg.manual;
+      else if (cfg.content_source === "latest_post") c = { eyebrow: "Filosofía", title: "Último artículo publicado", body: "(El sitio mostrará el post más reciente)", cta_label: "Leer artículo", cta_href: "#" };
+      else if (cfg.content_source === "latest_book") c = { eyebrow: "Catálogo", title: "Último libro publicado", body: "(El sitio mostrará el libro más reciente)", cta_label: "Ver libro", cta_href: "#" };
+      else c = { eyebrow: "Editorial", title: "Casa de Asterión Ediciones", body: "(Aquí va la descripción editorial del sitio)", cta_label: "Explorar el catálogo", cta_href: "/catalogo" };
+      const eyebrow = card.querySelector("[data-preview-eyebrow]");
+      const title = card.querySelector("[data-preview-title]");
+      const body = card.querySelector("[data-preview-body]");
+      const cta = card.querySelector("[data-preview-cta]");
+      eyebrow.textContent = c.eyebrow || "";
+      eyebrow.style.display = c.eyebrow ? "block" : "none";
+      title.textContent = c.title || "";
+      body.textContent = c.body || "";
+      body.style.display = c.body ? "block" : "none";
+      cta.textContent = c.cta_label || "";
+      card.href = c.cta_href || "#";
+    };
+
+    const renderHeroPreview = () => {
+      const stage = $("[data-preview-stage]");
+      const card = $("[data-preview-card]");
+      const bgImage = $("[data-preview-bg-image]");
+      const meta = $("[data-preview-meta]");
+      const frame = $("[data-preview-frame]");
+      if (!stage || !card || !frame) return;
+
+      const cfg = readHeroForm();
+      currentHeroCfg = cfg;
+      const heroJson = $("[data-hero-json]");
+      if (heroJson) heroJson.value = JSON.stringify(cfg);
+
+      // Mirror inputs (read-only labels next to color/range)
+      $$("[data-bind]").forEach(el => {
+        const path = el.getAttribute("data-bind");
+        const v = getByPath(cfg, path);
+        const mirror = el.parentElement?.querySelector(`[data-bind-mirror="${path}"]`);
+        if (mirror && mirror !== el) mirror.value = String(v);
+      });
+
+      // The site's hero image visible in the preview
+      const heroImgInput = document.querySelector('input[type="hidden"][name="hero_image_url"]');
+      const heroImageUrl = (heroImgInput?.value || "").trim() || HERO_FALLBACK_URL;
+
+      const layout = currentPreviewTab === "desktop" ? cfg.desktop : cfg.mobile;
+      applyLayout(card, layout);
+      applyContent(card, cfg);
+
+      // Title size matches the public site
+      const t = card.querySelector("[data-preview-title]");
+      if (t) t.style.fontSize = currentPreviewTab === "desktop" ? "3rem" : "1.4rem";
+
+      if (currentPreviewTab === "desktop") {
+        bgImage.style.display = "block";
+        bgImage.style.backgroundImage = `url('${heroImageUrl}')`;
+      } else {
+        bgImage.style.display = "none";
+      }
+
+      // Scale the stage to fit the frame
+      const fw = frame.clientWidth - 16;
+      const fh = frame.clientHeight - 16;
+      const targetW = currentPreviewTab === "desktop" ? FRAME_DESKTOP_W : FRAME_MOBILE_W;
+      const targetH = currentPreviewTab === "desktop" ? FRAME_DESKTOP_H : FRAME_MOBILE_H;
+      const scale = Math.min(fw / targetW, fh / targetH, 1);
+      stage.style.width = `${targetW}px`;
+      stage.style.height = `${targetH}px`;
+      stage.style.transformOrigin = "top left";
+      stage.style.transform = `scale(${scale})`;
+      stage.style.position = "absolute";
+      stage.style.top = "8px";
+      const scaledW = targetW * scale;
+      const offsetLeft = (frame.clientWidth - scaledW) / 2;
+      stage.style.left = `${Math.max(8, offsetLeft)}px`;
+
+      if (meta) meta.textContent = `${currentPreviewTab} · ${targetW} × ${targetH}`;
+    };
+
+    // ----- Hero fallback "En uso / Inactiva" badge -----
+    const updateHeroFallbackStatus = () => {
+      const form = $("[data-site-form]");
+      if (!form) return;
+      const hidden = form.querySelector('input[type="hidden"][name="hero_image_url"]');
+      const wrap = form.querySelector("[data-hero-fallback-status]");
+      if (!hidden || !wrap) return;
+      const dot = wrap.querySelector("[data-hero-fallback-dot]");
+      const label = wrap.querySelector("[data-hero-fallback-label]");
+      if (!dot || !label) return;
+      const inUse = !hidden.value;
+      wrap.className = "mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 self-start text-[10px] font-medium uppercase tracking-wider rounded-sm border";
+      if (inUse) {
+        wrap.classList.add("bg-emerald-50", "text-emerald-700", "border-emerald-200");
+        dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+        label.textContent = "En uso";
+      } else {
+        wrap.classList.add("bg-stone-100", "text-stone-500", "border-stone-200");
+        dot.className = "w-1.5 h-1.5 rounded-full bg-stone-400";
+        label.textContent = "Inactiva";
+      }
+    };
+
+    // ----- Hydration of all site_configuration -----
     const apply = (cfg) => {
-      const form = document.querySelector("[data-site-form]");
+      const form = $("[data-site-form]");
       if (!form) return;
       const set = (name, value) => {
         const el = form.querySelector(`[name="${name}"]`);
@@ -240,7 +794,6 @@ if (Astro.request.method === "POST") {
       const kws = Array.isArray(cfg.default_keywords) ? cfg.default_keywords.join(", ") : (cfg.default_keywords ?? "");
       set("default_keywords", kws);
       set("twitter_handle", cfg.twitter_handle ?? "");
-      // ImageUpload exposes a __casSetImage setter on its wrapper element.
       const setImage = (name, value) => {
         const hidden = form.querySelector(`input[type="hidden"][name="${name}"]`);
         const wrapper = hidden?.closest("[data-image-upload]");
@@ -252,46 +805,27 @@ if (Astro.request.method === "POST") {
       setImage("organization_logo_url", cfg.organization_logo_url ?? "");
       setImage("hero_image_url", cfg.hero_image_url ?? "");
       updateHeroFallbackStatus();
-      // Enable submit once data is loaded.
+
+      // Hero card config
+      const persisted = cfg.hero_card_config;
+      const heroCfg = persisted && typeof persisted === "object"
+        ? {
+            content_source: persisted.content_source ?? DEFAULT_HERO_CARD.content_source,
+            manual: { ...DEFAULT_HERO_CARD.manual, ...(persisted.manual ?? {}) },
+            desktop: { ...DEFAULT_HERO_CARD.desktop, ...(persisted.desktop ?? {}) },
+            mobile: { ...DEFAULT_HERO_CARD.mobile, ...(persisted.mobile ?? {}) },
+          }
+        : structuredClone(DEFAULT_HERO_CARD);
+      currentHeroCfg = heroCfg;
+      writeHeroForm(heroCfg);
+      renderHeroPreview();
+
       const btn = form.querySelector("[data-submit-btn]");
       if (btn) btn.disabled = false;
     };
 
-    // The "Imagen por defecto" badge reflects whether the user has a
-    // hero image configured. When empty, the fallback is "En uso"
-    // (green); when set, it's "Inactiva" (stone).
-    const updateHeroFallbackStatus = () => {
-      const form = document.querySelector("[data-site-form]");
-      if (!form) return;
-      const hidden = form.querySelector('input[type="hidden"][name="hero_image_url"]');
-      const wrap = form.querySelector("[data-hero-fallback-status]");
-      if (!hidden || !wrap) return;
-      const dot = wrap.querySelector("[data-hero-fallback-dot]");
-      const label = wrap.querySelector("[data-hero-fallback-label]");
-      if (!dot || !label) return;
-      const inUse = !hidden.value;
-      // Reset classes first so we can swap palettes cleanly.
-      wrap.className =
-        "mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 self-start text-[10px] font-medium uppercase tracking-wider rounded-sm border";
-      if (inUse) {
-        wrap.classList.add("bg-emerald-50", "text-emerald-700", "border-emerald-200");
-        dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
-        label.textContent = "En uso";
-      } else {
-        wrap.classList.add("bg-stone-100", "text-stone-500", "border-stone-200");
-        dot.className = "w-1.5 h-1.5 rounded-full bg-stone-400";
-        label.textContent = "Inactiva";
-      }
-    };
-
-    // React to user uploads / removals on the hero image uploader.
-    document.addEventListener("cas:imageupload:change", (e) => {
-      if (e.detail?.name === "hero_image_url") updateHeroFallbackStatus();
-    });
-
     const hydrate = async () => {
-      if (!document.querySelector("[data-site-form]")) return;
-
+      if (!$("[data-site-form]")) return;
       try {
         const raw = sessionStorage.getItem(cacheKey);
         if (raw) {
@@ -299,12 +833,8 @@ if (Astro.request.method === "POST") {
           if (Date.now() - parsed.t < TTL) apply(parsed.cfg);
         }
       } catch {}
-
       try {
-        const res = await fetch("/api/page-data?type=site", {
-          credentials: "same-origin",
-          headers: { accept: "application/json" },
-        });
+        const res = await fetch("/api/page-data?type=site", { credentials: "same-origin", headers: { accept: "application/json" } });
         if (!res.ok) return;
         const data = await res.json();
         apply(data.config ?? {});
@@ -312,18 +842,68 @@ if (Astro.request.method === "POST") {
       } catch {}
     };
 
+    // ----- Wire events -----
+    const wireForm = () => {
+      $$("[data-bind]").forEach(el => {
+        el.addEventListener("input", renderHeroPreview);
+        el.addEventListener("change", renderHeroPreview);
+      });
+      document.addEventListener("cas:imageupload:change", (e) => {
+        const d = e.detail || {};
+        if (d.name === "hero_image_url") {
+          updateHeroFallbackStatus();
+          renderHeroPreview();
+        } else if (d.name === "desktop_bg_image" || d.name === "mobile_bg_image") {
+          renderHeroPreview();
+        }
+      });
+      $$("[data-preview-tab]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          currentPreviewTab = btn.getAttribute("data-preview-tab");
+          $$("[data-preview-tab]").forEach(b => b.classList.toggle("cas-preview-tab-active", b === btn));
+          $$("[data-platform-section]").forEach(sec => {
+            sec.style.outline = sec.getAttribute("data-platform-section") === currentPreviewTab ? "2px solid rgb(28 25 23)" : "";
+            sec.style.outlineOffset = "-2px";
+          });
+          renderHeroPreview();
+        });
+      });
+      const reset = $("[data-reset-hero-btn]");
+      if (reset) reset.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        if (!confirm("¿Restablecer estilos de la card a los defaults?")) return;
+        currentHeroCfg = structuredClone(DEFAULT_HERO_CARD);
+        writeHeroForm(currentHeroCfg);
+        renderHeroPreview();
+      });
+      // On submit, make sure the JSON hidden input has the latest config.
+      const form = $("[data-site-form]");
+      if (form) form.addEventListener("submit", () => {
+        const cfg = readHeroForm();
+        const heroJson = $("[data-hero-json]");
+        if (heroJson) heroJson.value = JSON.stringify(cfg);
+      });
+      window.addEventListener("resize", renderHeroPreview);
+    };
+
+    const boot = () => {
+      wireTabs();
+      wireForm();
+      hydrate();
+    };
+
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
       if (url.searchParams.has("saved")) {
         try { sessionStorage.removeItem(cacheKey); } catch {}
       }
-      hydrate();
+      boot();
     });
-    document.addEventListener("astro:after-swap", hydrate);
+    document.addEventListener("astro:after-swap", boot);
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", hydrate);
+      document.addEventListener("DOMContentLoaded", boot);
     } else {
-      hydrate();
+      boot();
     }
   })();
 </script>
