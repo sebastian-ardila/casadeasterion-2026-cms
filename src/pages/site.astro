@@ -126,84 +126,116 @@ const DEFAULT_HERO_CARD = {
 
 function renderPlatformControls(p: "desktop" | "mobile"): string {
   return `
-    <div>
+    <!-- Background color + alpha -->
+    <div class="hcc-stack">
       <label class="label">Fondo</label>
-      <div class="grid sm:grid-cols-2 gap-3">
-        <div class="hcc-color-row">
-          <input type="color" data-bind="${p}.bg_color" />
-          <input type="text" data-bind-mirror="${p}.bg_color" class="hcc-input flex-1" placeholder="#1a1715" disabled />
+      <div class="hcc-row">
+        <input type="color" data-bind="${p}.bg_color" aria-label="Color de fondo" />
+        <input type="text" data-bind-mirror="${p}.bg_color" class="hcc-input hcc-mirror-text" disabled />
+        <span class="hcc-row-label">Opacidad</span>
+        <input type="range" data-bind="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-range" />
+        <input type="number" data-bind-mirror="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-input hcc-mirror-num" disabled />
+      </div>
+      <p class="hcc-hint">Si subes una imagen de fondo, el color actúa como overlay encima.</p>
+    </div>
+
+    <!-- Blur -->
+    <div class="hcc-stack">
+      <label class="label">Blur del fondo</label>
+      <div class="hcc-row">
+        <input type="range" data-bind="${p}.bg_blur" min="0" max="40" step="1" class="hcc-range" />
+        <input type="number" data-bind-mirror="${p}.bg_blur" min="0" max="40" step="1" class="hcc-input hcc-mirror-num" disabled />
+        <span class="text-xs text-stone-400">px</span>
+      </div>
+    </div>
+
+    <!-- Text color + font -->
+    <div class="grid sm:grid-cols-2 gap-3">
+      <div>
+        <label class="label">Color del texto</label>
+        <div class="hcc-row">
+          <input type="color" data-bind="${p}.text_color" aria-label="Color del texto" />
+          <input type="text" data-bind-mirror="${p}.text_color" class="hcc-input hcc-mirror-text" disabled />
         </div>
-        <div>
-          <label class="label" style="margin-top:0">Opacidad del color</label>
-          <div class="hcc-color-row">
-            <input type="range" data-bind="${p}.bg_alpha" min="0" max="1" step="0.05" class="flex-1" />
-            <input type="number" data-bind-mirror="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-input w-16" disabled />
-          </div>
+      </div>
+      <div>
+        <label class="label">Fuente del título</label>
+        <select data-bind="${p}.title_font" class="hcc-input w-full">
+          <option value="serif">Serif (Cormorant)</option>
+          <option value="sans">Sans (Inter)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Border radius — visual editor -->
+    <div>
+      <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <label class="label" style="margin:0">Bordes redondeados</label>
+        <label class="hcc-link-toggle">
+          <input type="checkbox" data-radius-link="${p}" />
+          <span>Vincular esquinas</span>
+        </label>
+      </div>
+      <div class="hcc-radius-grid" data-radius-platform="${p}">
+        <div class="hcc-radius-corner">
+          <span class="hcc-corner-icon hcc-corner-tl" aria-hidden="true"></span>
+          <input type="number" data-bind="${p}.border_radius_tl" min="0" max="200" class="hcc-input" data-radius-input aria-label="Esquina superior izquierda" />
+        </div>
+        <div class="hcc-radius-corner hcc-radius-corner-tr">
+          <input type="number" data-bind="${p}.border_radius_tr" min="0" max="200" class="hcc-input" data-radius-input aria-label="Esquina superior derecha" />
+          <span class="hcc-corner-icon hcc-corner-tr" aria-hidden="true"></span>
+        </div>
+        <div class="hcc-radius-corner">
+          <span class="hcc-corner-icon hcc-corner-bl" aria-hidden="true"></span>
+          <input type="number" data-bind="${p}.border_radius_bl" min="0" max="200" class="hcc-input" data-radius-input aria-label="Esquina inferior izquierda" />
+        </div>
+        <div class="hcc-radius-corner hcc-radius-corner-br">
+          <input type="number" data-bind="${p}.border_radius_br" min="0" max="200" class="hcc-input" data-radius-input aria-label="Esquina inferior derecha" />
+          <span class="hcc-corner-icon hcc-corner-br" aria-hidden="true"></span>
         </div>
       </div>
-      <p class="hcc-hint mt-1">Si subes una imagen de fondo, el color actúa como overlay encima.</p>
     </div>
 
+    <!-- Size: width + height + padding -->
     <div>
-      <label class="label">Blur del fondo (px)</label>
-      <div class="hcc-color-row">
-        <input type="range" data-bind="${p}.bg_blur" min="0" max="40" step="1" class="flex-1" />
-        <input type="number" data-bind-mirror="${p}.bg_blur" min="0" max="40" step="1" class="hcc-input w-16" disabled />
-      </div>
-      <p class="hcc-hint mt-1">Aplica blur a lo que está detrás de la card (efecto frosted glass — útil con opacidad &lt; 1).</p>
-    </div>
-
-    <div>
-      <label class="label">Color del texto</label>
-      <div class="hcc-color-row">
-        <input type="color" data-bind="${p}.text_color" />
-        <input type="text" data-bind-mirror="${p}.text_color" class="hcc-input flex-1" placeholder="#f5f1ea" disabled />
-      </div>
-    </div>
-
-    <div>
-      <label class="label">Tipografía del título</label>
-      <select data-bind="${p}.title_font" class="hcc-input w-full">
-        <option value="serif">Serif (Cormorant Garamond)</option>
-        <option value="sans">Sans (Inter)</option>
-      </select>
-    </div>
-
-    <div>
-      <label class="label">Bordes redondeados (px) — por esquina</label>
-      <div class="hcc-num-row">
-        <div><label>Sup. izq.</label><input type="number" data-bind="${p}.border_radius_tl" min="0" max="200" class="hcc-input w-full" /></div>
-        <div><label>Sup. der.</label><input type="number" data-bind="${p}.border_radius_tr" min="0" max="200" class="hcc-input w-full" /></div>
-        <div><label>Inf. der.</label><input type="number" data-bind="${p}.border_radius_br" min="0" max="200" class="hcc-input w-full" /></div>
-        <div><label>Inf. izq.</label><input type="number" data-bind="${p}.border_radius_bl" min="0" max="200" class="hcc-input w-full" /></div>
-      </div>
-    </div>
-
-    <div>
-      <label class="label">Tamaño y padding (px)</label>
-      <div class="hcc-num-row">
-        <div><label>Ancho</label><input type="number" data-bind="${p}.width" min="0" max="1400" class="hcc-input w-full" /></div>
-        <div><label>Alto mínimo</label><input type="number" data-bind="${p}.height" min="0" max="1000" class="hcc-input w-full" /></div>
-        <div><label>Padding interno</label><input type="number" data-bind="${p}.padding" min="0" max="120" class="hcc-input w-full" /></div>
-        <div></div>
+      <label class="label">Tamaño</label>
+      <div class="hcc-triplet">
+        <label class="hcc-triplet-cell">
+          <span>Ancho</span>
+          <input type="number" data-bind="${p}.width" min="0" max="1400" class="hcc-input w-full" />
+        </label>
+        <label class="hcc-triplet-cell">
+          <span>Alto mín.</span>
+          <input type="number" data-bind="${p}.height" min="0" max="1000" class="hcc-input w-full" />
+        </label>
+        <label class="hcc-triplet-cell">
+          <span>Padding</span>
+          <input type="number" data-bind="${p}.padding" min="0" max="120" class="hcc-input w-full" />
+        </label>
       </div>
       <p class="hcc-hint mt-1">Ancho = 0 → se adapta al contenedor (recomendado para mobile).</p>
     </div>
 
+    <!-- Position: offset_x, offset_y -->
     <div>
       <label class="label">Posición</label>
-      <div class="hcc-num-row">
-        <div><label>Offset X</label><input type="number" data-bind="${p}.offset_x" min="-400" max="1000" class="hcc-input w-full" /></div>
-        <div><label>Offset Y</label><input type="number" data-bind="${p}.offset_y" min="-300" max="300" class="hcc-input w-full" /></div>
-        <div></div>
-        <div></div>
+      <div class="hcc-pair">
+        <label class="hcc-triplet-cell">
+          <span>Offset X</span>
+          <input type="number" data-bind="${p}.offset_x" min="-400" max="1000" class="hcc-input w-full" />
+        </label>
+        <label class="hcc-triplet-cell">
+          <span>Offset Y</span>
+          <input type="number" data-bind="${p}.offset_y" min="-300" max="300" class="hcc-input w-full" />
+        </label>
       </div>
     </div>
 
-    <div class="flex items-center gap-2">
-      <input type="checkbox" data-bind="${p}.shadow" id="${p}-shadow" class="w-4 h-4" />
-      <label for="${p}-shadow" class="text-sm">Sombra</label>
-    </div>
+    <!-- Shadow -->
+    <label class="hcc-checkbox-row">
+      <input type="checkbox" data-bind="${p}.shadow" />
+      <span>Sombra</span>
+    </label>
   `;
 }
 ---
@@ -252,8 +284,11 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
     <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
 
       {/* === HERO TAB === */}
+      {/* On <lg the aside (preview) goes first so the user sees changes
+          immediately without scrolling. On lg+ we reorder so the preview
+          sits on the right. */}
       <div data-tab-panel="hero" class="grid lg:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
-        <div class="space-y-6 min-w-0">
+        <div class="space-y-6 min-w-0 lg:order-1 order-2">
 
           {/* Hero image */}
           <section class="card space-y-5">
@@ -363,7 +398,7 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         </div>
 
         {/* Live preview pane */}
-        <aside class="lg:sticky lg:top-6 space-y-3">
+        <aside class="lg:sticky lg:top-6 space-y-3 lg:order-2 order-1">
           <div class="flex items-center gap-2">
             <button type="button" data-preview-tab="desktop" class="cas-preview-tab cas-preview-tab-active">
               <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
@@ -452,9 +487,8 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
 </AppLayout>
 
 <style is:global>
-  .cas-tabs {
-    margin-bottom: 1.5rem;
-  }
+  /* === Tab nav === */
+  .cas-tabs { margin-bottom: 1.5rem; }
   .cas-tab {
     display: inline-flex;
     align-items: center;
@@ -471,20 +505,24 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
     white-space: nowrap;
   }
   .cas-tab:hover { color: rgb(28 25 23); }
-  .cas-tab-active {
-    color: rgb(28 25 23);
-    border-bottom-color: rgb(28 25 23);
+  .cas-tab-active { color: rgb(28 25 23); border-bottom-color: rgb(28 25 23); }
+  /* Compact tabs on mobile: smaller padding, smaller font, hide nothing */
+  @media (max-width: 640px) {
+    .cas-tab { padding: 0.5rem 0.625rem; font-size: 0.8125rem; gap: 0.375rem; }
   }
 
+  /* === Inputs === */
   .hcc-input {
     border: 1px solid rgb(214 211 209);
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     background: white;
     transition: border-color 0.15s;
+    min-width: 0;
   }
   .hcc-input:focus { outline: none; border-color: rgb(28 25 23); }
 
+  /* === Preview tabs (web/mobile) === */
   .cas-preview-tab {
     display: inline-flex;
     align-items: center;
@@ -505,41 +543,153 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
     border-color: rgb(28 25 23);
   }
   .cas-preview-frame {
-    height: clamp(420px, 56vh, 720px);
+    height: clamp(280px, 48vh, 720px);
     position: relative;
   }
+  /* On lg+ (desktop CMS) the preview is sticky and tall enough */
+  @media (min-width: 1024px) {
+    .cas-preview-frame { height: clamp(420px, 56vh, 720px); }
+  }
 
-  [data-platform-section] .hcc-num-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+  /* === Stack + row helpers === */
+  .hcc-stack { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; }
+  .hcc-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
   }
-  @media (min-width: 640px) {
-    [data-platform-section] .hcc-num-row {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  [data-platform-section] .hcc-num-row label {
-    display: block;
+  .hcc-row-label {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: rgb(120 113 108);
-    margin-bottom: 0.25rem;
+    white-space: nowrap;
   }
-  [data-platform-section] .hcc-color-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
+  .hcc-mirror-text { flex: 1 1 0; min-width: 70px; }
+  .hcc-mirror-num { width: 56px; flex: 0 0 auto; text-align: right; }
+  .hcc-range { flex: 1 1 80px; min-width: 0; accent-color: rgb(28 25 23); }
+
+  /* === Color input === */
   [data-platform-section] input[type="color"] {
     width: 44px; height: 32px; padding: 0;
     border: 1px solid rgb(214 211 209);
     cursor: pointer; background: white;
+    flex: 0 0 auto;
   }
-  [data-platform-section] input[type="range"] {
-    accent-color: rgb(28 25 23);
+  [data-platform-section] input[type="range"] { accent-color: rgb(28 25 23); }
+
+  /* === Triplet (3 inputs in a row) and Pair (2 inputs) === */
+  .hcc-triplet {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
   }
+  .hcc-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  .hcc-triplet-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+  .hcc-triplet-cell > span {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(120 113 108);
+  }
+  /* On really narrow screens, triplets become 2 cols + 1 below */
+  @media (max-width: 380px) {
+    .hcc-triplet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hcc-triplet-cell:nth-child(3) { grid-column: 1 / -1; }
+  }
+
+  /* === Border radius editor === */
+  .hcc-radius-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    max-width: 320px;
+  }
+  .hcc-radius-corner {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgb(229 229 228);
+    background: rgb(250 250 249);
+    border-radius: 4px;
+  }
+  /* Right-side corners get input-then-icon order */
+  .hcc-radius-corner-tr,
+  .hcc-radius-corner-br {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+  .hcc-radius-corner > .hcc-input {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.8125rem;
+    border: 0;
+    background: transparent;
+    text-align: center;
+  }
+  .hcc-radius-corner > .hcc-input:focus { outline: 1px solid rgb(28 25 23); outline-offset: 1px; }
+  .hcc-corner-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    border: 2px solid transparent;
+    color: rgb(120 113 108);
+  }
+  .hcc-corner-tl {
+    border-top: 2px solid currentColor;
+    border-left: 2px solid currentColor;
+    border-top-left-radius: 5px;
+  }
+  .hcc-corner-tr {
+    border-top: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    border-top-right-radius: 5px;
+  }
+  .hcc-corner-bl {
+    border-bottom: 2px solid currentColor;
+    border-left: 2px solid currentColor;
+    border-bottom-left-radius: 5px;
+  }
+  .hcc-corner-br {
+    border-bottom: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    border-bottom-right-radius: 5px;
+  }
+  .hcc-link-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: rgb(120 113 108);
+    cursor: pointer;
+    user-select: none;
+  }
+  .hcc-link-toggle input { width: 14px; height: 14px; }
+
+  /* === Checkbox row === */
+  .hcc-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.875rem;
+  }
+  .hcc-checkbox-row input { width: 16px; height: 16px; }
+
   .hcc-hint { font-size: 0.75rem; color: rgb(120 113 108); }
 </style>
 
@@ -951,6 +1101,33 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       });
       $$("[data-preview-tab]").forEach(btn => {
         btn.addEventListener("click", () => switchPreviewTab(btn.getAttribute("data-preview-tab")));
+      });
+
+      // Border-radius "link corners" toggle: when on, editing one corner
+      // input mirrors its value into the other 3 of the same platform.
+      $$("[data-radius-link]").forEach(toggle => {
+        const platform = toggle.getAttribute("data-radius-link");
+        const grid = document.querySelector(`[data-radius-platform="${platform}"]`);
+        if (!grid) return;
+        const inputs = Array.from(grid.querySelectorAll("[data-radius-input]"));
+        inputs.forEach(inp => {
+          inp.addEventListener("input", () => {
+            if (!toggle.checked) return;
+            const v = inp.value;
+            inputs.forEach(other => {
+              if (other !== inp) other.value = v;
+            });
+            renderHeroPreview();
+          });
+        });
+        // When the toggle is turned ON, snap all four corners to the value
+        // of the first corner so they're consistent right away.
+        toggle.addEventListener("change", () => {
+          if (!toggle.checked) return;
+          const v = inputs[0]?.value || "0";
+          inputs.forEach(i => { i.value = v; });
+          renderHeroPreview();
+        });
       });
       const reset = $("[data-reset-hero-btn]");
       if (reset) reset.addEventListener("click", (ev) => {
