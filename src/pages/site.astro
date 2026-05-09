@@ -1044,11 +1044,21 @@ const DEFAULT_HERO_CARD = {
       };
       set("desktop_bg_image", cfg.desktop?.bg_image_url || "");
       set("mobile_bg_image", cfg.mobile?.bg_image_url || "");
-      // Show / hide the manual fields wrapper based on content source.
-      // We use the hidden attribute (not opacity) so the form layout
-      // collapses cleanly when the manual block isn't relevant.
+      updateManualVisibility(cfg.content_source);
+    };
+
+    // Manual content fields toggle. Reads from the live form when no
+    // value is passed in so the dropdown's change listener can call
+    // it without needing to round-trip through readHeroForm.
+    const updateManualVisibility = (source) => {
       const manual = document.querySelector("[data-manual-fields]");
-      if (manual) manual.hidden = cfg.content_source !== "manual";
+      if (!manual) return;
+      let value = source;
+      if (value == null) {
+        const ddWrap = document.querySelector('[data-bind-dd="content_source"]');
+        value = ddWrap?.querySelector("[data-dd-input]")?.value || "editorial";
+      }
+      manual.hidden = value !== "manual";
     };
 
     // ----- Preview render -----
@@ -1434,9 +1444,15 @@ const DEFAULT_HERO_CARD = {
       });
       // Dropdown components emit a "change" event on their hidden input
       // when the user picks an option. Listen at the wrapper level so we
-      // catch all of them in one place.
+      // catch all of them in one place. The content_source dropdown
+      // also drives the manual-fields visibility toggle.
       $$("[data-bind-dd]").forEach(wrap => {
-        wrap.addEventListener("change", renderHeroPreview);
+        wrap.addEventListener("change", () => {
+          if (wrap.getAttribute("data-bind-dd") === "content_source") {
+            updateManualVisibility();
+          }
+          renderHeroPreview();
+        });
       });
       // Auto-switch the preview tab when the user focuses or changes a
       // control inside one of the platform-scoped sections. Catches
@@ -1448,6 +1464,35 @@ const DEFAULT_HERO_CARD = {
         sec.addEventListener("input", trigger);
         sec.addEventListener("change", trigger);
       });
+      // Scroll-spy: when the desktop / mobile editor section enters the
+      // top band of the viewport, swap the preview to that platform.
+      // The active band is roughly the top third (excludes the
+      // breadcrumb + sticky tab nav at the top, ~100px). We rely on
+      // IntersectionObserver and react to the most recent entering
+      // section so quick scrolls feel responsive.
+      const platformSections = $$("[data-platform-section]");
+      if ("IntersectionObserver" in window && platformSections.length) {
+        const io = new IntersectionObserver((entries) => {
+          // Prefer the entry that became visible most recently AND has
+          // the largest intersection ratio inside the band.
+          let pick = null;
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            if (!pick || e.intersectionRatio > pick.intersectionRatio) pick = e;
+          }
+          if (pick) {
+            const platform = pick.target.getAttribute("data-platform-section");
+            if (platform) switchPreviewTab(platform);
+          }
+        }, {
+          // Top 100px reserved for breadcrumb+tabs; bottom 60% trimmed
+          // so only the upper portion of the viewport counts as
+          // "active". A section entering this band triggers the swap.
+          rootMargin: "-100px 0px -60% 0px",
+          threshold: [0, 0.15, 0.4, 0.7, 1],
+        });
+        platformSections.forEach(sec => io.observe(sec));
+      }
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
         if (d.name === "hero_image_url") {
