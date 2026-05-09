@@ -24,22 +24,31 @@ export function formatAgo(iso: string | null | undefined): string {
   return `el ${formatted}`;
 }
 
-/** First name (or email-prefix fallback). Long full names eat row width. */
-export function shortName(
+/** Full display name (nombre y apellido). Falls back to email-prefix
+ *  if the profile has no full_name set yet, and "alguien" as a last
+ *  resort so the UI never shows raw "null" or empty. */
+export function fullName(
   p: { full_name?: string | null; email?: string | null } | null | undefined,
 ): string {
   if (!p) return "alguien";
   const name = (p.full_name ?? "").trim();
-  if (name) {
-    const first = name.split(/\s+/)[0];
-    return first || name;
-  }
+  if (name) return name;
   const email = (p.email ?? "").trim();
   if (email) return email.split("@")[0];
   return "alguien";
 }
 
-/** "Sebastián · hace 2 días". If editor is missing, just the timestamp. */
+/** Prefix used by editorMeta. The ListPanel renderer detects this
+ *  to find the name segment and wrap it in a link to /admins/<id>. */
+export const EDITOR_PREFIX = "Editado por ";
+/** Separator between the name and the timestamp. */
+export const EDITOR_SEP = " · ";
+
+/** "Editado por Sebastián Ardila · hace 2 días". If editor is
+ *  missing, just the timestamp ("hace 2 días"). The ListPanel and
+ *  /site renderers split this string on EDITOR_PREFIX + EDITOR_SEP
+ *  to identify the name segment and turn it into a link to
+ *  /admins/<id> when an editorId is also supplied. */
 export function editorMeta(
   updated_at: string | null | undefined,
   editor: { full_name?: string | null; email?: string | null } | null | undefined,
@@ -47,5 +56,5 @@ export function editorMeta(
   const ago = formatAgo(updated_at);
   if (!ago) return "";
   if (!editor || (!editor.full_name && !editor.email)) return ago;
-  return `${shortName(editor)} · ${ago}`;
+  return `${EDITOR_PREFIX}${fullName(editor)}${EDITOR_SEP}${ago}`;
 }

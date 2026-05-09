@@ -7,7 +7,7 @@ import Dropdown from "~/components/Dropdown.astro";
 import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astro";
 import ColorEditor from "~/components/ColorEditor.astro";
 import PageStub from "~/components/PageStub.astro";
-import { editorMeta } from "~/lib/relative-time";
+import { fullName, formatAgo } from "~/lib/relative-time";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
@@ -76,7 +76,7 @@ let LATEST_BOOK: LatestBook = null;
 // Most recent site_configuration row + the editor that last touched it
 // — shown next to "Guardar configuración" so the team can see at a
 // glance who saved last.
-let LAST_SITE_EDIT: { updated_at: string; editor: { full_name: string | null; email: string | null } | null } | null = null;
+let LAST_SITE_EDIT: { updated_at: string; editor: { id: string; full_name: string | null; email: string | null } | null } | null = null;
 try {
   const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
   const [postsRes, booksRes, authorsRes, latestPostRes, latestBookRes, siteEditRes] = await Promise.all([
@@ -86,7 +86,7 @@ try {
     sb.from("posts").select("slug, title, excerpt, content_md").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("books").select("slug, title, subtitle, description_md").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("site_configuration")
-      .select("updated_at, editor:profiles!site_configuration_updated_by_fkey(full_name, email)")
+      .select("updated_at, editor:profiles!site_configuration_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -734,9 +734,21 @@ const DEFAULT_HERO_CARD = {
             {canEdit && (
               <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
             )}
-            {LAST_SITE_EDIT && (
+            {LAST_SITE_EDIT && formatAgo(LAST_SITE_EDIT.updated_at) && (
               <p class="text-xs text-stone-500 italic">
-                Última edición: {editorMeta(LAST_SITE_EDIT.updated_at, LAST_SITE_EDIT.editor)}
+                {LAST_SITE_EDIT.editor ? (
+                  <>
+                    Editado por{" "}
+                    <a
+                      href={`/admins/${LAST_SITE_EDIT.editor.id}`}
+                      class="underline decoration-stone-400 hover:text-stone-900 hover:decoration-current"
+                      data-astro-prefetch
+                    >{fullName(LAST_SITE_EDIT.editor)}</a>
+                    {" · "}{formatAgo(LAST_SITE_EDIT.updated_at)}
+                  </>
+                ) : (
+                  <>Última edición {formatAgo(LAST_SITE_EDIT.updated_at)}</>
+                )}
               </p>
             )}
           </div>

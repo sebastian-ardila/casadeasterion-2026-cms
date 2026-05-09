@@ -185,6 +185,20 @@ const isNew = Astro.url.pathname.endsWith("/new");
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .lp-meta-link {
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(168, 162, 158, 0.5);
+    text-underline-offset: 2px;
+    transition: color 0.12s, text-decoration-color 0.12s;
+  }
+  .lp-meta-link:hover,
+  .lp-meta-link:focus-visible {
+    color: rgb(28 25 23);
+    text-decoration-color: currentColor;
+    outline: none;
+  }
   .lp-meta {
     font-size: 11px;
     color: #a8a29e;
@@ -359,6 +373,31 @@ const isNew = Astro.url.pathname.endsWith("/new");
     // Lowercase + strip diacritics so 'ector' or 'Hector' both match 'Héctor'.
     const normalize = (s) =>
       String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+    // Build the "Editado por NAME · hace X" line. When `editorId` is
+    // present and the meta starts with "Editado por ", wrap the NAME
+    // segment (between the prefix and " · ") in a clickable span that
+    // navigates to /admins/<id>. NOT an <a> element — the row itself
+    // is already an <a class="lp-link">, and nested anchors are
+    // invalid HTML (the browser auto-closes the outer one, breaking
+    // the row layout). Mirrors EDITOR_PREFIX / EDITOR_SEP in
+    // ~/lib/relative-time.ts.
+    const renderMetaWithLink = (meta, editorId) => {
+      const PREFIX = "Editado por ";
+      const SEP = " · ";
+      if (!editorId || !meta || !meta.startsWith(PREFIX)) return escape(meta || "");
+      const sepAt = meta.indexOf(SEP, PREFIX.length);
+      if (sepAt < 0) return escape(meta);
+      const name = meta.slice(PREFIX.length, sepAt);
+      const tail = meta.slice(sepAt);
+      return (
+        escape(PREFIX) +
+        `<span class="lp-meta-link" role="link" tabindex="0" data-editor-href="/admins/${escape(editorId)}">` +
+          escape(name) +
+        `</span>` +
+        escape(tail)
+      );
+    };
 
     const applySearch = (panel) => {
       const input = panel.querySelector("[data-list-search]");
@@ -647,7 +686,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
                       ${status}
                     </div>
                     ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
-                    ${it.meta ? `<p class="lp-meta">${escape(it.meta)}</p>` : ""}
+                    ${it.meta ? `<p class="lp-meta">${renderMetaWithLink(it.meta, it.editorId)}</p>` : ""}
                   </div>
                 </span>
                 ${arrows}
@@ -737,6 +776,31 @@ const isNew = Astro.url.pathname.endsWith("/new");
         }
       });
     };
+
+    // Delegated click for the "Editado por NAME" pseudo-link inside
+    // each row's meta line. Navigates to /admins/<id> while preventing
+    // the outer <a class="lp-link"> from opening the resource detail.
+    document.addEventListener("click", (e) => {
+      const t = e.target instanceof Element ? e.target : null;
+      if (!t) return;
+      const link = t.closest(".lp-meta-link[data-editor-href]");
+      if (!link) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const href = link.getAttribute("data-editor-href");
+      if (href) window.location.href = href;
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const t = e.target instanceof Element ? e.target : null;
+      if (!t) return;
+      const link = t.closest(".lp-meta-link[data-editor-href]");
+      if (!link) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const href = link.getAttribute("data-editor-href");
+      if (href) window.location.href = href;
+    });
 
     // Initial run.
     if (document.readyState === "loading") {

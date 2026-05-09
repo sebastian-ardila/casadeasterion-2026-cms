@@ -7,8 +7,13 @@ type Item = {
   id: string;
   title: string;
   subtitle: string | null;
-  /** Optional third line (e.g. "hace 2 días"). Renders muted under the subtitle. */
+  /** Optional third line (e.g. "Sebastián Ardila · hace 2 días").
+   *  Renders muted under the subtitle. When `editorId` is set, the
+   *  panel wraps the leading "Name" segment (everything before the
+   *  first " · ") in a link to /admins/<editorId>. */
   meta?: string | null;
+  /** uuid of the profile that last edited the row. */
+  editorId?: string | null;
   status?: string | null;
   href: string;
   imageUrl?: string | null;
@@ -82,13 +87,14 @@ export const GET: APIRoute = async (ctx) => {
   if (resource === "posts") {
     const { data } = await supabase
       .from("posts")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!posts_updated_by_fkey(full_name, email)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!posts_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((p: any) => ({
       id: p.id,
       title: p.title,
       subtitle: p.authors?.name ?? p.slug,
       meta: editorMeta(p.updated_at, p.editor),
+      editorId: p.editor?.id ?? null,
       status: p.status,
       href: `/posts/${p.id}`,
       imageUrl: p.cover_image_url ?? null,
@@ -97,13 +103,14 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "books") {
     const { data } = await supabase
       .from("books")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!books_updated_by_fkey(full_name, email)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!books_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((b: any) => ({
       id: b.id,
       title: b.title,
       subtitle: b.authors?.name ?? b.slug,
       meta: editorMeta(b.updated_at, b.editor),
+      editorId: b.editor?.id ?? null,
       status: b.status,
       href: `/books/${b.id}`,
       imageUrl: b.cover_image_url ?? null,
@@ -112,13 +119,14 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "authors") {
     const { data } = await supabase
       .from("authors")
-      .select("id, name, slug, photo_url, updated_at, editor:profiles!authors_updated_by_fkey(full_name, email)")
+      .select("id, name, slug, photo_url, updated_at, editor:profiles!authors_updated_by_fkey(id, full_name, email)")
       .order("name");
     items = (data ?? []).map((a: any) => ({
       id: a.id,
       title: a.name,
       subtitle: `/${a.slug}`,
       meta: editorMeta(a.updated_at, a.editor),
+      editorId: a.editor?.id ?? null,
       href: `/authors/${a.id}`,
       imageUrl: a.photo_url ?? null,
       imageStyle: "photo",
@@ -126,7 +134,7 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "categories") {
     const { data } = await supabase
       .from("categories")
-      .select("id, name, slug, kind, sort_order, updated_at, editor:profiles!categories_updated_by_fkey(full_name, email)")
+      .select("id, name, slug, kind, sort_order, updated_at, editor:profiles!categories_updated_by_fkey(id, full_name, email)")
       .order("sort_order")
       .order("name");
     items = (data ?? []).map((c: any) => ({
@@ -134,6 +142,7 @@ export const GET: APIRoute = async (ctx) => {
       title: c.name,
       subtitle: KIND_LABEL[c.kind] ?? c.kind,
       meta: editorMeta(c.updated_at, c.editor),
+      editorId: c.editor?.id ?? null,
       href: `/categories/${c.id}`,
       imageUrl: KIND_EMOJI[c.kind] ?? KIND_EMOJI.other,
       imageStyle: "emoji",
