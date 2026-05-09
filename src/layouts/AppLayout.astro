@@ -44,6 +44,15 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
     <meta name="robots" content="noindex,nofollow" />
     <title>{title} · Casa de Asterión CMS</title>
     <link rel="icon" href="/casadeasterion.webp" type="image/webp" />
+    {/* Hero card title fonts — loaded so the "Tipo de letra" dropdown
+        in /site renders each option in its own typeface. Same set as
+        apps/web/src/layouts/Layout.astro. */}
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Playfair+Display:wght@500&family=Lora:wght@500&family=Inter:wght@500&family=DM+Sans:wght@500&family=Space+Grotesk:wght@500&display=swap"
+    />
     <ClientRouter />
   </head>
   <body class="min-h-screen md:flex md:h-screen md:overflow-hidden">

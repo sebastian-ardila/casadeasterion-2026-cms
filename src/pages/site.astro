@@ -1297,9 +1297,16 @@ const DEFAULT_HERO_CARD = {
       if (hidden) hidden.value = String(value ?? "");
       if (option && display) {
         const label = option.getAttribute("data-label") || option.querySelector(".cas-dd-option-label")?.textContent || "";
+        const fontFamily = option.getAttribute("data-font-family") || "";
         const truncate = display.querySelector(".truncate");
-        if (truncate) truncate.textContent = label;
-        else display.innerHTML = `<span class="truncate">${label}</span>`;
+        if (truncate) {
+          truncate.textContent = label;
+          if (fontFamily) truncate.style.fontFamily = fontFamily;
+          else truncate.style.removeProperty("font-family");
+        } else {
+          const styleAttr = fontFamily ? ` style="font-family: ${fontFamily}"` : "";
+          display.innerHTML = `<span class="truncate"${styleAttr}>${label}</span>`;
+        }
       }
       wrap.querySelectorAll("[data-dd-option]").forEach(opt => {
         const isSelected = opt.getAttribute("data-value") === String(value ?? "");

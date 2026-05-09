@@ -19,6 +19,9 @@ export interface DropdownOption {
    *  in the menu. Distinct from `iconStyle: "person"` which renders a round
    *  photo thumbnail. */
   icon?: string;
+  /** Optional CSS font-family applied to the option's label so the
+   *  user previews the typeface when picking it. */
+  fontFamily?: string;
 }
 
 interface Props {
@@ -90,7 +93,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
               )}
             </span>
           )}
-          <span class="truncate">{current.label}</span>
+          <span class="truncate" style={current.fontFamily ? `font-family: ${current.fontFamily}` : undefined}>{current.label}</span>
         </>
       ) : (
         <span class="text-stone-400">{placeholder}</span>
@@ -142,6 +145,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
           data-label={opt.label}
           data-image={opt.imageUrl ?? ""}
           data-icon-style={opt.iconStyle ?? "none"}
+          data-font-family={opt.fontFamily ?? ""}
           class:list={[
             "cas-dd-option",
             opt.value === value && "cas-dd-option-selected",
@@ -167,7 +171,10 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
             </span>
           )}
           <span class="cas-dd-option-text">
-            <span class="cas-dd-option-label">{opt.label}</span>
+            <span
+              class="cas-dd-option-label"
+              style={opt.fontFamily ? `font-family: ${opt.fontFamily}` : undefined}
+            >{opt.label}</span>
             {opt.hint && <span class="cas-dd-option-hint">{opt.hint}</span>}
           </span>
         </button>
@@ -512,7 +519,8 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
           thumbHtml = `<span class="cas-dd-thumb shrink-0">${PERSON_FALLBACK}</span>`;
         }
       }
-      display.innerHTML = thumbHtml + `<span class="truncate">${escapeHtml(label)}</span>`;
+      const fontStyle = option.fontFamily ? ` style="font-family: ${escapeHtml(option.fontFamily)}"` : "";
+      display.innerHTML = thumbHtml + `<span class="truncate"${fontStyle}>${escapeHtml(label)}</span>`;
 
       // Update aria-selected on options
       root.querySelectorAll("[data-dd-option]").forEach((o) => {
@@ -584,6 +592,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
             label: option.dataset.label || option.textContent?.trim() || "",
             image: option.dataset.image || "",
             iconStyle: option.dataset.iconStyle || "none",
+            fontFamily: option.dataset.fontFamily || "",
           });
           closeOpen();
         }
@@ -652,6 +661,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
                 label: firstVisible.dataset.label || firstVisible.textContent?.trim() || "",
                 image: firstVisible.dataset.image || "",
                 iconStyle: firstVisible.dataset.iconStyle || "none",
+                fontFamily: firstVisible.dataset.fontFamily || "",
               });
               closeOpen();
               const btn = root.querySelector("[data-dd-button]");
@@ -669,6 +679,7 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
               label: target.dataset.label || target.textContent?.trim() || "",
               image: target.dataset.image || "",
               iconStyle: target.dataset.iconStyle || "none",
+              fontFamily: target.dataset.fontFamily || "",
             });
             closeOpen();
             const btn = root.querySelector("[data-dd-button]");

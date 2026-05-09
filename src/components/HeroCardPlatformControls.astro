@@ -12,15 +12,16 @@ const BG_IMAGE_NAME = p === "desktop" ? "desktop_bg_image" : "mobile_bg_image";
 const OTHER_LABEL = p === "desktop" ? "mobile" : "web";
 
 // Title fonts — kept in sync with apps/web/src/lib/hero-card.ts
-// HERO_CARD_FONTS map. The hint text is what the CMS shows in the
-// dropdown; the value travels to the public site as title_font.
+// HERO_CARD_FONTS map. The fontFamily property is applied to the
+// dropdown's visible label so editors preview each typeface as
+// they pick. AppLayout loads these Google Fonts.
 const FONT_OPTIONS = [
-  { value: "serif",          label: "Cormorant Garamond", hint: "Serif editorial clásica" },
-  { value: "playfair",       label: "Playfair Display",   hint: "Serif con contraste" },
-  { value: "lora",           label: "Lora",               hint: "Serif suave para lectura" },
-  { value: "sans",           label: "Inter",              hint: "Sans-serif neutral" },
-  { value: "dm-sans",        label: "DM Sans",            hint: "Sans geométrica moderna" },
-  { value: "space-grotesk",  label: "Space Grotesk",      hint: "Sans-serif técnica" },
+  { value: "serif",         label: "Cormorant Garamond", hint: "Serif editorial clásica",  fontFamily: '"Cormorant Garamond", Georgia, serif' },
+  { value: "playfair",      label: "Playfair Display",   hint: "Serif con contraste",      fontFamily: '"Playfair Display", Georgia, serif' },
+  { value: "lora",          label: "Lora",               hint: "Serif suave para lectura", fontFamily: '"Lora", Georgia, serif' },
+  { value: "sans",          label: "Inter",              hint: "Sans-serif neutral",       fontFamily: '"Inter", system-ui, sans-serif' },
+  { value: "dm-sans",       label: "DM Sans",            hint: "Sans geométrica moderna",  fontFamily: '"DM Sans", "Inter", sans-serif' },
+  { value: "space-grotesk", label: "Space Grotesk",      hint: "Sans-serif técnica",       fontFamily: '"Space Grotesk", "Inter", sans-serif' },
 ];
 ---
 
@@ -57,7 +58,7 @@ const FONT_OPTIONS = [
     />
   </div>
   <div class="hcc-stack" data-bind-dd={`${p}.title_font`}>
-    <label class="label">Fuente del título</label>
+    <label class="label">Tipo de letra</label>
     <Dropdown name={`${p}_title_font`} value="serif" options={FONT_OPTIONS} />
   </div>
 </div>
