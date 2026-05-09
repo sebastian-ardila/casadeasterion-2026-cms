@@ -61,12 +61,21 @@ const URL_STATIC: UrlOpt[] = [
   { value: "/contacto",    label: "Contacto",   hint: "Formulario de contacto",  icon: "lucide:phone" },
 ];
 let URL_OPTIONS: UrlOpt[] = [...URL_STATIC];
+// The "Contenido de la card" mini preview also wants the latest
+// published post + latest published book so editors see the real
+// content the public site will resolve. Surface them via define:vars.
+type LatestPost = { slug: string; title: string; excerpt: string | null } | null;
+type LatestBook = { slug: string; title: string; subtitle: string | null } | null;
+let LATEST_POST: LatestPost = null;
+let LATEST_BOOK: LatestBook = null;
 try {
   const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
-  const [postsRes, booksRes, authorsRes] = await Promise.all([
+  const [postsRes, booksRes, authorsRes, latestPostRes, latestBookRes] = await Promise.all([
     sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("authors").select("slug, name").order("name").limit(40),
+    sb.from("posts").select("slug, title, excerpt").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("books").select("slug, title, subtitle").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const books = (booksRes.data ?? []).filter((r) => r?.slug);
   const posts = (postsRes.data ?? []).filter((r) => r?.slug);
@@ -77,6 +86,8 @@ try {
     ...posts.map((p) => ({ value: `/articulos/${p.slug}`, label: p.title, hint: "Artículo", icon: "lucide:file-text" as const })),
     ...authors.map((a) => ({ value: `/autores/${a.slug}`, label: a.name,  hint: "Autor",    icon: "lucide:user" as const })),
   ];
+  if (latestPostRes.data) LATEST_POST = latestPostRes.data as LatestPost;
+  if (latestBookRes.data) LATEST_BOOK = latestBookRes.data as LatestBook;
 } catch {
   // Network / RLS hiccup — keep the static picker only.
 }
@@ -358,6 +369,30 @@ const DEFAULT_HERO_CARD = {
               <label class="label">Fuente del contenido</label>
               <Dropdown name="content_source" value="editorial" options={CONTENT_SOURCE_OPTIONS} />
               <p class="hcc-hint mt-1">Si eliges artículo o libro pero aún no hay nada publicado, se usa la descripción editorial como fallback.</p>
+            </div>
+
+            {/* Mini preview that always shows the resolved content the
+                public site will render for the chosen source. Bg color
+                / fonts / radius come from the Desktop card config so
+                the preview reflects style choices too, but at a fixed
+                compact size so it always fits in the form column. The
+                two side panels surface contextual help: a "Editar
+                editorial" link when source=editorial, and a warning
+                banner when source=latest_post / latest_book but
+                nothing's published yet. */}
+            <div class="hcc-content-preview" data-content-preview>
+              <p class="hcc-preview-eyebrow-label">Preview del contenido</p>
+              <div class="hcc-content-preview-card" data-content-preview-card>
+                <p class="hcc-cp-eyebrow" data-cp-eyebrow></p>
+                <h3 class="hcc-cp-title" data-cp-title></h3>
+                <p class="hcc-cp-body" data-cp-body></p>
+                <span class="hcc-cp-cta" data-cp-cta></span>
+              </div>
+              <p class="hcc-cp-hint" data-cp-warning role="status" hidden></p>
+              <a class="hcc-cp-edit-link" data-cp-edit-editorial href="#" hidden>
+                <Icon name="lucide:external-link" class="w-3 h-3" aria-hidden="true" />
+                Editar la descripción editorial
+              </a>
             </div>
             {/* Manual fields — only visible when content source is "manual".
                 JS toggles the [hidden] attribute based on the selected source. */}
@@ -1209,6 +1244,98 @@ const DEFAULT_HERO_CARD = {
   .hcc-field .hcc-hint { margin: 0 0 0.125rem; }
   .hcc-url-stack { display: flex; flex-direction: column; gap: 0.5rem; }
 
+  /* === Mini content preview (lives inside "Contenido de la card") ===
+     Compact card that always shows the resolved final content for
+     the chosen content_source — separate from the right-side full
+     hero preview, so editors don't have to scan the screen to see
+     what's effectively in the card. Visual styles (bg color, text
+     color, fonts, radius) mirror the desktop card config so font
+     and color choices show up here too. */
+  .hcc-content-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed rgb(229 229 228);
+  }
+  .hcc-preview-eyebrow-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: rgb(120 113 108);
+    margin: 0;
+  }
+  .hcc-content-preview-card {
+    background: var(--cp-bg, #1a1715);
+    color: var(--cp-fg, #f5f1ea);
+    border-radius: var(--cp-radius, 0px);
+    padding: 1.5rem 1.625rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 140px;
+    box-shadow: 0 6px 14px -8px rgba(0,0,0,0.18);
+  }
+  .hcc-cp-eyebrow {
+    font-family: var(--cp-eyebrow-font, inherit);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    opacity: 0.7;
+    margin: 0;
+    min-height: 1em;
+  }
+  .hcc-cp-eyebrow:empty { display: none; }
+  .hcc-cp-title {
+    font-family: var(--cp-title-font, "Cormorant Garamond", serif);
+    font-size: 1.375rem;
+    line-height: 1.15;
+    margin: 0;
+    font-weight: 500;
+  }
+  .hcc-cp-title:empty { display: none; }
+  .hcc-cp-body {
+    font-family: var(--cp-body-font, inherit);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    opacity: 0.85;
+    margin: 0;
+  }
+  .hcc-cp-body:empty { display: none; }
+  .hcc-cp-cta {
+    font-family: var(--cp-cta-font, inherit);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    border-bottom: 1px solid currentColor;
+    padding-bottom: 2px;
+    align-self: flex-start;
+    margin-top: 0.25rem;
+    opacity: 0.9;
+  }
+  .hcc-cp-cta:empty { display: none; }
+  .hcc-cp-hint {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    background: rgb(254 252 232);   /* amber-50 */
+    border: 1px solid rgb(253 230 138); /* amber-200 */
+    color: rgb(120 53 15);           /* amber-900 */
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+  .hcc-cp-edit-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 11px;
+    color: rgb(68 64 60);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    align-self: flex-start;
+  }
+  .hcc-cp-edit-link:hover { color: rgb(28 25 23); }
+
   /* === Contact list editor (emails / phones / addresses / social) === */
   .cl-list { display: flex; flex-direction: column; gap: 0.625rem; }
   .cl-list-rows { display: flex; flex-direction: column; gap: 0.625rem; }
@@ -1317,7 +1444,7 @@ const DEFAULT_HERO_CARD = {
   }
 </style>
 
-<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL, HERO_CARD_FONTS_MAP }}>
+<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL, HERO_CARD_FONTS_MAP, LATEST_POST, LATEST_BOOK }}>
   (() => {
     if (window.__casSiteInit) return;
     window.__casSiteInit = true;
@@ -1514,6 +1641,88 @@ const DEFAULT_HERO_CARD = {
         value = ddWrap?.querySelector("[data-dd-input]")?.value || "editorial";
       }
       manual.hidden = value !== "manual";
+    };
+
+    // ----- Mini "Contenido de la card" preview -----
+    // Resolves the final text the public site will render given the
+    // current content_source + manual fields + the latest published
+    // post/book (fetched at SSR via define:vars). Then paints those
+    // strings + the desktop card's visual style into the dedicated
+    // preview-card element inside the "Contenido de la card" section.
+    const resolveContentPreview = (cfg) => {
+      const src = cfg.content_source || "editorial";
+      const editorialField = document.querySelector('[name="editorial_description"]');
+      const editorialText = (editorialField?.value || "").trim();
+      let eyebrow = "Editorial";
+      let title = "Casa de Asterión Ediciones";
+      let body = editorialText;
+      let cta = "Explorar el catálogo";
+      let warning = "";
+      let editorialLink = false;
+      if (src === "manual") {
+        const m = cfg.manual ?? {};
+        eyebrow = (m.eyebrow ?? "").trim();
+        title = (m.title ?? "").trim();
+        body = (m.body ?? "").trim();
+        cta = (m.cta_label ?? "").trim();
+      } else if (src === "latest_post") {
+        if (LATEST_POST) {
+          eyebrow = "Editorial";
+          title = LATEST_POST.title || "(sin título)";
+          body = LATEST_POST.excerpt || "";
+          cta = "Leer artículo";
+        } else {
+          warning = "No hay artículos publicados todavía. Mientras tanto el sitio mostrará la descripción editorial como fallback.";
+        }
+      } else if (src === "latest_book") {
+        if (LATEST_BOOK) {
+          eyebrow = "Catálogo";
+          title = LATEST_BOOK.title || "(sin título)";
+          body = LATEST_BOOK.subtitle || "";
+          cta = "Ver libro";
+        } else {
+          warning = "No hay libros publicados todavía. Mientras tanto el sitio mostrará la descripción editorial como fallback.";
+        }
+      } else {
+        // editorial
+        editorialLink = true;
+        if (!editorialText) warning = "La descripción editorial está vacía. Edita la pestaña Editorial para que esta card tenga cuerpo.";
+      }
+      return { eyebrow, title, body, cta, warning, editorialLink };
+    };
+    const renderContentPreview = (cfg) => {
+      const root = $("[data-content-preview]");
+      if (!root) return;
+      const { eyebrow, title, body, cta, warning, editorialLink } = resolveContentPreview(cfg);
+      const setText = (sel, txt) => {
+        const el = root.querySelector(sel);
+        if (el) el.textContent = txt || "";
+      };
+      setText("[data-cp-eyebrow]", eyebrow);
+      setText("[data-cp-title]",   title);
+      setText("[data-cp-body]",    body);
+      setText("[data-cp-cta]",     cta);
+      // Mirror the desktop card's visual style on the mini preview.
+      const card = root.querySelector("[data-content-preview-card]");
+      if (card) {
+        const d = cfg.desktop ?? {};
+        const bg = hexToRgba(d.bg_color || "#1a1715", d.bg_alpha ?? 1);
+        card.style.setProperty("--cp-bg", bg);
+        card.style.setProperty("--cp-fg", d.text_color || "#f5f1ea");
+        card.style.setProperty("--cp-radius",
+          `${d.border_radius_tl || 0}px ${d.border_radius_tr || 0}px ${d.border_radius_br || 0}px ${d.border_radius_bl || 0}px`);
+        card.style.setProperty("--cp-title-font",   HERO_CARD_FONTS_MAP[d.title_font]   || HERO_CARD_FONTS_MAP.serif);
+        card.style.setProperty("--cp-eyebrow-font", HERO_CARD_FONTS_MAP[d.eyebrow_font] || HERO_CARD_FONTS_MAP.sans);
+        card.style.setProperty("--cp-body-font",    HERO_CARD_FONTS_MAP[d.body_font]    || HERO_CARD_FONTS_MAP.sans);
+        card.style.setProperty("--cp-cta-font",     HERO_CARD_FONTS_MAP[d.cta_font]     || HERO_CARD_FONTS_MAP.sans);
+      }
+      const warn = root.querySelector("[data-cp-warning]");
+      if (warn) {
+        if (warning) { warn.textContent = warning; warn.hidden = false; }
+        else { warn.hidden = true; }
+      }
+      const link = root.querySelector("[data-cp-edit-editorial]");
+      if (link) link.hidden = !editorialLink;
     };
 
     // ----- Preview render -----
@@ -1804,6 +2013,7 @@ const DEFAULT_HERO_CARD = {
       currentHeroCfg = cfg;
       updateBgFallbackHints(cfg);
       updatePositionBounds();
+      renderContentPreview(cfg);
       const heroJson = $("[data-hero-json]");
       if (heroJson) heroJson.value = JSON.stringify(cfg);
       // Preview cfg — bg image falls back across platforms so the
@@ -2429,6 +2639,20 @@ const DEFAULT_HERO_CARD = {
       $$("[data-preview-zoom-in]").forEach(b => b.addEventListener("click", () => stepZoom(+1)));
       $$("[data-preview-zoom-out]").forEach(b => b.addEventListener("click", () => stepZoom(-1)));
       $$("[data-preview-zoom-reset]").forEach(b => b.addEventListener("click", () => setPreviewZoom(1)));
+      // Mini content-preview "Editar editorial" link — switches to
+      // the Editorial tab and focuses the Descripción editorial
+      // textarea so the editor lands directly on it.
+      $$("[data-cp-edit-editorial]").forEach(a => {
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          switchTab("editorial");
+          const textarea = document.querySelector('[name="editorial_description"]');
+          if (textarea) {
+            textarea.scrollIntoView({ behavior: "smooth", block: "center" });
+            requestAnimationFrame(() => textarea.focus());
+          }
+        });
+      });
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
         if (d.name === "hero_image_url") {
