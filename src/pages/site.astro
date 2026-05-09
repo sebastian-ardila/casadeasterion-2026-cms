@@ -554,21 +554,29 @@ const DEFAULT_HERO_CARD = {
   .hcc-range { flex: 1 1 80px; min-width: 0; accent-color: rgb(28 25 23); }
 
   /* === Color block (swatch + hex + alpha slider + percent) ===
-     Designed to match the Dropdown button height (36px) so a color
-     editor and a Dropdown sit on the same row without misalignment.
-     Padding is 0 — the swatch fills full height flush against the
-     left border, then a 1px divider separates it from the inline
-     row of hex/range/pct. */
+     Sized to match the Dropdown button exactly. Both controls use
+     box-sizing: border-box and height: var(--cas-control-h) below,
+     so a color editor and a Dropdown sit on the same row pixel for
+     pixel — no 1px nudge from a stray border. */
   .hcc-color-block {
     display: flex;
     align-items: stretch;
-    height: 36px;
+    box-sizing: border-box;
+    height: var(--cas-control-h, 38px);
     border: 1px solid rgb(214 211 209);
     background: white;
     border-radius: 4px;
     padding: 0;
     overflow: hidden;
   }
+  /* Force the Dropdown buttons inside this page to the same exact
+     height as the color block. We scope to [data-site-form] so we
+     don't affect Dropdown usages on other pages. */
+  [data-site-form] .cas-dd-btn {
+    box-sizing: border-box;
+    height: var(--cas-control-h, 38px);
+  }
+  [data-site-form] { --cas-control-h: 38px; }
   .hcc-swatch-wrap {
     position: relative;
     display: block;
@@ -689,87 +697,50 @@ const DEFAULT_HERO_CARD = {
     .hcc-size-grid > :nth-child(3) { grid-column: 1 / -1; }
   }
 
-  /* === Position block ===
-     Two-column card: a frame-shaped pad on the left with a scaled
-     card overlay, X/Y inputs on the right. Both pads use their
-     platform's real frame aspect ratio so the user sees the actual
-     ratio of card-to-frame at all times. */
-  .hcc-position-block {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(110px, 140px);
-    gap: 0.75rem;
-    align-items: start;
-    border: 1px solid rgb(229 229 228);
-    background: rgb(250 250 249);
-    border-radius: 6px;
-    padding: 0.6rem;
-    max-width: 460px;
-  }
-  @media (max-width: 480px) {
-    .hcc-position-block { grid-template-columns: 1fr; }
-  }
-  .hcc-position-pad {
-    position: relative;
-    width: 100%;
-    background: repeating-conic-gradient(#fafaf9 0 25%, #f5f5f4 0 50%) 50% / 12px 12px;
-    border: 1px solid rgb(214 211 209);
-    border-radius: 4px;
-    cursor: crosshair;
-    touch-action: none;
-    overflow: hidden;
-  }
-  /* Each platform's real frame ratio — keeps the pad informative */
-  .hcc-position-pad[data-position-pad="desktop"] {
-    aspect-ratio: 1440 / 720;
-    max-height: 200px;
-  }
-  .hcc-position-pad[data-position-pad="mobile"] {
-    aspect-ratio: 390 / 720;
-    max-height: 220px;
-    max-width: 120px;
-    justify-self: start;
-  }
-  .hcc-position-frame-label {
-    position: absolute;
-    top: 3px;
-    left: 5px;
-    font-size: 9px;
-    letter-spacing: 0.04em;
-    color: rgb(168 162 158);
-    pointer-events: none;
-    font-variant-numeric: tabular-nums;
-    text-transform: uppercase;
-    z-index: 1;
-  }
-  .hcc-position-card {
-    position: absolute;
-    background: rgba(28, 25, 23, 0.16);
-    border: 1.5px solid rgb(28 25 23);
-    border-radius: 2px;
-    pointer-events: none;
-    transition: left 0.06s linear, top 0.06s linear, width 0.06s linear, height 0.06s linear;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-    box-sizing: border-box;
-  }
-  .hcc-position-fields {
+  /* === Position inputs ===
+     X and Y rows with −/+ stepper buttons flanking each input. The
+     visual drag pad was removed because it pushed users toward
+     positions that needed to be re-edited anyway; explicit numbers
+     plus easy nudge buttons cover the common case better. */
+  .hcc-pos-inputs {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.5rem;
+    max-width: 320px;
+  }
+  .hcc-pos-row {
+    display: grid;
+    grid-template-columns: 1.75rem 1fr;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .hcc-pos-control {
+    display: flex;
+    align-items: stretch;
+    gap: 0.375rem;
+  }
+  .hcc-pos-input-wrap {
+    flex: 1;
     min-width: 0;
-    justify-content: center;
   }
-  .hcc-num-cell-tight { gap: 0.15rem; }
-  .hcc-num-cell-tight .hcc-num-cell-label {
-    font-size: 9px;
-    letter-spacing: 0.06em;
+  .hcc-step {
+    width: 32px;
+    height: 36px;
+    border: 1px solid rgb(214 211 209);
+    background: white;
+    border-radius: 4px;
+    color: rgb(68 64 60);
+    font-size: 1.1rem;
+    line-height: 1;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+    flex-shrink: 0;
+    user-select: none;
   }
-  .hcc-num-cell-tight .hcc-num-input {
-    padding: 0.3rem 22px 0.3rem 0.4rem;
-    font-size: 0.8125rem;
-  }
-  .hcc-num-cell-tight .hcc-num-suffix {
-    font-size: 10px;
-  }
+  .hcc-step:hover { background: rgb(28 25 23); border-color: rgb(28 25 23); color: white; }
+  .hcc-step:active { transform: translateY(0.5px); }
+  .hcc-step:focus-visible { outline: none; border-color: rgb(28 25 23); box-shadow: 0 0 0 1px rgb(28 25 23); }
 
   /* === Color input === */
   [data-platform-section] input[type="color"] {
@@ -1253,46 +1224,6 @@ const DEFAULT_HERO_CARD = {
         const v = getByPath(cfg, path);
         el.textContent = `${Math.round(Number(v) || 0)}px`;
       });
-      // Position pad: render a card-shaped overlay scaled to the
-      // platform's frame. The pad's aspect-ratio already matches the
-      // frame, so we just compute the card's top-left + size as a
-      // percentage of the frame and let the overlay snap to that.
-      // Visualization is clamped so the card never escapes the pad
-      // bounds — even if the user typed extreme values into X/Y.
-      $$("[data-position-pad]").forEach(pad => {
-        const platform = pad.getAttribute("data-position-pad");
-        const cardEl = pad.querySelector("[data-position-card]");
-        if (!cardEl) return;
-        const frameW = Number(pad.getAttribute("data-frame-w")) || 1440;
-        const frameH = Number(pad.getAttribute("data-frame-h")) || 720;
-        const x = Number(getByPath(cfg, `${platform}.offset_x`)) || 0;
-        const y = Number(getByPath(cfg, `${platform}.offset_y`)) || 0;
-        const w = Number(getByPath(cfg, `${platform}.width`)) || 0;
-        const h = Number(getByPath(cfg, `${platform}.height`)) || 0;
-        // Effective dimensions: width=0 → fill remaining horizontal
-        // space (auto); height treated as min-height. Floor at sane
-        // minimums so the overlay is always visible.
-        const autoW = platform === "mobile" ? Math.max(80, frameW - x * 2) : Math.max(120, frameW - x);
-        const effW = w > 0 ? Math.min(w, frameW) : autoW;
-        const effH = Math.max(40, Math.min(h || 280, frameH));
-        let cardLeft, cardTop;
-        if (platform === "desktop") {
-          // Card is positioned with left=offset_x and centered
-          // vertically + offset_y in the live CSS rules.
-          cardLeft = x;
-          cardTop = (frameH - effH) / 2 + y;
-        } else {
-          // Mobile: top margin = offset_y, side margins = offset_x.
-          cardLeft = x;
-          cardTop = y;
-        }
-        cardLeft = Math.max(0, Math.min(frameW - effW, cardLeft));
-        cardTop = Math.max(0, Math.min(frameH - effH, cardTop));
-        cardEl.style.left = `${(cardLeft / frameW) * 100}%`;
-        cardEl.style.top = `${(cardTop / frameH) * 100}%`;
-        cardEl.style.width = `${(effW / frameW) * 100}%`;
-        cardEl.style.height = `${(effH / frameH) * 100}%`;
-      });
 
       const heroImgInput = document.querySelector('input[type="hidden"][name="hero_image_url"]');
       const heroImageUrl = (heroImgInput?.value || "").trim() || HERO_FALLBACK_URL;
@@ -1523,70 +1454,47 @@ const DEFAULT_HERO_CARD = {
         if (modal && !modal.hasAttribute("hidden")) closeFullscreen();
       });
 
-      // 2D drag pad for position. The cursor inside the pad maps to
-      // the card's center within the frame; new offset_x/offset_y are
-      // computed and clamped so the card never leaves the frame
-      // bounds. This keeps the editor honest — the user can't drag
-      // the card off-screen even if they wanted to. Outside-range
-      // values can still be entered via the number input directly,
-      // but the overlay will visually clamp.
-      $$("[data-position-pad]").forEach(pad => {
-        const platform = pad.getAttribute("data-position-pad");
-        const xInput = document.querySelector(`[data-bind="${platform}.offset_x"]`);
-        const yInput = document.querySelector(`[data-bind="${platform}.offset_y"]`);
-        if (!xInput || !yInput) return;
-        const frameW = Number(pad.getAttribute("data-frame-w")) || 1440;
-        const frameH = Number(pad.getAttribute("data-frame-h")) || 720;
-        const wInput = document.querySelector(`[data-bind="${platform}.width"]`);
-        const hInput = document.querySelector(`[data-bind="${platform}.height"]`);
-        let dragging = false;
-        const setFromEvent = (e) => {
-          const rect = pad.getBoundingClientRect();
-          const cx = (e.touches?.[0]?.clientX ?? e.clientX) - rect.left;
-          const cy = (e.touches?.[0]?.clientY ?? e.clientY) - rect.top;
-          // Cursor in frame coordinates
-          const fx = Math.max(0, Math.min(rect.width, cx)) / rect.width * frameW;
-          const fy = Math.max(0, Math.min(rect.height, cy)) / rect.height * frameH;
-          // Read effective card size from the form
-          const w = Number(wInput?.value) || 0;
-          const h = Number(hInput?.value) || 0;
-          const xCur = Number(xInput.value) || 0;
-          const autoW = platform === "mobile" ? Math.max(80, frameW - xCur * 2) : Math.max(120, frameW - xCur);
-          const effW = w > 0 ? Math.min(w, frameW) : autoW;
-          const effH = Math.max(40, Math.min(h || 280, frameH));
-          if (platform === "desktop") {
-            // Cursor = card center → derive card top-left, then convert
-            // top-left back to offset_x/offset_y, clamped.
-            const left = Math.max(0, Math.min(frameW - effW, fx - effW / 2));
-            const top = Math.max(0, Math.min(frameH - effH, fy - effH / 2));
-            xInput.value = String(Math.round(left));
-            yInput.value = String(Math.round(top - (frameH - effH) / 2));
-          } else {
-            // Mobile: cursor = card top-left. side margin = offset_x,
-            // top margin = offset_y. Clamp so card fits in frame.
-            const maxX = Math.max(0, (frameW - 80) / 2);
-            const left = Math.max(0, Math.min(maxX, fx - effW / 2));
-            const top = Math.max(0, Math.min(frameH - effH, fy - effH / 2));
-            xInput.value = String(Math.round(left));
-            yInput.value = String(Math.round(top));
-          }
-          switchPreviewTab(platform);
+      // Position steppers: −/+ buttons next to each X/Y input nudge
+      // the value by `data-step` (typically ±8px). Click and hold to
+      // repeat at ~12 ticks/second after a 350ms initial delay so
+      // longer adjustments don't require dozens of taps.
+      $$(".hcc-step").forEach(btn => {
+        const targetPath = btn.getAttribute("data-step-target");
+        const stepBy = Number(btn.getAttribute("data-step")) || 1;
+        const input = document.querySelector(`[data-bind="${CSS.escape(targetPath)}"]`);
+        if (!input) return;
+        const apply = () => {
+          const cur = Number(input.value) || 0;
+          let next = cur + stepBy;
+          const min = input.min !== "" ? Number(input.min) : -Infinity;
+          const max = input.max !== "" ? Number(input.max) : Infinity;
+          next = Math.max(min, Math.min(max, next));
+          input.value = String(next);
+          // Find the platform from the bind path (e.g. "desktop.offset_x")
+          const platform = targetPath.split(".")[0];
+          if (platform === "desktop" || platform === "mobile") switchPreviewTab(platform);
           renderHeroPreview();
         };
-        pad.addEventListener("pointerdown", (e) => {
-          dragging = true;
-          try { pad.setPointerCapture(e.pointerId); } catch {}
-          setFromEvent(e);
-        });
-        pad.addEventListener("pointermove", (e) => {
-          if (dragging) setFromEvent(e);
-        });
-        const stop = (e) => {
-          dragging = false;
-          try { pad.releasePointerCapture(e.pointerId); } catch {}
+        let holdTimer = null;
+        let repeatTimer = null;
+        const startHold = () => {
+          holdTimer = setTimeout(() => {
+            repeatTimer = setInterval(apply, 80);
+          }, 350);
         };
-        pad.addEventListener("pointerup", stop);
-        pad.addEventListener("pointercancel", stop);
+        const stopHold = () => {
+          if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+          if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+        };
+        btn.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          apply();
+          startHold();
+        });
+        btn.addEventListener("pointerup", stopHold);
+        btn.addEventListener("pointerleave", stopHold);
+        btn.addEventListener("pointercancel", stopHold);
+        btn.addEventListener("blur", stopHold);
       });
 
       // Border-radius "link corners" toggle: when on, editing one corner

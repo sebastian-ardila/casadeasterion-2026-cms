@@ -133,51 +133,41 @@ const FONT_OPTIONS = [
   <p class="hcc-hint mt-1">Ancho = 0 → se adapta al contenedor (recomendado para mobile).</p>
 </div>
 
-{/* Position editor.
-    The pad is sized to the platform's frame aspect ratio (1440×720
-    desktop / 390×720 mobile) and shows a card-shaped overlay scaled
-    to the actual card width/height. Dragging or clicking inside the
-    pad re-centers the card at the cursor, clamped so the card never
-    leaves the frame bounds — this prevents nonsensical positions
-    that would render the card off-screen on the public site. */}
+{/* Position: X / Y inputs only. Each input is flanked by −/+ stepper
+    buttons (8px increments) for one-tap nudging without having to
+    target the native number arrows. */}
 <div>
   <label class="label">Posición</label>
-  <div class="hcc-position-block">
-    <div
-      class="hcc-position-pad"
-      data-position-pad={p}
-      data-frame-w={p === "desktop" ? "1440" : "390"}
-      data-frame-h={p === "desktop" ? "720" : "720"}
-      role="application"
-      aria-label="Arrastra la card para posicionarla dentro del frame"
-    >
-      <span class="hcc-position-frame-label" aria-hidden="true">{p === "desktop" ? "1440×720" : "390×720"}</span>
-      <span class="hcc-position-card" data-position-card aria-hidden="true"></span>
-    </div>
-    <div class="hcc-position-fields">
-      <label class="hcc-num-cell hcc-num-cell-tight">
-        <span class="hcc-num-cell-label">
-          <svg class="hcc-num-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-          X
-        </span>
-        <div class="hcc-num-input-wrap">
-          <input type="number" data-bind={`${p}.offset_x`} min="0" max="2000" class="hcc-input hcc-num-input" />
+  <div class="hcc-pos-inputs">
+    <label class="hcc-pos-row">
+      <span class="hcc-num-cell-label">
+        <svg class="hcc-num-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        X
+      </span>
+      <div class="hcc-pos-control">
+        <button type="button" class="hcc-step" data-step-target={`${p}.offset_x`} data-step="-8" aria-label="Reducir X 8 px">−</button>
+        <div class="hcc-num-input-wrap hcc-pos-input-wrap">
+          <input type="number" data-bind={`${p}.offset_x`} min="0" max="2000" step="1" class="hcc-input hcc-num-input" />
           <span class="hcc-num-suffix">px</span>
         </div>
-      </label>
-      <label class="hcc-num-cell hcc-num-cell-tight">
-        <span class="hcc-num-cell-label">
-          <svg class="hcc-num-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
-          Y
-        </span>
-        <div class="hcc-num-input-wrap">
-          <input type="number" data-bind={`${p}.offset_y`} min="-2000" max="2000" class="hcc-input hcc-num-input" />
+        <button type="button" class="hcc-step" data-step-target={`${p}.offset_x`} data-step="8" aria-label="Aumentar X 8 px">+</button>
+      </div>
+    </label>
+    <label class="hcc-pos-row">
+      <span class="hcc-num-cell-label">
+        <svg class="hcc-num-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+        Y
+      </span>
+      <div class="hcc-pos-control">
+        <button type="button" class="hcc-step" data-step-target={`${p}.offset_y`} data-step="-8" aria-label="Reducir Y 8 px">−</button>
+        <div class="hcc-num-input-wrap hcc-pos-input-wrap">
+          <input type="number" data-bind={`${p}.offset_y`} min="-2000" max="2000" step="1" class="hcc-input hcc-num-input" />
           <span class="hcc-num-suffix">px</span>
         </div>
-      </label>
-    </div>
+        <button type="button" class="hcc-step" data-step-target={`${p}.offset_y`} data-step="8" aria-label="Aumentar Y 8 px">+</button>
+      </div>
+    </label>
   </div>
-  <p class="hcc-hint mt-1">El rectángulo refleja el tamaño real de la card dentro del frame {p === "desktop" ? "1440×720" : "390×720"}.</p>
 </div>
 
 {/* Shadow */}
