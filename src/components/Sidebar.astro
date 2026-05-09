@@ -135,7 +135,7 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
           )}
         </a>
         {item.subItems && (
-          <div class="cas-subnav" data-subnav-parent={item.href} hidden={!isActive(item.href)}>
+          <div class="cas-subnav" data-subnav-parent={item.href} hidden>
             {item.subItems.map((sub) => (
               <a
                 href={sub.href}
@@ -152,6 +152,28 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
       </>
     ))}
   </nav>
+
+  {/* Sync the expand/collapse state from localStorage BEFORE the
+      browser paints the sidebar. SSR ships every sub-nav as hidden;
+      this script reopens any that the user had open last time. */}
+  <script is:inline>
+    (() => {
+      try {
+        const raw = localStorage.getItem("cas:sidebar-expanded");
+        if (!raw) return;
+        const state = JSON.parse(raw);
+        if (!state || typeof state !== "object") return;
+        document.querySelectorAll("#cms-sidebar [data-subnav-parent]").forEach((el) => {
+          const parent = el.getAttribute("data-subnav-parent") || "";
+          if (state[parent] === true) {
+            el.removeAttribute("hidden");
+            const row = document.querySelector('#cms-sidebar a.nav-link[href="' + parent + '"]');
+            if (row) row.setAttribute("data-expanded", "1");
+          }
+        });
+      } catch {}
+    })();
+  </script>
 
   <div class="shrink-0 border-t border-stone-200 px-5 py-4 text-xs text-stone-600 bg-stone-50">
     {user ? (
@@ -454,12 +476,14 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     const writeExpandState = (s) => {
       try { localStorage.setItem(EXPAND_STORAGE_KEY, JSON.stringify(s)); } catch {}
     };
-    const isExpanded = (parentHref, parentActive) => {
+    const isExpanded = (parentHref, _parentActive) => {
       const s = readExpandState();
       // Explicit override — true / false stored.
       if (typeof s[parentHref] === "boolean") return s[parentHref];
-      // Default: open if the parent is active.
-      return parentActive;
+      // Default: collapsed. The user opens it once and the choice
+      // sticks via localStorage (survives reloads, navigations,
+      // logout/login on the same browser).
+      return false;
     };
 
     // Re-sync the active state of nav links. Called immediately on click and
