@@ -145,6 +145,27 @@ if (Astro.request.method === "POST") {
 // Default hero card config — kept in sync with apps/web/src/lib/site-config.ts
 // and migration 0030. Used when no value is persisted yet, and to fill
 // missing keys from a partial save.
+// Hero card font codes → CSS font-family. Mirror of HERO_CARD_FONTS
+// in apps/web/src/lib/hero-card.ts. Used by the live preview.
+const HERO_CARD_FONTS_MAP: Record<string, string> = {
+  serif:               '"Cormorant Garamond", Georgia, serif',
+  "eb-garamond":       '"EB Garamond", Georgia, serif',
+  playfair:            '"Playfair Display", Georgia, serif',
+  lora:                '"Lora", Georgia, serif',
+  "libre-baskerville": '"Libre Baskerville", Georgia, serif',
+  crimson:             '"Crimson Pro", Georgia, serif',
+  fraunces:            '"Fraunces", Georgia, serif',
+  spectral:            '"Spectral", Georgia, serif',
+  sans:                '"Inter", system-ui, -apple-system, sans-serif',
+  "dm-sans":           '"DM Sans", "Inter", sans-serif',
+  "space-grotesk":     '"Space Grotesk", "Inter", sans-serif',
+  manrope:             '"Manrope", "Inter", sans-serif',
+  "work-sans":         '"Work Sans", "Inter", sans-serif',
+  "plus-jakarta":      '"Plus Jakarta Sans", "Inter", sans-serif',
+  outfit:              '"Outfit", "Inter", sans-serif',
+  marcellus:           '"Marcellus", "Cormorant Garamond", serif',
+};
+
 const DEFAULT_HERO_CARD = {
   content_source: "editorial",
   manual: {
@@ -161,6 +182,9 @@ const DEFAULT_HERO_CARD = {
     bg_blur: 0,
     text_color: "#f5f1ea",
     title_font: "serif",
+    eyebrow_font: "sans",
+    body_font: "sans",
+    cta_font: "sans",
     border_radius_tl: 0,
     border_radius_tr: 0,
     border_radius_br: 0,
@@ -179,6 +203,9 @@ const DEFAULT_HERO_CARD = {
     bg_blur: 0,
     text_color: "#f5f1ea",
     title_font: "serif",
+    eyebrow_font: "sans",
+    body_font: "sans",
+    cta_font: "sans",
     border_radius_tl: 0,
     border_radius_tr: 0,
     border_radius_br: 0,
@@ -1194,7 +1221,7 @@ const DEFAULT_HERO_CARD = {
   }
 </style>
 
-<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL }}>
+<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL, HERO_CARD_FONTS_MAP }}>
   (() => {
     if (window.__casSiteInit) return;
     window.__casSiteInit = true;
@@ -1371,11 +1398,18 @@ const DEFAULT_HERO_CARD = {
       card.style.boxShadow = layout.shadow ? "0 25px 50px -12px rgba(0,0,0,0.25)" : "none";
       card.style.backdropFilter = layout.bg_blur > 0 ? `blur(${layout.bg_blur}px)` : "none";
       card.style.webkitBackdropFilter = layout.bg_blur > 0 ? `blur(${layout.bg_blur}px)` : "none";
-      const titleFont = layout.title_font === "serif"
-        ? `"Cormorant Garamond","EB Garamond",Georgia,serif`
-        : `"Inter",system-ui,-apple-system,sans-serif`;
-      const t = card.querySelector("[data-preview-title]");
-      if (t) t.style.fontFamily = titleFont;
+      // Apply each chosen typeface to the matching preview element.
+      // HERO_CARD_FONTS_MAP mirrors the same-named map in
+      // apps/web/src/lib/hero-card.ts; both must list the same codes.
+      const fontFor = (key, fallback) => HERO_CARD_FONTS_MAP[key] || HERO_CARD_FONTS_MAP[fallback] || HERO_CARD_FONTS_MAP.serif;
+      const apply = (sel, family) => {
+        const el = card.querySelector(sel);
+        if (el) el.style.fontFamily = family;
+      };
+      apply("[data-preview-title]",   fontFor(layout.title_font,   "serif"));
+      apply("[data-preview-eyebrow]", fontFor(layout.eyebrow_font, "sans"));
+      apply("[data-preview-body]",    fontFor(layout.body_font,    "sans"));
+      apply("[data-preview-cta]",     fontFor(layout.cta_font,     "sans"));
     };
 
     // Desktop: card sits absolute over the right-half hero image. Margin-right
