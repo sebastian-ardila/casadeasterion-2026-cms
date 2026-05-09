@@ -64,8 +64,11 @@ let URL_OPTIONS: UrlOpt[] = [...URL_STATIC];
 // The "Contenido de la card" mini preview also wants the latest
 // published post + latest published book so editors see the real
 // content the public site will resolve. Surface them via define:vars.
-type LatestPost = { slug: string; title: string; excerpt: string | null } | null;
-type LatestBook = { slug: string; title: string; subtitle: string | null } | null;
+// content_md / description_md let the JS-side teaser builder fall
+// back to the long-form text when the editor hasn't filled an
+// excerpt / subtitle.
+type LatestPost = { slug: string; title: string; excerpt: string | null; content_md: string | null } | null;
+type LatestBook = { slug: string; title: string; subtitle: string | null; description_md: string | null } | null;
 let LATEST_POST: LatestPost = null;
 let LATEST_BOOK: LatestBook = null;
 try {
@@ -74,8 +77,8 @@ try {
     sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("authors").select("slug, name").order("name").limit(40),
-    sb.from("posts").select("slug, title, excerpt").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("books").select("slug, title, subtitle").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("posts").select("slug, title, excerpt, content_md").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("books").select("slug, title, subtitle, description_md").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const books = (booksRes.data ?? []).filter((r) => r?.slug);
   const posts = (postsRes.data ?? []).filter((r) => r?.slug);
@@ -1654,17 +1657,39 @@ const DEFAULT_HERO_CARD = {
     // post/book (fetched at SSR via define:vars). Then paints those
     // strings + the desktop card's visual style into the dedicated
     // preview-card element inside the "Contenido de la card" section.
+    // Strip a small subset of markdown to plain text and trim to a
+    // sensible body length. Mirrors markdownToTeaser() in
+    // apps/web/src/lib/hero-card.ts so the CMS preview matches the
+    // public site's body when an editor's excerpt / subtitle is
+    // empty and the long-form md is the only available teaser.
+    const markdownToTeaser = (md, max = 280) => {
+      if (!md) return "";
+      const stripped = md
+        .replace(/`{3}[\s\S]*?`{3}/g, " ")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+        .replace(/^\s{0,3}>\s?/gm, "")
+        .replace(/^\s*[-*+]\s+/gm, "")
+        .replace(/^\s*\d+\.\s+/gm, "")
+        .replace(/(\*\*|__)(.*?)\1/g, "$2")
+        .replace(/(\*|_)(.*?)\1/g, "$2")
+        .replace(/~~(.*?)~~/g, "$1")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (stripped.length <= max) return stripped;
+      const cut = stripped.slice(0, max);
+      const lastSpace = cut.lastIndexOf(" ");
+      return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+    };
+
     const resolveContentPreview = (cfg) => {
       const src = cfg.content_source || "editorial";
       const editorialField = document.querySelector('[name="editorial_description"]');
       const editorialText = (editorialField?.value || "").trim();
       const m = cfg.manual ?? {};
-      // CTA falls back to editorial defaults when the user hasn't
-      // overridden manual.cta_label / manual.cta_href — so editors
-      // can keep "Explorar el catálogo" / "/catalogo" with no extra
-      // typing, but customize freely when they want to.
       const customCtaLabel = (m.cta_label ?? "").trim();
-      const customCtaHref = (m.cta_href ?? "").trim();
       let eyebrow = "Editorial";
       let title = "Casa de Asterión Ediciones";
       let body = editorialText;
@@ -1680,7 +1705,9 @@ const DEFAULT_HERO_CARD = {
         if (LATEST_POST) {
           eyebrow = "Editorial";
           title = LATEST_POST.title || "(sin título)";
-          body = LATEST_POST.excerpt || "";
+          // Body chain: authored excerpt → stripped content_md
+          // teaser. Same fallback the public site uses now.
+          body = (LATEST_POST.excerpt || "").trim() || markdownToTeaser(LATEST_POST.content_md);
           cta = "Leer artículo";
         } else {
           warning = "No hay artículos publicados todavía. Mientras tanto el sitio mostrará la descripción editorial como fallback.";
@@ -1689,13 +1716,12 @@ const DEFAULT_HERO_CARD = {
         if (LATEST_BOOK) {
           eyebrow = "Catálogo";
           title = LATEST_BOOK.title || "(sin título)";
-          body = LATEST_BOOK.subtitle || "";
+          body = (LATEST_BOOK.subtitle || "").trim() || markdownToTeaser(LATEST_BOOK.description_md);
           cta = "Ver libro";
         } else {
           warning = "No hay libros publicados todavía. Mientras tanto el sitio mostrará la descripción editorial como fallback.";
         }
       } else {
-        // editorial
         editorialLink = true;
         if (!editorialText) warning = "La descripción editorial está vacía. Edita la pestaña Editorial para que esta card tenga cuerpo.";
       }
@@ -1832,11 +1858,24 @@ const DEFAULT_HERO_CARD = {
     };
 
     const applyContent = (card, cfg) => {
-      let c;
-      if (cfg.content_source === "manual") c = cfg.manual;
-      else if (cfg.content_source === "latest_post") c = { eyebrow: "Filosofía", title: "Último artículo publicado", body: "(El sitio mostrará el post más reciente)", cta_label: "Leer artículo", cta_href: "#" };
-      else if (cfg.content_source === "latest_book") c = { eyebrow: "Catálogo", title: "Último libro publicado", body: "(El sitio mostrará el libro más reciente)", cta_label: "Ver libro", cta_href: "#" };
-      else c = { eyebrow: "Editorial", title: "Casa de Asterión Ediciones", body: "(Aquí va la descripción editorial del sitio)", cta_label: "Explorar el catálogo", cta_href: "/catalogo" };
+      // Reuse the mini-preview's resolver so the right-side preview
+      // and the inline mini preview agree on title / body / cta —
+      // including the markdown teaser fallback when the latest
+      // post / book has no excerpt or subtitle.
+      const resolved = resolveContentPreview(cfg);
+      const m = cfg.manual ?? {};
+      const ctaHref = (m.cta_href ?? "").trim();
+      const c = {
+        eyebrow: resolved.eyebrow,
+        title: resolved.title,
+        body: resolved.body,
+        cta_label: resolved.cta,
+        cta_href: cfg.content_source === "latest_post"
+          ? (LATEST_POST ? `/articulos/${LATEST_POST.slug}` : "#")
+          : cfg.content_source === "latest_book"
+          ? (LATEST_BOOK ? `/catalogo/${LATEST_BOOK.slug}` : "#")
+          : (ctaHref || "/catalogo"),
+      };
       const eyebrow = card.querySelector("[data-preview-eyebrow]");
       const title = card.querySelector("[data-preview-title]");
       const body = card.querySelector("[data-preview-body]");
