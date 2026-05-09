@@ -7,6 +7,7 @@ import Dropdown from "~/components/Dropdown.astro";
 import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astro";
 import ColorEditor from "~/components/ColorEditor.astro";
 import PageStub from "~/components/PageStub.astro";
+import { editorMeta } from "~/lib/relative-time";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
@@ -72,14 +73,23 @@ type LatestPost = { slug: string; title: string; excerpt: string | null; content
 type LatestBook = { slug: string; title: string; subtitle: string | null; description_md: string | null } | null;
 let LATEST_POST: LatestPost = null;
 let LATEST_BOOK: LatestBook = null;
+// Most recent site_configuration row + the editor that last touched it
+// — shown next to "Guardar configuración" so the team can see at a
+// glance who saved last.
+let LAST_SITE_EDIT: { updated_at: string; editor: { full_name: string | null; email: string | null } | null } | null = null;
 try {
   const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
-  const [postsRes, booksRes, authorsRes, latestPostRes, latestBookRes] = await Promise.all([
+  const [postsRes, booksRes, authorsRes, latestPostRes, latestBookRes, siteEditRes] = await Promise.all([
     sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("authors").select("slug, name").order("name").limit(40),
     sb.from("posts").select("slug, title, excerpt, content_md").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("books").select("slug, title, subtitle, description_md").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("site_configuration")
+      .select("updated_at, editor:profiles!site_configuration_updated_by_fkey(full_name, email)")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
   const books = (booksRes.data ?? []).filter((r) => r?.slug);
   const posts = (postsRes.data ?? []).filter((r) => r?.slug);
@@ -92,6 +102,7 @@ try {
   ];
   if (latestPostRes.data) LATEST_POST = latestPostRes.data as LatestPost;
   if (latestBookRes.data) LATEST_BOOK = latestBookRes.data as LatestBook;
+  if (siteEditRes.data) LAST_SITE_EDIT = siteEditRes.data as typeof LAST_SITE_EDIT;
 } catch {
   // Network / RLS hiccup — keep the static picker only.
 }
@@ -717,10 +728,17 @@ const DEFAULT_HERO_CARD = {
         </section>
       </div>
 
-      {canEdit && (
+      {(canEdit || LAST_SITE_EDIT) && (
         <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
-          <div class="px-5 md:px-8 lg:px-10 py-3 flex gap-3">
-            <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
+          <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+            {canEdit && (
+              <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
+            )}
+            {LAST_SITE_EDIT && (
+              <p class="text-xs text-stone-500 italic">
+                Última edición: {editorMeta(LAST_SITE_EDIT.updated_at, LAST_SITE_EDIT.editor)}
+              </p>
+            )}
           </div>
         </div>
       )}

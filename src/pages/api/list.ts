@@ -1,6 +1,7 @@
 import type { APIRoute } from "astro";
 import { requirePermission, type Resource } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { editorMeta } from "~/lib/relative-time";
 
 type Item = {
   id: string;
@@ -38,6 +39,7 @@ function formatRelative(iso: string): string {
   const formatted = new Date(iso).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
   return `activo el ${formatted}`;
 }
+
 
 type ListResource = Resource;
 const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins"]);
@@ -80,12 +82,13 @@ export const GET: APIRoute = async (ctx) => {
   if (resource === "posts") {
     const { data } = await supabase
       .from("posts")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors(name)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!posts_updated_by_fkey(full_name, email)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((p: any) => ({
       id: p.id,
       title: p.title,
       subtitle: p.authors?.name ?? p.slug,
+      meta: editorMeta(p.updated_at, p.editor),
       status: p.status,
       href: `/posts/${p.id}`,
       imageUrl: p.cover_image_url ?? null,
@@ -94,12 +97,13 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "books") {
     const { data } = await supabase
       .from("books")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors(name)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!books_updated_by_fkey(full_name, email)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((b: any) => ({
       id: b.id,
       title: b.title,
       subtitle: b.authors?.name ?? b.slug,
+      meta: editorMeta(b.updated_at, b.editor),
       status: b.status,
       href: `/books/${b.id}`,
       imageUrl: b.cover_image_url ?? null,
@@ -108,12 +112,13 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "authors") {
     const { data } = await supabase
       .from("authors")
-      .select("id, name, slug, photo_url")
+      .select("id, name, slug, photo_url, updated_at, editor:profiles!authors_updated_by_fkey(full_name, email)")
       .order("name");
     items = (data ?? []).map((a: any) => ({
       id: a.id,
       title: a.name,
       subtitle: `/${a.slug}`,
+      meta: editorMeta(a.updated_at, a.editor),
       href: `/authors/${a.id}`,
       imageUrl: a.photo_url ?? null,
       imageStyle: "photo",
@@ -121,13 +126,14 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "categories") {
     const { data } = await supabase
       .from("categories")
-      .select("id, name, slug, kind, sort_order")
+      .select("id, name, slug, kind, sort_order, updated_at, editor:profiles!categories_updated_by_fkey(full_name, email)")
       .order("sort_order")
       .order("name");
     items = (data ?? []).map((c: any) => ({
       id: c.id,
       title: c.name,
       subtitle: KIND_LABEL[c.kind] ?? c.kind,
+      meta: editorMeta(c.updated_at, c.editor),
       href: `/categories/${c.id}`,
       imageUrl: KIND_EMOJI[c.kind] ?? KIND_EMOJI.other,
       imageStyle: "emoji",
