@@ -279,9 +279,10 @@ const DEFAULT_HERO_CARD = {
       <span>SEO</span>
     </button>
     {/* Right side: fullscreen preview launchers — only on phone-sized
-        screens. On md+ the inline preview pane is already visible, so
-        these buttons would be redundant. */}
-    <div class="md:hidden ml-auto flex items-center gap-1 pl-2 self-center">
+        screens AND only when the Hero tab is active (other tabs
+        don't have a card preview to launch). switchTab() toggles
+        the [hidden] attribute on this wrapper. */}
+    <div class="md:hidden ml-auto flex items-center gap-1 pl-2 self-center" data-fullscreen-launchers>
       <button type="button" data-fullscreen-tab="desktop" class="cas-fs-btn" aria-label="Vista web a pantalla completa" title="Vista web a pantalla completa">
         <Icon name="lucide:monitor" class="w-4 h-4" aria-hidden="true" />
         <span class="hidden sm:inline">Web</span>
@@ -371,22 +372,33 @@ const DEFAULT_HERO_CARD = {
               <p class="hcc-hint mt-1">Si eliges artículo o libro pero aún no hay nada publicado, se usa la descripción editorial como fallback.</p>
             </div>
 
-            {/* Mini preview that always shows the resolved content the
-                public site will render for the chosen source. Bg color
-                / fonts / radius come from the Desktop card config so
-                the preview reflects style choices too, but at a fixed
-                compact size so it always fits in the form column. The
-                two side panels surface contextual help: a "Editar
-                editorial" link when source=editorial, and a warning
-                banner when source=latest_post / latest_book but
-                nothing's published yet. */}
+            {/* Mini preview that mirrors EXACTLY how the public site
+                will render the card at desktop breakpoint. The card
+                is rendered at its full configured desktop dimensions
+                (width / min-height / padding) with the same Tailwind
+                classes the public site uses on the .hcc-* elements
+                — same font sizes (text-5xl title, text-base body,
+                text-xs eyebrow/cta), same line-clamp values
+                (4 / 3), same opacity / tracking — so truncation
+                behaves identically to what visitors see. The whole
+                stage is then CSS-scaled to fit the form column.
+                Below the frame, contextual hints surface: a
+                warning when source=latest_post / latest_book but
+                nothing's published; an "Editar editorial" link
+                when source=editorial. */}
             <div class="hcc-content-preview" data-content-preview>
               <p class="hcc-preview-eyebrow-label">Preview del contenido</p>
-              <div class="hcc-content-preview-card" data-content-preview-card>
-                <p class="hcc-cp-eyebrow" data-cp-eyebrow></p>
-                <h3 class="hcc-cp-title" data-cp-title></h3>
-                <p class="hcc-cp-body" data-cp-body></p>
-                <span class="hcc-cp-cta" data-cp-cta></span>
+              <div class="hcc-cp-frame" data-cp-frame>
+                <div class="hcc-cp-stage" data-cp-stage>
+                  <div class="hcc-cp-card flex flex-col justify-between" data-cp-card>
+                    <div>
+                      <p class="hcc-cp-eyebrow uppercase text-xs tracking-[0.2em] opacity-70 mb-5" data-cp-eyebrow></p>
+                      <h3 class="hcc-cp-title text-5xl leading-[1.1] mb-5 line-clamp-4" data-cp-title></h3>
+                      <p class="hcc-cp-body text-base opacity-80 leading-relaxed line-clamp-3" data-cp-body></p>
+                    </div>
+                    <span class="hcc-cp-cta uppercase text-xs tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4" data-cp-cta></span>
+                  </div>
+                </div>
               </div>
               <p class="hcc-cp-hint" data-cp-warning role="status" hidden></p>
               <a class="hcc-cp-edit-link" data-cp-edit-editorial href="#" hidden>
@@ -394,8 +406,8 @@ const DEFAULT_HERO_CARD = {
                 Editar la descripción editorial
               </a>
             </div>
-            {/* Manual fields — only visible when content source is "manual".
-                JS toggles the [hidden] attribute based on the selected source. */}
+            {/* Manual-only fields (eyebrow / title / body): hidden
+                unless content_source = "manual". */}
             <div data-manual-fields class="space-y-4 pt-4 border-t border-stone-100" hidden>
               <div class="hcc-field">
                 <label class="hcc-field-label">
@@ -421,13 +433,20 @@ const DEFAULT_HERO_CARD = {
                 <p class="hcc-hint">Párrafo breve bajo el título (opcional). Una o dos frases máximo.</p>
                 <textarea data-bind="manual.body" rows="3" class="hcc-input w-full"></textarea>
               </div>
+            </div>
+            {/* CTA fields (text + URL picker): visible for both
+                content_source = "manual" AND "editorial" (the
+                latest_post / latest_book modes link to the article
+                or book detail page directly, so they don't expose
+                a custom CTA). */}
+            <div data-cta-fields class="space-y-4 pt-4 border-t border-stone-100" hidden>
               <div class="hcc-field">
                 <label class="hcc-field-label">
                   <Icon name="lucide:mouse-pointer-click" class="w-3.5 h-3.5" aria-hidden="true" />
                   Texto del botón
                 </label>
                 <p class="hcc-hint">Llamada a la acción visible en el CTA. Ej: <em>Explorar el catálogo</em>.</p>
-                <input type="text" data-bind="manual.cta_label" class="hcc-input w-full" />
+                <input type="text" data-bind="manual.cta_label" class="hcc-input w-full" placeholder="Explorar el catálogo" />
               </div>
               <div class="hcc-field">
                 <label class="hcc-field-label">
@@ -1245,12 +1264,11 @@ const DEFAULT_HERO_CARD = {
   .hcc-url-stack { display: flex; flex-direction: column; gap: 0.5rem; }
 
   /* === Mini content preview (lives inside "Contenido de la card") ===
-     Compact card that always shows the resolved final content for
-     the chosen content_source — separate from the right-side full
-     hero preview, so editors don't have to scan the screen to see
-     what's effectively in the card. Visual styles (bg color, text
-     color, fonts, radius) mirror the desktop card config so font
-     and color choices show up here too. */
+     The card itself is rendered at the configured desktop dimensions
+     and then transform: scale()-ed to fit the form column — same
+     pattern the right-side full preview uses. This keeps text
+     truncation (line-clamp), padding, font-sizes, and aspect ratio
+     identical to what visitors will see at the desktop breakpoint. */
   .hcc-content-preview {
     display: flex;
     flex-direction: column;
@@ -1265,54 +1283,35 @@ const DEFAULT_HERO_CARD = {
     color: rgb(120 113 108);
     margin: 0;
   }
-  .hcc-content-preview-card {
-    background: var(--cp-bg, #1a1715);
-    color: var(--cp-fg, #f5f1ea);
-    border-radius: var(--cp-radius, 0px);
-    padding: 1.5rem 1.625rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    min-height: 140px;
+  .hcc-cp-frame {
+    position: relative;
+    width: 100%;
+    background: rgb(245 245 244);
+    border-radius: 4px;
+    overflow: hidden;
+    /* Height set inline based on card_height × scale. */
+  }
+  .hcc-cp-stage {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+  }
+  .hcc-cp-card {
+    /* width / min-height / padding / bg / color / radius set inline
+       at render time from cfg.desktop. Fonts come through CSS vars
+       so each role uses its chosen typeface from FONT_OPTIONS. */
     box-shadow: 0 6px 14px -8px rgba(0,0,0,0.18);
   }
-  .hcc-cp-eyebrow {
-    font-family: var(--cp-eyebrow-font, inherit);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-    opacity: 0.7;
-    margin: 0;
-    min-height: 1em;
-  }
-  .hcc-cp-eyebrow:empty { display: none; }
-  .hcc-cp-title {
-    font-family: var(--cp-title-font, "Cormorant Garamond", serif);
-    font-size: 1.375rem;
-    line-height: 1.15;
-    margin: 0;
-    font-weight: 500;
-  }
-  .hcc-cp-title:empty { display: none; }
-  .hcc-cp-body {
-    font-family: var(--cp-body-font, inherit);
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    opacity: 0.85;
-    margin: 0;
-  }
-  .hcc-cp-body:empty { display: none; }
-  .hcc-cp-cta {
-    font-family: var(--cp-cta-font, inherit);
-    text-transform: uppercase;
-    font-size: 10px;
-    letter-spacing: 0.16em;
-    border-bottom: 1px solid currentColor;
-    padding-bottom: 2px;
-    align-self: flex-start;
-    margin-top: 0.25rem;
-    opacity: 0.9;
-  }
+  .hcc-cp-eyebrow { font-family: var(--cp-eyebrow-font, inherit); }
+  .hcc-cp-title   { font-family: var(--cp-title-font,   inherit); font-weight: 500; }
+  .hcc-cp-body    { font-family: var(--cp-body-font,    inherit); }
+  .hcc-cp-cta     { font-family: var(--cp-cta-font,     inherit); }
+  /* Hide each role's element when its text is empty so the public
+     site's "skip empty" behavior is mirrored 1:1. */
+  .hcc-cp-eyebrow:empty,
+  .hcc-cp-title:empty,
+  .hcc-cp-body:empty,
   .hcc-cp-cta:empty { display: none; }
   .hcc-cp-hint {
     margin: 0;
@@ -1535,9 +1534,10 @@ const DEFAULT_HERO_CARD = {
     const switchTab = (name) => {
       $$("[data-tab]").forEach(b => b.classList.toggle("cas-tab-active", b.getAttribute("data-tab") === name));
       $$("[data-tab-panel]").forEach(p => p.hidden = p.getAttribute("data-tab-panel") !== name);
-      // Keep URL hash in sync for shareability
+      // Mobile-only fullscreen preview launchers belong to the Hero
+      // tab — Editorial/Contacto/SEO have no card preview to launch.
+      $$("[data-fullscreen-launchers]").forEach(el => { el.hidden = name !== "hero"; });
       try { history.replaceState(null, "", `#${name}`); } catch {}
-      // Re-render preview if the hero tab becomes active (sizing relies on offsetWidth)
       if (name === "hero") setTimeout(renderHeroPreview, 0);
     };
 
@@ -1633,14 +1633,19 @@ const DEFAULT_HERO_CARD = {
     // value is passed in so the dropdown's change listener can call
     // it without needing to round-trip through readHeroForm.
     const updateManualVisibility = (source) => {
-      const manual = document.querySelector("[data-manual-fields]");
-      if (!manual) return;
       let value = source;
       if (value == null) {
         const ddWrap = document.querySelector('[data-bind-dd="content_source"]');
         value = ddWrap?.querySelector("[data-dd-input]")?.value || "editorial";
       }
-      manual.hidden = value !== "manual";
+      // Manual-only inputs (eyebrow / title / body) — only shown for "manual".
+      const manual = document.querySelector("[data-manual-fields]");
+      if (manual) manual.hidden = value !== "manual";
+      // CTA inputs (text + URL) — shown for "manual" AND "editorial".
+      // latest_post / latest_book auto-link to the article/book detail
+      // page so they don't expose a CTA editor.
+      const cta = document.querySelector("[data-cta-fields]");
+      if (cta) cta.hidden = value !== "manual" && value !== "editorial";
     };
 
     // ----- Mini "Contenido de la card" preview -----
@@ -1653,18 +1658,24 @@ const DEFAULT_HERO_CARD = {
       const src = cfg.content_source || "editorial";
       const editorialField = document.querySelector('[name="editorial_description"]');
       const editorialText = (editorialField?.value || "").trim();
+      const m = cfg.manual ?? {};
+      // CTA falls back to editorial defaults when the user hasn't
+      // overridden manual.cta_label / manual.cta_href — so editors
+      // can keep "Explorar el catálogo" / "/catalogo" with no extra
+      // typing, but customize freely when they want to.
+      const customCtaLabel = (m.cta_label ?? "").trim();
+      const customCtaHref = (m.cta_href ?? "").trim();
       let eyebrow = "Editorial";
       let title = "Casa de Asterión Ediciones";
       let body = editorialText;
-      let cta = "Explorar el catálogo";
+      let cta = customCtaLabel || "Explorar el catálogo";
       let warning = "";
       let editorialLink = false;
       if (src === "manual") {
-        const m = cfg.manual ?? {};
         eyebrow = (m.eyebrow ?? "").trim();
         title = (m.title ?? "").trim();
         body = (m.body ?? "").trim();
-        cta = (m.cta_label ?? "").trim();
+        cta = customCtaLabel;
       } else if (src === "latest_post") {
         if (LATEST_POST) {
           eyebrow = "Editorial";
@@ -1693,6 +1704,11 @@ const DEFAULT_HERO_CARD = {
     const renderContentPreview = (cfg) => {
       const root = $("[data-content-preview]");
       if (!root) return;
+      const frame = root.querySelector("[data-cp-frame]");
+      const stage = root.querySelector("[data-cp-stage]");
+      const card = root.querySelector("[data-cp-card]");
+      if (!frame || !stage || !card) return;
+
       const { eyebrow, title, body, cta, warning, editorialLink } = resolveContentPreview(cfg);
       const setText = (sel, txt) => {
         const el = root.querySelector(sel);
@@ -1702,20 +1718,41 @@ const DEFAULT_HERO_CARD = {
       setText("[data-cp-title]",   title);
       setText("[data-cp-body]",    body);
       setText("[data-cp-cta]",     cta);
-      // Mirror the desktop card's visual style on the mini preview.
-      const card = root.querySelector("[data-content-preview-card]");
-      if (card) {
-        const d = cfg.desktop ?? {};
-        const bg = hexToRgba(d.bg_color || "#1a1715", d.bg_alpha ?? 1);
-        card.style.setProperty("--cp-bg", bg);
-        card.style.setProperty("--cp-fg", d.text_color || "#f5f1ea");
-        card.style.setProperty("--cp-radius",
-          `${d.border_radius_tl || 0}px ${d.border_radius_tr || 0}px ${d.border_radius_br || 0}px ${d.border_radius_bl || 0}px`);
-        card.style.setProperty("--cp-title-font",   HERO_CARD_FONTS_MAP[d.title_font]   || HERO_CARD_FONTS_MAP.serif);
-        card.style.setProperty("--cp-eyebrow-font", HERO_CARD_FONTS_MAP[d.eyebrow_font] || HERO_CARD_FONTS_MAP.sans);
-        card.style.setProperty("--cp-body-font",    HERO_CARD_FONTS_MAP[d.body_font]    || HERO_CARD_FONTS_MAP.sans);
-        card.style.setProperty("--cp-cta-font",     HERO_CARD_FONTS_MAP[d.cta_font]     || HERO_CARD_FONTS_MAP.sans);
-      }
+
+      // Render the card at its REAL desktop dimensions so line-clamp,
+      // padding and spacing behave identically to the public site.
+      // Then transform: scale() the stage to fit the form column.
+      const d = cfg.desktop ?? {};
+      const cardW = d.width > 0 ? d.width : 760;
+      const cardH = d.height > 0 ? d.height : 520;
+      const padding = d.padding ?? 56;
+      const bg = hexToRgba(d.bg_color || "#1a1715", d.bg_alpha ?? 1);
+      const bgRule = d.bg_image_url
+        ? `linear-gradient(${bg}, ${bg}), url('${d.bg_image_url}') center/cover no-repeat`
+        : bg;
+      card.style.width = `${cardW}px`;
+      card.style.minHeight = `${cardH}px`;
+      card.style.padding = `${padding}px`;
+      card.style.background = bgRule;
+      card.style.color = d.text_color || "#f5f1ea";
+      card.style.borderRadius = `${d.border_radius_tl || 0}px ${d.border_radius_tr || 0}px ${d.border_radius_br || 0}px ${d.border_radius_bl || 0}px`;
+      card.style.boxShadow = d.shadow ? "0 25px 50px -12px rgba(0,0,0,0.25)" : "0 6px 14px -8px rgba(0,0,0,0.18)";
+      card.style.setProperty("--cp-title-font",   HERO_CARD_FONTS_MAP[d.title_font]   || HERO_CARD_FONTS_MAP.serif);
+      card.style.setProperty("--cp-eyebrow-font", HERO_CARD_FONTS_MAP[d.eyebrow_font] || HERO_CARD_FONTS_MAP.sans);
+      card.style.setProperty("--cp-body-font",    HERO_CARD_FONTS_MAP[d.body_font]    || HERO_CARD_FONTS_MAP.sans);
+      card.style.setProperty("--cp-cta-font",     HERO_CARD_FONTS_MAP[d.cta_font]     || HERO_CARD_FONTS_MAP.sans);
+
+      // Fit the card horizontally; never up-scale (max scale = 1).
+      const frameW = frame.clientWidth - 16;
+      const scale = frameW > 0 ? Math.min(frameW / cardW, 1) : 0.5;
+      stage.style.transform = `scale(${scale})`;
+      stage.style.width = `${cardW}px`;
+      stage.style.height = `${cardH}px`;
+      stage.style.left = `${Math.max(8, (frame.clientWidth - cardW * scale) / 2)}px`;
+      stage.style.top = "8px";
+      // Frame height tracks the scaled card height + padding.
+      frame.style.height = `${Math.max(160, cardH * scale + 16)}px`;
+
       const warn = root.querySelector("[data-cp-warning]");
       if (warn) {
         if (warning) { warn.textContent = warning; warn.hidden = false; }
