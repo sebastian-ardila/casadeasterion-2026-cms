@@ -19,8 +19,11 @@ interface Props {
   resource?: PanelResource;
   activeId?: string | null;
   breadcrumbLabel?: string;
+  /** Drop the 1100px max-width on <main> for pages that benefit from
+   *  the full available width (e.g. /site with its inline preview). */
+  wide?: boolean;
 }
-const { title = "CMS", resource, activeId, breadcrumbLabel } = Astro.props;
+const { title = "CMS", resource, activeId, breadcrumbLabel, wide = false } = Astro.props;
 
 // "admins" is owner-only, so it's not in the permissions map. Treat it
 // like an always-allowed section for the panel-visibility check; the
@@ -57,7 +60,8 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
       )}
       <main
         class:list={[
-          "flex-1 min-w-0 max-w-[1100px] md:h-screen md:overflow-y-auto",
+          "flex-1 min-w-0 md:h-screen md:overflow-y-auto",
+          wide ? "max-w-none" : "max-w-[1100px]",
           showListPanel && !isDetailRoute && "hidden md:block",
         ]}
       >

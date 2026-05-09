@@ -113,6 +113,7 @@ if (Astro.request.method === "POST") {
       { key: "og_image_default",      value: str(fd, "og_image_default") ?? "" },
       { key: "organization_logo_url", value: str(fd, "organization_logo_url") ?? "" },
       { key: "hero_image_url",        value: str(fd, "hero_image_url") ?? "" },
+      { key: "hero_bg_color",         value: str(fd, "hero_bg_color") ?? "" },
     ];
 
     // Hero card config travels as a single JSON blob in a hidden input.
@@ -192,7 +193,7 @@ const DEFAULT_HERO_CARD = {
 
 ---
 
-<AppLayout title="Landing Page">
+<AppLayout title="Landing Page" wide>
   <div class="mb-6">
     <h1 class="font-serif text-3xl md:text-4xl mb-2">Landing Page</h1>
     <p class="text-stone-500 max-w-2xl">
@@ -266,6 +267,35 @@ const DEFAULT_HERO_CARD = {
           <section class="card space-y-5">
             <CardHeader icon="lucide:image" title="Imagen del hero" desc="Foto que ocupa la mitad derecha en desktop y aparece debajo de la card en mobile." />
             <div class="space-y-4">
+              {/* Page bg color — what shows behind the card and around
+                  the image. Different from the card's own bg color
+                  (per-platform, set in "Estilo de la card") and the
+                  card's optional bg image (also per-platform). */}
+              <div class="block min-w-0">
+                <span class="label flex items-center justify-between gap-2">
+                  <span class="flex items-center gap-1.5">
+                    <Icon name="lucide:paint-bucket" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                    Color de fondo del hero
+                  </span>
+                  <button type="button" class="text-[11px] uppercase tracking-wider text-stone-500 hover:text-stone-900 underline underline-offset-2" data-reset-hero-bg>
+                    Restablecer
+                  </button>
+                </span>
+                <p class="hcc-hint mb-2">Color visible detrás de la card y alrededor de la imagen. Si lo dejas vacío usa el color por defecto del sitio.</p>
+                <div class="hcc-color-block hcc-color-block--solo" data-hero-bg-block>
+                  <label class="hcc-swatch-wrap" aria-label="Color de fondo del hero">
+                    <input type="color" data-hero-bg-input class="hcc-swatch-input" />
+                    <span class="hcc-swatch" data-hero-bg-swatch></span>
+                  </label>
+                  <div class="hcc-color-info">
+                    <span class="hcc-color-hex" data-hero-bg-hex>Por defecto</span>
+                  </div>
+                </div>
+                {/* Real submitted value lives in this hidden input; the
+                    color picker above only drives the UI so we can
+                    represent the "use site default" empty state. */}
+                <input type="hidden" name="hero_bg_color" value="" data-hero-bg-hidden />
+              </div>
               <ImageUpload
                 name="hero_image_url"
                 label="Tu imagen"
@@ -1646,6 +1676,34 @@ const DEFAULT_HERO_CARD = {
       }
     };
 
+    // Hero page-bg color control. The <input type="color"> always
+    // carries SOME value (browsers default to #000), so we use a
+    // data-set="true|false" flag on the wrapper to know whether the
+    // user actively chose a color or wants to fall back to the
+    // public site's default. This drives both the swatch + hex
+    // mirror and the inline preview frame's background.
+    const HERO_BG_DEFAULT_PREVIEW = "#f5f1ea"; // matches public site --bg-alt
+    const getHeroBgState = () => {
+      const input = $("[data-hero-bg-input]");
+      const block = $("[data-hero-bg-block]");
+      const isSet = block?.dataset.set === "true";
+      const hex = (input?.value || "").trim() || HERO_BG_DEFAULT_PREVIEW;
+      return { input, block, isSet, hex };
+    };
+    const updateHeroBgPreview = () => {
+      const { isSet, hex } = getHeroBgState();
+      // Swatch + hex readout
+      const swatch = $("[data-hero-bg-swatch]");
+      const hexEl = $("[data-hero-bg-hex]");
+      if (swatch) swatch.style.setProperty("--swatch-color", isSet ? hex : "transparent");
+      if (hexEl) hexEl.textContent = isSet ? hex.toLowerCase() : "Por defecto";
+      // Apply to the inline + fullscreen preview frames so the editor
+      // sees the page bg the same way the public site will render it.
+      const applyTo = (el) => { if (el) el.style.background = isSet ? hex : ""; };
+      applyTo($("[data-preview-frame]"));
+      applyTo($("[data-fullscreen-frame]"));
+    };
+
     // ----- Hydration of all site_configuration -----
     const apply = (cfg) => {
       const form = $("[data-site-form]");
@@ -1686,6 +1744,19 @@ const DEFAULT_HERO_CARD = {
       setImage("organization_logo_url", cfg.organization_logo_url ?? "");
       setImage("hero_image_url", cfg.hero_image_url ?? "");
       updateHeroFallbackStatus();
+
+      // Hero page bg color. The picker can't represent "empty", so a
+      // sibling hidden input is the real form value, and a
+      // data-set="true|false" flag on the wrapper distinguishes
+      // "user picked a color" from "use site default".
+      const heroBgInput = form.querySelector("[data-hero-bg-input]");
+      const heroBgHidden = form.querySelector("[data-hero-bg-hidden]");
+      const heroBgBlock = form.querySelector("[data-hero-bg-block]");
+      const stored = (cfg.hero_bg_color ?? "").trim();
+      if (heroBgInput) heroBgInput.value = stored || HERO_BG_DEFAULT_PREVIEW;
+      if (heroBgHidden) heroBgHidden.value = stored;
+      if (heroBgBlock) heroBgBlock.dataset.set = stored ? "true" : "false";
+      updateHeroBgPreview();
 
       // Hero card config
       const persisted = cfg.hero_card_config;
@@ -1915,6 +1986,31 @@ const DEFAULT_HERO_CARD = {
           renderHeroPreview();
         });
       });
+      // Hero page-bg color: picker drives both the hidden form value
+      // and the live preview frame's background. The "Restablecer"
+      // link clears both so the public site falls back to its CSS
+      // default (--bg-alt).
+      const heroBgInput = $("[data-hero-bg-input]");
+      const heroBgHidden = $("[data-hero-bg-hidden]");
+      const heroBgBlock = $("[data-hero-bg-block]");
+      const heroBgReset = $("[data-reset-hero-bg]");
+      if (heroBgInput && heroBgHidden && heroBgBlock) {
+        heroBgInput.addEventListener("input", () => {
+          heroBgHidden.value = heroBgInput.value;
+          heroBgBlock.dataset.set = "true";
+          updateHeroBgPreview();
+        });
+      }
+      if (heroBgReset && heroBgHidden && heroBgBlock && heroBgInput) {
+        heroBgReset.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          heroBgHidden.value = "";
+          heroBgBlock.dataset.set = "false";
+          heroBgInput.value = HERO_BG_DEFAULT_PREVIEW;
+          updateHeroBgPreview();
+        });
+      }
+
       // CTA href picker: when the user picks a suggestion from the
       // detected URLs, copy the chosen value into the editable text
       // input so it becomes the manual.cta_href that gets persisted.
