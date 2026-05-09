@@ -125,45 +125,68 @@ const DEFAULT_HERO_CARD = {
 };
 
 function renderPlatformControls(p: "desktop" | "mobile"): string {
+  // Compact lucide-style icons inlined as SVG strings so we can stitch
+  // them into the renderPlatformControls HTML output.
+  const I = {
+    moveX: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8l4 4-4 4M6 8l-4 4 4 4M2 12h20"/></svg>`,
+    moveY: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 18l4 4 4-4M8 6l4-4 4 4M12 2v20"/></svg>`,
+    pad: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>`,
+    arrR: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`,
+    arrD: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>`,
+    drop: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>`,
+    type: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
+  };
   return `
-    <!-- Background color + alpha -->
+    <!-- Background color: visual swatch + hex + opacity slider -->
     <div class="hcc-stack">
       <label class="label">Fondo</label>
-      <div class="hcc-row">
-        <input type="color" data-bind="${p}.bg_color" aria-label="Color de fondo" />
-        <input type="text" data-bind-mirror="${p}.bg_color" class="hcc-input hcc-mirror-text" disabled />
-        <span class="hcc-row-label">Opacidad</span>
-        <input type="range" data-bind="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-range" />
-        <input type="number" data-bind-mirror="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-input hcc-mirror-num" disabled />
+      <div class="hcc-color-block" data-color-block="${p}.bg">
+        <label class="hcc-swatch-wrap" aria-label="Color de fondo">
+          <input type="color" data-bind="${p}.bg_color" class="hcc-swatch-input" />
+          <span class="hcc-swatch" data-color-swatch></span>
+        </label>
+        <div class="hcc-color-info">
+          <span class="hcc-color-hex" data-bind-mirror="${p}.bg_color">#1a1715</span>
+          <input type="range" data-bind="${p}.bg_alpha" min="0" max="1" step="0.05" class="hcc-range" aria-label="Opacidad" />
+          <span class="hcc-color-pct" data-alpha-pct="${p}.bg_alpha">100%</span>
+        </div>
       </div>
       <p class="hcc-hint">Si subes una imagen de fondo, el color actúa como overlay encima.</p>
     </div>
 
-    <!-- Blur -->
+    <!-- Blur with droplet icon -->
     <div class="hcc-stack">
       <label class="label">Blur del fondo</label>
       <div class="hcc-row">
+        <span class="hcc-icon-prefix">${I.drop}</span>
         <input type="range" data-bind="${p}.bg_blur" min="0" max="40" step="1" class="hcc-range" />
-        <input type="number" data-bind-mirror="${p}.bg_blur" min="0" max="40" step="1" class="hcc-input hcc-mirror-num" disabled />
-        <span class="text-xs text-stone-400">px</span>
+        <span class="hcc-color-pct" data-blur-px="${p}.bg_blur">0px</span>
       </div>
     </div>
 
-    <!-- Text color + font -->
+    <!-- Text color: visual swatch + hex -->
     <div class="grid sm:grid-cols-2 gap-3">
       <div>
         <label class="label">Color del texto</label>
-        <div class="hcc-row">
-          <input type="color" data-bind="${p}.text_color" aria-label="Color del texto" />
-          <input type="text" data-bind-mirror="${p}.text_color" class="hcc-input hcc-mirror-text" disabled />
+        <div class="hcc-color-block hcc-color-block--solo" data-color-block="${p}.text">
+          <label class="hcc-swatch-wrap" aria-label="Color del texto">
+            <input type="color" data-bind="${p}.text_color" class="hcc-swatch-input" />
+            <span class="hcc-swatch" data-color-swatch></span>
+          </label>
+          <div class="hcc-color-info">
+            <span class="hcc-color-hex" data-bind-mirror="${p}.text_color">#f5f1ea</span>
+          </div>
         </div>
       </div>
       <div>
         <label class="label">Fuente del título</label>
-        <select data-bind="${p}.title_font" class="hcc-input w-full">
-          <option value="serif">Serif (Cormorant)</option>
-          <option value="sans">Sans (Inter)</option>
-        </select>
+        <div class="hcc-row">
+          <span class="hcc-icon-prefix">${I.type}</span>
+          <select data-bind="${p}.title_font" class="hcc-input w-full">
+            <option value="serif">Serif (Cormorant)</option>
+            <option value="sans">Sans (Inter)</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -196,39 +219,62 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
       </div>
     </div>
 
-    <!-- Size: width + height + padding -->
+    <!-- Size: width + height + padding with directional icons -->
     <div>
       <label class="label">Tamaño</label>
-      <div class="hcc-triplet">
-        <label class="hcc-triplet-cell">
-          <span>Ancho</span>
-          <input type="number" data-bind="${p}.width" min="0" max="1400" class="hcc-input w-full" />
+      <div class="hcc-size-grid">
+        <label class="hcc-num-cell">
+          <span class="hcc-num-cell-label"><span class="hcc-num-icon">${I.moveX}</span>Ancho</span>
+          <div class="hcc-num-input-wrap">
+            <input type="number" data-bind="${p}.width" min="0" max="1400" class="hcc-input hcc-num-input" />
+            <span class="hcc-num-suffix">px</span>
+          </div>
         </label>
-        <label class="hcc-triplet-cell">
-          <span>Alto mín.</span>
-          <input type="number" data-bind="${p}.height" min="0" max="1000" class="hcc-input w-full" />
+        <label class="hcc-num-cell">
+          <span class="hcc-num-cell-label"><span class="hcc-num-icon">${I.moveY}</span>Alto mín.</span>
+          <div class="hcc-num-input-wrap">
+            <input type="number" data-bind="${p}.height" min="0" max="1000" class="hcc-input hcc-num-input" />
+            <span class="hcc-num-suffix">px</span>
+          </div>
         </label>
-        <label class="hcc-triplet-cell">
-          <span>Padding</span>
-          <input type="number" data-bind="${p}.padding" min="0" max="120" class="hcc-input w-full" />
+        <label class="hcc-num-cell">
+          <span class="hcc-num-cell-label"><span class="hcc-num-icon">${I.pad}</span>Padding</span>
+          <div class="hcc-num-input-wrap">
+            <input type="number" data-bind="${p}.padding" min="0" max="120" class="hcc-input hcc-num-input" />
+            <span class="hcc-num-suffix">px</span>
+          </div>
         </label>
       </div>
       <p class="hcc-hint mt-1">Ancho = 0 → se adapta al contenedor (recomendado para mobile).</p>
     </div>
 
-    <!-- Position: offset_x, offset_y -->
+    <!-- Position: 2D drag pad + linked numeric inputs -->
     <div>
       <label class="label">Posición</label>
-      <div class="hcc-pair">
-        <label class="hcc-triplet-cell">
-          <span>Offset X</span>
-          <input type="number" data-bind="${p}.offset_x" min="-400" max="1000" class="hcc-input w-full" />
-        </label>
-        <label class="hcc-triplet-cell">
-          <span>Offset Y</span>
-          <input type="number" data-bind="${p}.offset_y" min="-300" max="300" class="hcc-input w-full" />
-        </label>
+      <div class="hcc-position-grid">
+        <div class="hcc-position-pad" data-position-pad="${p}" role="application" aria-label="Arrastra para posicionar la card">
+          <span class="hcc-position-axis hcc-position-axis-h" aria-hidden="true"></span>
+          <span class="hcc-position-axis hcc-position-axis-v" aria-hidden="true"></span>
+          <span class="hcc-position-dot" data-position-dot></span>
+        </div>
+        <div class="hcc-position-inputs">
+          <label class="hcc-num-cell">
+            <span class="hcc-num-cell-label"><span class="hcc-num-icon">${I.arrR}</span>Offset X</span>
+            <div class="hcc-num-input-wrap">
+              <input type="number" data-bind="${p}.offset_x" min="-400" max="1000" class="hcc-input hcc-num-input" />
+              <span class="hcc-num-suffix">px</span>
+            </div>
+          </label>
+          <label class="hcc-num-cell">
+            <span class="hcc-num-cell-label"><span class="hcc-num-icon">${I.arrD}</span>Offset Y</span>
+            <div class="hcc-num-input-wrap">
+              <input type="number" data-bind="${p}.offset_y" min="-300" max="300" class="hcc-input hcc-num-input" />
+              <span class="hcc-num-suffix">px</span>
+            </div>
+          </label>
+        </div>
       </div>
+      <p class="hcc-hint mt-1">El pad mapea X = 0–400 px, Y = -100–100 px. Para valores fuera de ese rango, edita los números directamente.</p>
     </div>
 
     <!-- Shadow -->
@@ -641,6 +687,189 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
   .hcc-mirror-num { width: 56px; flex: 0 0 auto; text-align: right; }
   .hcc-range { flex: 1 1 80px; min-width: 0; accent-color: rgb(28 25 23); }
 
+  /* === Color block (swatch + hex + alpha slider + percent) === */
+  .hcc-color-block {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 0.625rem;
+    align-items: stretch;
+    padding: 0.5rem;
+    border: 1px solid rgb(229 229 228);
+    background: rgb(250 250 249);
+    border-radius: 4px;
+  }
+  .hcc-swatch-wrap {
+    position: relative;
+    display: block;
+    width: 44px;
+    height: 36px;
+    border: 1px solid rgb(214 211 209);
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    background-image:
+      linear-gradient(45deg, #e5e5e4 25%, transparent 25%),
+      linear-gradient(-45deg, #e5e5e4 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e5e5e4 75%),
+      linear-gradient(-45deg, transparent 75%, #e5e5e4 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  }
+  .hcc-swatch-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: 0;
+    padding: 0;
+  }
+  .hcc-swatch {
+    position: absolute;
+    inset: 0;
+    display: block;
+    background: var(--swatch-color, #1a1715);
+    pointer-events: none;
+  }
+  .hcc-color-info {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    min-width: 0;
+  }
+  .hcc-color-block--solo .hcc-color-info { grid-template-columns: 1fr; }
+  .hcc-color-hex {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: rgb(68 64 60);
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+  .hcc-color-pct {
+    font-size: 0.75rem;
+    color: rgb(120 113 108);
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* === Icon prefix === */
+  .hcc-icon-prefix {
+    display: inline-flex;
+    color: rgb(120 113 108);
+    flex: 0 0 auto;
+  }
+
+  /* === Numeric cell with icon + label + suffix === */
+  .hcc-num-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+  .hcc-num-cell-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(120 113 108);
+  }
+  .hcc-num-icon {
+    display: inline-flex;
+    color: rgb(120 113 108);
+  }
+  .hcc-num-input-wrap {
+    position: relative;
+    display: block;
+  }
+  .hcc-num-input {
+    width: 100%;
+    padding-right: 26px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .hcc-num-suffix {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    color: rgb(168 162 158);
+    pointer-events: none;
+  }
+
+  /* === Size grid: 3 cells === */
+  .hcc-size-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+  @media (max-width: 380px) {
+    .hcc-size-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hcc-size-grid > :nth-child(3) { grid-column: 1 / -1; }
+  }
+
+  /* === Position block: 2D pad + 2 inputs === */
+  .hcc-position-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 160px) 1fr;
+    gap: 0.75rem;
+    align-items: start;
+  }
+  @media (max-width: 480px) {
+    .hcc-position-grid { grid-template-columns: 1fr; }
+  }
+  .hcc-position-pad {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: rgb(250 250 249);
+    border: 1px solid rgb(214 211 209);
+    border-radius: 4px;
+    cursor: crosshair;
+    touch-action: none;
+    overflow: hidden;
+  }
+  .hcc-position-axis {
+    position: absolute;
+    background: rgb(229 229 228);
+    pointer-events: none;
+  }
+  .hcc-position-axis-h {
+    left: 0; right: 0;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+  .hcc-position-axis-v {
+    top: 0; bottom: 0;
+    left: 0;
+    width: 1px;
+  }
+  .hcc-position-dot {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: rgb(28 25 23);
+    border: 2px solid white;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    transition: left 0.05s linear, top 0.05s linear;
+  }
+  .hcc-position-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
   /* === Color input === */
   [data-platform-section] input[type="color"] {
     width: 44px; height: 32px; padding: 0;
@@ -1035,7 +1264,40 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         const path = el.getAttribute("data-bind");
         const v = getByPath(cfg, path);
         const mirror = el.parentElement?.querySelector(`[data-bind-mirror="${path}"]`);
-        if (mirror && mirror !== el) mirror.value = String(v);
+        if (mirror && mirror !== el) {
+          if (mirror.tagName === "INPUT") mirror.value = String(v);
+          else mirror.textContent = String(v);
+        }
+      });
+
+      // Color swatches: paint the visual swatch with the current hex.
+      $$('input[type="color"][data-bind]').forEach(inp => {
+        const swatch = inp.parentElement?.querySelector('[data-color-swatch]');
+        if (swatch) swatch.style.setProperty("--swatch-color", inp.value);
+      });
+      // Alpha percentage readouts
+      $$("[data-alpha-pct]").forEach(el => {
+        const path = el.getAttribute("data-alpha-pct");
+        const v = getByPath(cfg, path);
+        el.textContent = `${Math.round((Number(v) || 0) * 100)}%`;
+      });
+      // Blur px readouts
+      $$("[data-blur-px]").forEach(el => {
+        const path = el.getAttribute("data-blur-px");
+        const v = getByPath(cfg, path);
+        el.textContent = `${Math.round(Number(v) || 0)}px`;
+      });
+      // Position pad dot positions (mapped to 0–400 X, -100–100 Y)
+      $$("[data-position-pad]").forEach(pad => {
+        const platform = pad.getAttribute("data-position-pad");
+        const dot = pad.querySelector("[data-position-dot]");
+        if (!dot) return;
+        const x = getByPath(cfg, `${platform}.offset_x`) ?? 0;
+        const y = getByPath(cfg, `${platform}.offset_y`) ?? 0;
+        const xPct = Math.max(0, Math.min(1, (Number(x) - 0) / (400 - 0)));
+        const yPct = Math.max(0, Math.min(1, (Number(y) + 100) / 200));
+        dot.style.left = `${xPct * 100}%`;
+        dot.style.top = `${yPct * 100}%`;
       });
 
       const heroImgInput = document.querySelector('input[type="hidden"][name="hero_image_url"]');
@@ -1224,6 +1486,45 @@ function renderPlatformControls(p: "desktop" | "mobile"): string {
         if (e.key !== "Escape") return;
         const modal = $("[data-fullscreen-modal]");
         if (modal && !modal.hasAttribute("hidden")) closeFullscreen();
+      });
+
+      // 2D drag pad for position: pointerdown anywhere in the pad sets
+      // the dot at that point and updates offset_x/offset_y. Map:
+      // X ∈ [0, 400] = horizontal pad, Y ∈ [-100, 100] = vertical pad
+      // (top of pad = -100, bottom = +100). Outside-range values can
+      // still be entered via the number input directly.
+      $$("[data-position-pad]").forEach(pad => {
+        const platform = pad.getAttribute("data-position-pad");
+        const xInput = document.querySelector(`[data-bind="${platform}.offset_x"]`);
+        const yInput = document.querySelector(`[data-bind="${platform}.offset_y"]`);
+        if (!xInput || !yInput) return;
+        let dragging = false;
+        const setFromEvent = (e) => {
+          const rect = pad.getBoundingClientRect();
+          const cx = (e.touches?.[0]?.clientX ?? e.clientX) - rect.left;
+          const cy = (e.touches?.[0]?.clientY ?? e.clientY) - rect.top;
+          const xPct = Math.max(0, Math.min(1, cx / rect.width));
+          const yPct = Math.max(0, Math.min(1, cy / rect.height));
+          xInput.value = String(Math.round(xPct * 400));
+          yInput.value = String(Math.round(-100 + yPct * 200));
+          // Auto-switch the preview tab to this section's platform.
+          switchPreviewTab(platform);
+          renderHeroPreview();
+        };
+        pad.addEventListener("pointerdown", (e) => {
+          dragging = true;
+          try { pad.setPointerCapture(e.pointerId); } catch {}
+          setFromEvent(e);
+        });
+        pad.addEventListener("pointermove", (e) => {
+          if (dragging) setFromEvent(e);
+        });
+        const stop = (e) => {
+          dragging = false;
+          try { pad.releasePointerCapture(e.pointerId); } catch {}
+        };
+        pad.addEventListener("pointerup", stop);
+        pad.addEventListener("pointercancel", stop);
       });
 
       // Border-radius "link corners" toggle: when on, editing one corner
