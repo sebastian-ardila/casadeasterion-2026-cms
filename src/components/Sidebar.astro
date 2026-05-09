@@ -24,7 +24,7 @@ const allItems: Array<{ href: string; label: string; icon: string; resource?: Re
   { href: "/categories",  label: "Categorías",   icon: "lucide:folder-tree",     resource: "categories", countKey: "categories" },
   {
     href: "/site",
-    label: "Landing Page",
+    label: "Webpage",
     icon: "lucide:layout-template",
     resource: "site",
     subItems: [
@@ -105,7 +105,7 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     </a>
   </div>
 
-  <nav class="flex-1 min-h-0 overflow-y-auto px-2 py-3" data-sidebar-nav>
+  <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 py-3" data-sidebar-nav>
     {items.map((item) => (
       <>
         <a
@@ -113,6 +113,7 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
           data-astro-prefetch
           class:list={[
             "nav-link cas-nav-row",
+            !!item.subItems && "cas-nav-row-has-toggle",
             isActive(item.href) && "nav-link-active",
           ]}
         >
@@ -120,6 +121,17 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
           <span class="cas-nav-label">{item.label}</span>
           {item.countKey && (
             <span class="cas-nav-count" data-count-key={item.countKey} aria-hidden="true"></span>
+          )}
+          {item.subItems && (
+            <span
+              class="cas-nav-expander"
+              role="button"
+              tabindex="0"
+              data-expand-toggle={item.href}
+              aria-label="Mostrar u ocultar subpáginas"
+            >
+              <Icon name="lucide:chevron-down" class="w-3.5 h-3.5" aria-hidden="true" />
+            </span>
           )}
         </a>
         {item.subItems && (
@@ -221,6 +233,31 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
   .nav-link-active .cas-nav-count {
     background: rgba(255,255,255,0.18);
     color: rgb(245 245 244);
+  }
+
+  /* Expand/collapse caret for rows that have a sub-nav (Page →
+     Home / Catálogo / …). Click toggles the chips below. The icon
+     rotates 180° when the sub-nav is open. The label part of the
+     row keeps navigating as a normal link. */
+  .cas-nav-expander {
+    flex: 0 0 auto;
+    margin-left: 0.25rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    color: currentColor;
+    opacity: 0.7;
+    cursor: pointer;
+    transition: background-color 0.12s, opacity 0.12s, transform 0.15s;
+  }
+  .cas-nav-expander:hover { opacity: 1; background: rgba(0,0,0,0.06); }
+  .nav-link-active .cas-nav-expander:hover { background: rgba(255,255,255,0.12); }
+  .cas-nav-expander > svg { transition: transform 0.15s; }
+  .cas-nav-row-has-toggle[data-expanded="1"] .cas-nav-expander > svg {
+    transform: rotate(180deg);
   }
 
   /* Sub-navigation chips under an expanded parent (e.g. Landing Page →
@@ -403,39 +440,105 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     // sidebar so we have to re-fetch ourselves.
     document.addEventListener("astro:page-load", refreshCounts);
 
+    // Per-parent expand/collapse state. The default is "open when the
+    // parent route is active" — but the user can override (open when
+    // inactive, or close when active) and we persist that in
+    // localStorage so it survives reloads and navigations.
+    const EXPAND_STORAGE_KEY = "cas:sidebar-expanded";
+    const readExpandState = () => {
+      try {
+        const raw = localStorage.getItem(EXPAND_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch { return {}; }
+    };
+    const writeExpandState = (s) => {
+      try { localStorage.setItem(EXPAND_STORAGE_KEY, JSON.stringify(s)); } catch {}
+    };
+    const isExpanded = (parentHref, parentActive) => {
+      const s = readExpandState();
+      // Explicit override — true / false stored.
+      if (typeof s[parentHref] === "boolean") return s[parentHref];
+      // Default: open if the parent is active.
+      return parentActive;
+    };
+
     // Re-sync the active state of nav links. Called immediately on click and
     // again when a navigation completes — so the highlighted item updates the
     // moment you tap, not after the destination page finishes loading.
-    // Also expands/collapses sub-navs (e.g. Landing Page's Home / Catálogo /
+    // Also expands/collapses sub-navs (e.g. Page's Home / Catálogo /
     // Artículos / …) and highlights the active sub-item by ?page=… key.
     const setActive = (path, search) => {
       const params = new URLSearchParams(search || "");
       const pageKey = (params.get("page") || "home").toLowerCase();
       const isActive = (href) => {
-        // Sub-item hrefs include a query — match against pathname only
-        // for the parent highlight.
         const hrefPath = href.split("?")[0];
         return hrefPath === path || (hrefPath !== "/" && path.startsWith(hrefPath));
       };
-      // Top-level nav-link rows: only the parent highlight uses pathname.
-      document.querySelectorAll("#cms-sidebar [data-sidebar-nav] > a.nav-link, #cms-sidebar [data-sidebar-nav] a.nav-link").forEach((a) => {
+      document.querySelectorAll("#cms-sidebar [data-sidebar-nav] a.nav-link").forEach((a) => {
         const href = a.getAttribute("href") || "";
         a.classList.toggle("nav-link-active", isActive(href));
       });
-      // Sub-navs: visible only when their parent is active.
+      // Sub-navs: visibility is the OR of (parent route active) and the
+      // user's explicit expand override. The parent row also gets a
+      // [data-expanded] flag so the chevron knows which way to point.
       document.querySelectorAll("#cms-sidebar [data-subnav-parent]").forEach((el) => {
         const parent = el.getAttribute("data-subnav-parent") || "";
-        const open = isActive(parent);
+        const parentActive = isActive(parent);
+        const open = isExpanded(parent, parentActive);
         if (open) el.removeAttribute("hidden");
         else el.setAttribute("hidden", "");
+        const row = document.querySelector(
+          `#cms-sidebar a.nav-link[href="${parent}"]`,
+        );
+        if (row) {
+          if (open) row.setAttribute("data-expanded", "1");
+          else row.removeAttribute("data-expanded");
+        }
       });
-      // Sub-items: highlight the one matching ?page=. "home" matches when
-      // there's no ?page param too.
       document.querySelectorAll("#cms-sidebar .cas-subnav-link").forEach((a) => {
         const key = a.getAttribute("data-page-key") || "";
         a.classList.toggle("cas-subnav-active", key === pageKey);
       });
     };
+
+    // Click on the expander caret toggles the sub-nav for that parent
+    // row, without navigating to the parent's href.
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const exp = t.closest("[data-expand-toggle]");
+      if (!exp) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const parent = exp.getAttribute("data-expand-toggle") || "";
+      const subnav = document.querySelector(
+        `#cms-sidebar [data-subnav-parent="${parent}"]`,
+      );
+      if (!subnav) return;
+      const isHidden = subnav.hasAttribute("hidden");
+      const s = readExpandState();
+      s[parent] = isHidden;          // store the new state explicitly
+      writeExpandState(s);
+      if (isHidden) subnav.removeAttribute("hidden");
+      else subnav.setAttribute("hidden", "");
+      const row = document.querySelector(
+        `#cms-sidebar a.nav-link[href="${parent}"]`,
+      );
+      if (row) {
+        if (isHidden) row.setAttribute("data-expanded", "1");
+        else row.removeAttribute("data-expanded");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const exp = t.closest("[data-expand-toggle]");
+      if (!exp) return;
+      e.preventDefault();
+      e.stopPropagation();
+      exp.click();
+    });
     const syncActive = () =>
       setActive(window.location.pathname, window.location.search);
 
