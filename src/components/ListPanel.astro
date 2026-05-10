@@ -188,6 +188,14 @@ const isNew = Astro.url.pathname.endsWith("/new");
   .lp-meta-link {
     color: inherit;
     cursor: pointer;
+    /* Truncate so a long full_name never pushes the timestamp off
+       the row. The full name is exposed via the custom tooltip. */
+    display: inline-block;
+    max-width: 14ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
     text-decoration: underline;
     text-decoration-color: rgba(168, 162, 158, 0.5);
     text-underline-offset: 2px;
@@ -198,6 +206,40 @@ const isNew = Astro.url.pathname.endsWith("/new");
     color: rgb(28 25 23);
     text-decoration-color: currentColor;
     outline: none;
+  }
+
+  /* Global custom tooltip — instant (no delay), positioned by JS so
+     it escapes any ancestor overflow:hidden. Lives in <body> as a
+     singleton <div id="cas-tooltip">. Mounted by the tooltip script
+     at the bottom of this file. */
+  #cas-tooltip {
+    position: fixed;
+    z-index: 1000;
+    background: rgb(28 25 23);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-style: normal;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity 80ms ease, transform 80ms ease;
+  }
+  #cas-tooltip[data-show="1"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  #cas-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 12px;
+    border: 4px solid transparent;
+    border-top-color: rgb(28 25 23);
   }
   .lp-meta {
     font-size: 11px;
@@ -376,12 +418,16 @@ const isNew = Astro.url.pathname.endsWith("/new");
 
     // Build the "Editado por NAME · hace X" line. When `editorId` is
     // present and the meta starts with "Editado por ", wrap the NAME
-    // segment (between the prefix and " · ") in a clickable span that
-    // navigates to /admins/<id>. NOT an <a> element — the row itself
-    // is already an <a class="lp-link">, and nested anchors are
-    // invalid HTML (the browser auto-closes the outer one, breaking
-    // the row layout). Mirrors EDITOR_PREFIX / EDITOR_SEP in
-    // ~/lib/relative-time.ts.
+    // segment (between the prefix and " · ") in a clickable span
+    // that navigates to /admins/<id>. NOT an <a> element — the row
+    // itself is already an <a class="lp-link">, and nested anchors
+    // are invalid HTML.
+    //
+    // The span is CSS-truncated (max-width + ellipsis) so a long name
+    // never pushes the timestamp out of view. data-tooltip carries
+    // the full name; a global tooltip <div> renders it on hover/focus
+    // (see the tooltip-init script below). Mirrors EDITOR_PREFIX /
+    // EDITOR_SEP in ~/lib/relative-time.ts.
     const renderMetaWithLink = (meta, editorId) => {
       const PREFIX = "Editado por ";
       const SEP = " · ";
@@ -392,7 +438,9 @@ const isNew = Astro.url.pathname.endsWith("/new");
       const tail = meta.slice(sepAt);
       return (
         escape(PREFIX) +
-        `<span class="lp-meta-link" role="link" tabindex="0" data-editor-href="/admins/${escape(editorId)}">` +
+        `<span class="lp-meta-link" role="link" tabindex="0"` +
+        ` data-editor-href="/admins/${escape(editorId)}"` +
+        ` data-tooltip="${escape(name)}">` +
           escape(name) +
         `</span>` +
         escape(tail)
@@ -801,6 +849,64 @@ const isNew = Astro.url.pathname.endsWith("/new");
       const href = link.getAttribute("data-editor-href");
       if (href) window.location.href = href;
     });
+
+    // Custom tooltip for [data-tooltip] elements (e.g. the truncated
+    // editor name in lp-meta-link). Singleton <div> in <body>;
+    // positioned with position:fixed so it escapes the meta row's
+    // overflow:hidden. No delay — appears immediately on hover/focus.
+    if (!window.__casTooltipInit) {
+      window.__casTooltipInit = true;
+      const tip = document.createElement("div");
+      tip.id = "cas-tooltip";
+      tip.setAttribute("role", "tooltip");
+      document.body.appendChild(tip);
+
+      let activeEl = null;
+      const show = (el) => {
+        const text = el.getAttribute("data-tooltip");
+        if (!text) return;
+        tip.textContent = text;
+        const r = el.getBoundingClientRect();
+        // Provisionally place to measure tooltip dimensions.
+        tip.style.left = "0px";
+        tip.style.top = "0px";
+        tip.setAttribute("data-show", "1");
+        const tr = tip.getBoundingClientRect();
+        const left = Math.max(8, Math.min(window.innerWidth - tr.width - 8, r.left));
+        const top = Math.max(8, r.top - tr.height - 6);
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+        activeEl = el;
+      };
+      const hide = () => {
+        tip.removeAttribute("data-show");
+        activeEl = null;
+      };
+
+      document.addEventListener("mouseover", (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+        const target = t.closest("[data-tooltip]");
+        if (target && target !== activeEl) show(target);
+      });
+      document.addEventListener("mouseout", (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+        const target = t.closest("[data-tooltip]");
+        if (target && target === activeEl) hide();
+      });
+      document.addEventListener("focusin", (e) => {
+        const t = e.target instanceof Element ? e.target : null;
+        if (!t) return;
+        const target = t.closest("[data-tooltip]");
+        if (target) show(target);
+      });
+      document.addEventListener("focusout", hide);
+      // Hide on scroll/resize so the tooltip never floats far from
+      // its anchor.
+      window.addEventListener("scroll", hide, { passive: true, capture: true });
+      window.addEventListener("resize", hide);
+    }
 
     // Initial run.
     if (document.readyState === "loading") {
