@@ -185,17 +185,22 @@ const isNew = Astro.url.pathname.endsWith("/new");
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .lp-meta-link {
+  .lp-meta-link,
+  .lp-meta-name {
     color: inherit;
-    cursor: pointer;
-    /* Truncate so a long full_name never pushes the timestamp off
-       the row. The full name is exposed via the custom tooltip. */
+    /* Last-resort truncation. The two-line layout means a normal
+       name fits on its own line; this only kicks in for names
+       wider than the row. The custom tooltip exposes the full
+       name on hover/focus. */
     display: inline-block;
-    max-width: 14ch;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: bottom;
+  }
+  .lp-meta-link {
+    cursor: pointer;
     text-decoration: underline;
     text-decoration-color: rgba(168, 162, 158, 0.5);
     text-underline-offset: 2px;
@@ -206,6 +211,16 @@ const isNew = Astro.url.pathname.endsWith("/new");
     color: rgb(28 25 23);
     text-decoration-color: currentColor;
     outline: none;
+  }
+  /* Two-line meta block: "Editado por X" / "hace 15 min". The
+     "hace X" line drops the italic and uses a slightly smaller
+     size so it reads as secondary info under the editor name. */
+  .lp-meta-by { margin-bottom: 0; }
+  .lp-meta-when {
+    margin-top: 0;
+    font-style: italic;
+    font-size: 10.5px;
+    color: #b5b1ad;
   }
 
   /* Global custom tooltip — instant (no delay), positioned by JS so
@@ -416,34 +431,38 @@ const isNew = Astro.url.pathname.endsWith("/new");
     const normalize = (s) =>
       String(s ?? "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
-    // Build the "Editado por NAME · hace X" line. When `editorId` is
-    // present and the meta starts with "Editado por ", wrap the NAME
-    // segment (between the prefix and " · ") in a clickable span
-    // that navigates to /admins/<id>. NOT an <a> element — the row
-    // itself is already an <a class="lp-link">, and nested anchors
-    // are invalid HTML.
-    //
-    // The span is CSS-truncated (max-width + ellipsis) so a long name
-    // never pushes the timestamp out of view. data-tooltip carries
-    // the full name; a global tooltip <div> renders it on hover/focus
-    // (see the tooltip-init script below). Mirrors EDITOR_PREFIX /
-    // EDITOR_SEP in ~/lib/relative-time.ts.
-    const renderMetaWithLink = (meta, editorId) => {
+    // Build the "Editado por NAME" / "hace X" two-line meta block.
+    // The two lines guarantee the timestamp is always visible even
+    // when the editor's full name is long. NAME is wrapped in a
+    // clickable span that navigates to /admins/<id> — NOT an <a>,
+    // since the row itself is already an <a class="lp-link"> and
+    // nested anchors are invalid HTML. data-tooltip on the span
+    // exposes the full name on hover (see tooltip-init below);
+    // CSS truncation kicks in only as a last resort for absurdly
+    // long names. Mirrors EDITOR_PREFIX / EDITOR_SEP in
+    // ~/lib/relative-time.ts.
+    const renderMetaBlock = (meta, editorId) => {
+      if (!meta) return "";
       const PREFIX = "Editado por ";
       const SEP = " · ";
-      if (!editorId || !meta || !meta.startsWith(PREFIX)) return escape(meta || "");
+      if (!meta.startsWith(PREFIX)) {
+        // Just a timestamp ("hace X") — single line.
+        return `<p class="lp-meta">${escape(meta)}</p>`;
+      }
       const sepAt = meta.indexOf(SEP, PREFIX.length);
-      if (sepAt < 0) return escape(meta);
+      if (sepAt < 0) return `<p class="lp-meta">${escape(meta)}</p>`;
       const name = meta.slice(PREFIX.length, sepAt);
-      const tail = meta.slice(sepAt);
+      const ago = meta.slice(sepAt + SEP.length);
+      const nameMarkup = editorId
+        ? `<span class="lp-meta-link" role="link" tabindex="0"` +
+          ` data-editor-href="/admins/${escape(editorId)}"` +
+          ` data-tooltip="${escape(name)}">` +
+            escape(name) +
+          `</span>`
+        : `<span class="lp-meta-name" data-tooltip="${escape(name)}">${escape(name)}</span>`;
       return (
-        escape(PREFIX) +
-        `<span class="lp-meta-link" role="link" tabindex="0"` +
-        ` data-editor-href="/admins/${escape(editorId)}"` +
-        ` data-tooltip="${escape(name)}">` +
-          escape(name) +
-        `</span>` +
-        escape(tail)
+        `<p class="lp-meta lp-meta-by">${escape(PREFIX)}${nameMarkup}</p>` +
+        `<p class="lp-meta lp-meta-when">${escape(ago)}</p>`
       );
     };
 
@@ -734,7 +753,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
                       ${status}
                     </div>
                     ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
-                    ${it.meta ? `<p class="lp-meta">${renderMetaWithLink(it.meta, it.editorId)}</p>` : ""}
+                    ${renderMetaBlock(it.meta, it.editorId)}
                   </div>
                 </span>
                 ${arrows}

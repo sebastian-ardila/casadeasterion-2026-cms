@@ -735,21 +735,26 @@ const DEFAULT_HERO_CARD = {
               <button type="submit" class="btn-primary" disabled data-submit-btn>Guardar configuración</button>
             )}
             {LAST_SITE_EDIT && formatAgo(LAST_SITE_EDIT.updated_at) && (
-              <p class="text-xs text-stone-500 italic">
+              <div class="text-xs text-stone-500 italic leading-tight">
                 {LAST_SITE_EDIT.editor ? (
                   <>
-                    Editado por{" "}
-                    <a
-                      href={`/admins/${LAST_SITE_EDIT.editor.id}`}
-                      class="underline decoration-stone-400 hover:text-stone-900 hover:decoration-current"
-                      data-astro-prefetch
-                    >{fullName(LAST_SITE_EDIT.editor)}</a>
-                    {" · "}{formatAgo(LAST_SITE_EDIT.updated_at)}
+                    <p class="m-0">
+                      Editado por{" "}
+                      <a
+                        href={`/admins/${LAST_SITE_EDIT.editor.id}`}
+                        class="underline decoration-stone-400 hover:text-stone-900 hover:decoration-current"
+                        data-astro-prefetch
+                        data-tooltip={fullName(LAST_SITE_EDIT.editor)}
+                      >{fullName(LAST_SITE_EDIT.editor)}</a>
+                    </p>
+                    <p class="m-0 text-[10.5px] text-stone-400">
+                      {formatAgo(LAST_SITE_EDIT.updated_at)}
+                    </p>
                   </>
                 ) : (
-                  <>Última edición {formatAgo(LAST_SITE_EDIT.updated_at)}</>
+                  <p class="m-0">Última edición {formatAgo(LAST_SITE_EDIT.updated_at)}</p>
                 )}
-              </p>
+              </div>
             )}
           </div>
         </div>
