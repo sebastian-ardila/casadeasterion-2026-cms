@@ -1,0 +1,240 @@
+---
+// Shared confirmation modal. Single instance mounted in AppLayout.
+//
+// Two ways to invoke it:
+//
+//   A) Form-based (most cases). Any <form data-cas-confirm="..."> is
+//      intercepted on submit; the modal opens with the given message
+//      and the form is only submitted after the user confirms.
+//
+//      <form method="POST"
+//            data-cas-confirm="Esta acción es permanente."
+//            data-cas-confirm-title="¿Borrar este artículo?"
+//            data-cas-confirm-subtitle="Optional second line"
+//            data-cas-confirm-label="Borrar">
+//        ...
+//      </form>
+//
+//   B) Programmatic (for JS-driven flows). Call window.casConfirm:
+//
+//      const ok = await window.casConfirm({
+//        title: "¿Eliminar usuario?",
+//        subtitle: email,
+//        message: "Se borra el perfil. NO SE PUEDE DESHACER.",
+//        label: "Eliminar definitivamente",
+//        typed: email,            // optional: type-to-confirm gate
+//      });
+//      if (!ok) return;
+//      // ... actually delete
+//
+//   Cancel: button, click backdrop, or Escape.
+---
+
+<div
+  id="cas-confirm-modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="cas-confirm-title"
+  class="hidden fixed inset-0 z-[100] flex items-center justify-center px-4"
+>
+  <div data-cas-confirm-backdrop class="absolute inset-0 bg-stone-900/55 backdrop-blur-sm"></div>
+  <div class="relative bg-white border border-stone-200 shadow-2xl max-w-md w-full">
+    <header class="flex items-start gap-3 p-5 border-b border-stone-100">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-red-100 text-red-700 shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </span>
+      <div class="min-w-0">
+        <p id="cas-confirm-title" data-cas-confirm-title class="font-serif text-lg leading-tight">¿Continuar?</p>
+        <p data-cas-confirm-subtitle class="text-xs text-stone-500 mt-1 hidden"></p>
+      </div>
+    </header>
+    <div class="px-5 py-4 text-sm text-stone-700 leading-relaxed">
+      <p data-cas-confirm-message></p>
+    </div>
+    <div data-cas-confirm-typed-row class="hidden px-5 pb-4">
+      <label class="text-xs uppercase tracking-[0.14em] text-stone-500 block mb-1.5">
+        Escribe <strong data-cas-confirm-typed-value class="text-stone-900 normal-case tracking-normal break-all"></strong> para confirmar
+      </label>
+      <input
+        type="text"
+        data-cas-confirm-typed-input
+        autocomplete="off"
+        spellcheck="false"
+        class="w-full px-3 py-2 border border-stone-300 focus:border-stone-900 focus:outline-none text-sm font-mono"
+      />
+    </div>
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-stone-100 bg-stone-50">
+      <button
+        type="button"
+        data-cas-confirm-cancel
+        class="text-xs px-3 py-2 border border-stone-300 text-stone-700 hover:border-stone-900 hover:bg-white transition-colors cursor-pointer uppercase tracking-[0.14em]"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        data-cas-confirm-ok
+        class="text-xs px-3 py-2 bg-red-700 text-white border border-red-700 hover:bg-red-800 transition-colors cursor-pointer uppercase tracking-[0.14em] disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  (() => {
+    if (window.__casConfirmInit) return;
+    window.__casConfirmInit = true;
+
+    // Either a pending <form> to submit on OK, or a Promise resolver
+    // from window.casConfirm. Mutually exclusive.
+    let pendingForm = null;
+    let pendingResolve = null;
+    let expectedTyped = "";
+
+    const modalEl = () => document.getElementById("cas-confirm-modal");
+    const within = (sel) => modalEl()?.querySelector(sel) ?? null;
+
+    const setTypedState = () => {
+      const input = within("[data-cas-confirm-typed-input]");
+      const ok = within("[data-cas-confirm-ok]");
+      if (!ok) return;
+      if (!expectedTyped) {
+        ok.disabled = false;
+        return;
+      }
+      const v = (input && "value" in input ? input.value : "").trim().toLowerCase();
+      ok.disabled = v !== expectedTyped.toLowerCase();
+    };
+
+    const openModal = ({ title, subtitle, message, label, typed }) => {
+      const modal = modalEl();
+      if (!modal) return;
+
+      const titleEl = within("[data-cas-confirm-title]");
+      const subtitleEl = within("[data-cas-confirm-subtitle]");
+      const messageEl = within("[data-cas-confirm-message]");
+      const okBtn = within("[data-cas-confirm-ok]");
+      const typedRow = within("[data-cas-confirm-typed-row]");
+      const typedValueEl = within("[data-cas-confirm-typed-value]");
+      const typedInput = within("[data-cas-confirm-typed-input]");
+
+      if (titleEl) titleEl.textContent = title || "¿Continuar?";
+      if (subtitleEl) {
+        subtitleEl.textContent = subtitle || "";
+        subtitleEl.classList.toggle("hidden", !subtitle);
+      }
+      if (messageEl) messageEl.textContent = message || "Esta acción no se puede deshacer.";
+      if (okBtn) okBtn.textContent = label || "Eliminar";
+
+      expectedTyped = typed || "";
+      if (typedRow) typedRow.classList.toggle("hidden", !expectedTyped);
+      if (typedValueEl) typedValueEl.textContent = expectedTyped;
+      if (typedInput && "value" in typedInput) typedInput.value = "";
+      setTypedState();
+
+      modal.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+      // Focus the typed input if shown, otherwise the cancel button.
+      setTimeout(() => {
+        if (expectedTyped && typedInput && "focus" in typedInput) {
+          typedInput.focus();
+        } else {
+          within("[data-cas-confirm-cancel]")?.focus?.();
+        }
+      }, 0);
+    };
+
+    const closeModal = (confirmed) => {
+      const modal = modalEl();
+      if (!modal) return;
+      modal.classList.add("hidden");
+      document.body.style.overflow = "";
+      const form = pendingForm;
+      const resolve = pendingResolve;
+      pendingForm = null;
+      pendingResolve = null;
+      expectedTyped = "";
+      if (confirmed && form) {
+        form.dataset.casConfirmed = "1";
+        form.requestSubmit();
+      }
+      if (resolve) resolve(Boolean(confirmed));
+    };
+
+    // Programmatic API.
+    window.casConfirm = (opts) =>
+      new Promise((resolve) => {
+        pendingForm = null;
+        pendingResolve = resolve;
+        openModal(opts || {});
+      });
+
+    // Form-based intercept.
+    document.addEventListener(
+      "submit",
+      (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (!form.dataset.casConfirm) return;
+        if (form.dataset.casConfirmed === "1") return;
+        e.preventDefault();
+        e.stopPropagation();
+        pendingForm = form;
+        pendingResolve = null;
+        openModal({
+          title: form.dataset.casConfirmTitle,
+          subtitle: form.dataset.casConfirmSubtitle,
+          message: form.dataset.casConfirm,
+          label: form.dataset.casConfirmLabel,
+          typed: form.dataset.casConfirmTyped,
+        });
+      },
+      true,
+    );
+
+    document.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (
+        t.closest("[data-cas-confirm-cancel]") ||
+        t.closest("[data-cas-confirm-backdrop]")
+      ) {
+        closeModal(false);
+        return;
+      }
+      if (t.closest("[data-cas-confirm-ok]")) {
+        const okBtn = within("[data-cas-confirm-ok]");
+        if (okBtn && "disabled" in okBtn && okBtn.disabled) return;
+        closeModal(true);
+      }
+    });
+
+    document.addEventListener("input", (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest("[data-cas-confirm-typed-input]")) setTypedState();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      const modal = modalEl();
+      if (!modal || modal.classList.contains("hidden")) return;
+      if (e.key === "Escape") {
+        closeModal(false);
+        return;
+      }
+      if (e.key === "Enter") {
+        const okBtn = within("[data-cas-confirm-ok]");
+        if (okBtn && "disabled" in okBtn && !okBtn.disabled) {
+          e.preventDefault();
+          closeModal(true);
+        }
+      }
+    });
+  })();
+</script>

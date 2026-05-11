@@ -5,6 +5,7 @@ import Sidebar from "~/components/Sidebar.astro";
 import ListPanel from "~/components/ListPanel.astro";
 import ActionToasts from "~/components/ActionToasts.astro";
 import BuildStatusBar from "~/components/BuildStatusBar.astro";
+import ConfirmModal from "~/components/ConfirmModal.astro";
 import FormGuards from "~/components/FormGuards.astro";
 import MobileBreadcrumb from "~/components/MobileBreadcrumb.astro";
 import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
@@ -93,6 +94,7 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
     </div>
     <ActionToasts transition:persist="action-toasts" />
     <BuildStatusBar transition:persist="build-status-bar" />
+    <ConfirmModal transition:persist="confirm-modal" />
     <FormGuards />
 
     {/* Top progress bar shown during view transitions. */}

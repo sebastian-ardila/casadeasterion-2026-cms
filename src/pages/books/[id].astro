@@ -268,7 +268,10 @@ const statusOptions = [
   <form
     method="POST"
     class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
-    onsubmit="return confirm('¿Seguro que quieres borrar este libro? Esta acción es permanente.')"
+    data-cas-confirm="Esta acción es permanente. El libro y todas sus relaciones se eliminan."
+    data-cas-confirm-title="¿Borrar este libro?"
+    data-cas-confirm-subtitle={book.title}
+    data-cas-confirm-label="Borrar"
   >
     <input type="hidden" name="_action" value="delete" />
     <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>

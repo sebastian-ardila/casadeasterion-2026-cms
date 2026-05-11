@@ -213,7 +213,10 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
           <form
             method="POST"
             class="inline-block"
-            onsubmit={`return confirm('¿Revocar acceso de ${profile.email}? Podrás restaurarlo desde la lista de revocados.')`}
+            data-cas-confirm="El usuario deja de tener acceso al CMS. Sus datos se conservan y podrás restaurarlo desde la lista de revocados."
+            data-cas-confirm-title="¿Revocar acceso?"
+            data-cas-confirm-subtitle={profile.email}
+            data-cas-confirm-label="Revocar"
           >
             <input type="hidden" name="_action" value="remove_admin" />
             <input type="hidden" name="email" value={profile.email} />
@@ -375,20 +378,15 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
         const email = btn.dataset.profileEmail || "este usuario";
         const id = btn.dataset.profileId;
         if (!id) return;
-        const ok = window.confirm(
-          `¿Eliminar definitivamente a ${email}?\n\n` +
-          "Se borrará su perfil, sus permisos, su sesión y cualquier suscripción al newsletter asociada al mismo correo. NO SE PUEDE DESHACER.",
-        );
+        const ok = await window.casConfirm?.({
+          title: "¿Eliminar usuario completamente?",
+          subtitle: email,
+          message:
+            "Se borra su perfil, sus permisos, su sesión y cualquier suscripción al newsletter asociada al mismo correo. NO SE PUEDE DESHACER.",
+          label: "Eliminar definitivamente",
+          typed: email,
+        });
         if (!ok) return;
-        const second = window.prompt(
-          `Para confirmar, escribe el correo: ${email}`,
-        );
-        if (second?.trim().toLowerCase() !== email.toLowerCase()) {
-          if (typeof window.casToast === "function") {
-            window.casToast({ type: "error", message: "Correo no coincide. Cancelado." });
-          }
-          return;
-        }
         btn.disabled = true;
         btn.textContent = "Eliminando…";
         try {

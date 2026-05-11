@@ -128,7 +128,10 @@ const kindOptions = [
   <form
     method="POST"
     class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
-    onsubmit={`return confirm('¿Borrar la categoría "${category.name}"? Los artículos y libros asociados quedarán sin categoría.')`}
+    data-cas-confirm="Los artículos y libros asociados quedarán sin categoría."
+    data-cas-confirm-title="¿Borrar esta categoría?"
+    data-cas-confirm-subtitle={category.name}
+    data-cas-confirm-label="Borrar"
   >
     <input type="hidden" name="_action" value="delete" />
     <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>

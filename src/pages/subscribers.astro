@@ -312,12 +312,20 @@ const filterOptions = [
       let actions = "";
       if (canEdit) {
         const unsubBtn = !s.unsubscribed_at
-          ? `<form method="POST" class="inline-block mr-3" onsubmit="return confirm('¿Marcar a ${escape(s.email)} como dado de baja?')">
+          ? `<form method="POST" class="inline-block mr-3"
+                  data-cas-confirm="El suscriptor deja de recibir el newsletter. El registro se conserva."
+                  data-cas-confirm-title="¿Dar de baja a este suscriptor?"
+                  data-cas-confirm-subtitle="${escape(s.email)}"
+                  data-cas-confirm-label="Dar de baja">
                <input type="hidden" name="_action" value="unsubscribe" />
                <input type="hidden" name="id" value="${escape(s.id)}" />
                <button class="cursor-pointer text-xs text-stone-700 hover:underline">Dar de baja</button>
              </form>` : "";
-        actions = `${unsubBtn}<form method="POST" class="inline-block" onsubmit="return confirm('¿Borrar definitivamente a ${escape(s.email)}? No se puede deshacer.')">
+        actions = `${unsubBtn}<form method="POST" class="inline-block"
+                                    data-cas-confirm="Se borra el registro del suscriptor. No se puede deshacer."
+                                    data-cas-confirm-title="¿Borrar este suscriptor?"
+                                    data-cas-confirm-subtitle="${escape(s.email)}"
+                                    data-cas-confirm-label="Borrar">
             <input type="hidden" name="_action" value="delete" />
             <input type="hidden" name="id" value="${escape(s.id)}" />
             <button class="cursor-pointer text-xs text-red-700 hover:underline">Borrar</button>

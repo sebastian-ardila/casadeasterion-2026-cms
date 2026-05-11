@@ -199,7 +199,13 @@ const ROLE_LABEL: Record<string, string> = {
                 <td class="px-4 py-3 text-stone-600">{e.note ?? "—"}</td>
                 <td class="px-4 py-3 text-stone-500 text-xs">{new Date(e.added_at).toLocaleDateString()}</td>
                 <td class="px-4 py-3 text-right">
-                  <form method="POST" onsubmit={`return confirm('¿Quitar ${e.email} de la lista?')`}>
+                  <form
+                    method="POST"
+                    data-cas-confirm="El correo deja de estar autorizado para entrar al CMS."
+                    data-cas-confirm-title="¿Quitar de la lista?"
+                    data-cas-confirm-subtitle={e.email}
+                    data-cas-confirm-label="Quitar"
+                  >
                     <input type="hidden" name="_action" value="remove_pending" />
                     <input type="hidden" name="email" value={e.email} />
                     <button class="cursor-pointer text-xs text-red-700 hover:underline">Quitar</button>
@@ -272,7 +278,13 @@ const ROLE_LABEL: Record<string, string> = {
       const deleteBtn = li.querySelector("[data-delete-btn]");
 
       grantBtn?.addEventListener("click", async () => {
-        if (!confirm(`¿Restaurar acceso de ${email}?`)) return;
+        const ok = await window.casConfirm?.({
+          title: "¿Restaurar acceso?",
+          subtitle: email,
+          message: "El usuario volverá a entrar al CMS con sus permisos previos.",
+          label: "Restaurar",
+        });
+        if (!ok) return;
         grantBtn.disabled = true;
         grantBtn.textContent = "Dando acceso…";
         try {
@@ -303,17 +315,15 @@ const ROLE_LABEL: Record<string, string> = {
       });
 
       deleteBtn?.addEventListener("click", async () => {
-        if (!confirm(
-          `¿Eliminar definitivamente a ${email}?\n\n` +
-          "Se borrará su perfil, sus permisos, sus sesiones, y cualquier suscripción al newsletter asociada. NO SE PUEDE DESHACER."
-        )) return;
-        const second = window.prompt(`Para confirmar, escribe el correo: ${email}`);
-        if (second?.trim().toLowerCase() !== email.toLowerCase()) {
-          if (typeof window.casToast === "function") {
-            window.casToast({ type: "error", message: "Correo no coincide. Cancelado." });
-          }
-          return;
-        }
+        const ok = await window.casConfirm?.({
+          title: "¿Eliminar usuario completamente?",
+          subtitle: email,
+          message:
+            "Se borra su perfil, sus permisos, sus sesiones, y cualquier suscripción al newsletter asociada. NO SE PUEDE DESHACER.",
+          label: "Eliminar definitivamente",
+          typed: email,
+        });
+        if (!ok) return;
         deleteBtn.disabled = true;
         deleteBtn.textContent = "Eliminando…";
         try {
