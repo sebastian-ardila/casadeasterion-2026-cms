@@ -1042,15 +1042,22 @@ const isNew = Astro.url.pathname.endsWith("/new");
     document.addEventListener("astro:after-swap", hydrateAll);
 
     // Invalidate cache when a form succeeds (server redirects with ?saved=1).
+    // The panel is `transition:persist`, so its DOM survives navigation
+    // and would otherwise keep showing whatever was rendered from cache
+    // pre-save. We clear the cache AND force a re-hydrate so the panel
+    // refetches from the API instead of replaying stale items.
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
-      if (url.searchParams.has("saved")) {
-        ["posts", "books", "authors", "categories", "orders"].forEach((r) => {
-          try {
-            sessionStorage.removeItem(cacheKey(r));
-          } catch {}
-        });
-      }
+      if (!url.searchParams.has("saved")) return;
+      ["posts", "books", "authors", "categories", "orders"].forEach((r) => {
+        try {
+          sessionStorage.removeItem(cacheKey(r));
+        } catch {}
+      });
+      document.querySelectorAll("[data-list-panel]").forEach((panel) => {
+        delete panel.dataset.hydrated;
+      });
+      hydrateAll();
     });
   })();
 </script>
