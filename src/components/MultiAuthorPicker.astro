@@ -1,0 +1,436 @@
+---
+// Multi-author picker. Renders the currently selected authors as an
+// ordered list with reorder/remove controls and exposes an "+ Agregar
+// autor" affordance that adds from the remaining pool.
+//
+// The form submits a single hidden input (`<name>`) carrying a comma-
+// separated string of UUIDs in display order. The matching server
+// handler should split on "," and sync the book_authors / post_authors
+// junction. Empty value = no authors selected.
+
+interface AuthorOption {
+  id: string;
+  name: string;
+  photo_url: string | null;
+}
+
+interface Props {
+  name: string;
+  /** Every author in the system, sorted by display name. */
+  authors: AuthorOption[];
+  /** Currently-selected author IDs in display order (junction sort_order). */
+  selectedIds: string[];
+  /** Optional label rendered above the list. */
+  label?: string;
+}
+
+const { name, authors, selectedIds, label } = Astro.props as Props;
+const byId = new Map(authors.map((a) => [a.id, a]));
+const selected = selectedIds
+  .map((id) => byId.get(id))
+  .filter(Boolean) as AuthorOption[];
+const initialValue = selectedIds.join(",");
+---
+
+<div
+  class="map-picker"
+  data-map-picker
+  data-name={name}
+>
+  {label && <span class="label">{label}</span>}
+
+  {/* The actual form payload. JS keeps this in sync with the visible list. */}
+  <input type="hidden" name={name} value={initialValue} data-map-value />
+
+  {/* Selected authors — one row each. Reorder via the ↑ / ↓ buttons,
+      remove via the ✕ button. Buttons are disabled at the ends so a
+      misclick can't no-op. The row dataset.id is the source of truth
+      the JS reads when serializing back into the hidden input. */}
+  <ul class="map-list" data-map-list>
+    {selected.map((a, i) => (
+      <li class="map-item" data-map-item data-id={a.id}>
+        <div class="map-item-handle" aria-hidden="true">
+          <button
+            type="button"
+            class="map-btn map-up"
+            data-map-up
+            disabled={i === 0}
+            aria-label="Subir"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+          </button>
+          <button
+            type="button"
+            class="map-btn map-down"
+            data-map-down
+            disabled={i === selected.length - 1}
+            aria-label="Bajar"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+        </div>
+        <div class="map-thumb">
+          {a.photo_url ? (
+            <img src={a.photo_url} alt="" loading="lazy" />
+          ) : (
+            <span class="map-thumb-initial">{a.name.charAt(0)}</span>
+          )}
+        </div>
+        <span class="map-name">{a.name}</span>
+        <button
+          type="button"
+          class="map-btn map-remove"
+          data-map-remove
+          aria-label={`Quitar ${a.name}`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </li>
+    ))}
+  </ul>
+
+  <p
+    class="map-empty"
+    data-map-empty
+    class:list={[selected.length > 0 && "hidden"]}
+  >
+    Sin autores asignados.
+  </p>
+
+  {/* "+ Agregar autor" affordance — collapsed by default; clicking
+      reveals a list of all authors not yet selected. Picking one adds
+      it to the bottom of the selected list and re-renders the picker. */}
+  <details class="map-add" data-map-add>
+    <summary class="map-add-summary">+ Agregar autor</summary>
+    <ul class="map-add-list" data-map-add-list>
+      {authors.map((a) => (
+        <li
+          class="map-add-item"
+          data-map-add-item
+          data-id={a.id}
+          data-name={a.name}
+          data-photo={a.photo_url ?? ""}
+          class:list={[selectedIds.includes(a.id) && "hidden"]}
+        >
+          <button type="button" class="map-add-btn">
+            <span class="map-thumb">
+              {a.photo_url ? (
+                <img src={a.photo_url} alt="" loading="lazy" />
+              ) : (
+                <span class="map-thumb-initial">{a.name.charAt(0)}</span>
+              )}
+            </span>
+            <span class="map-name">{a.name}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+    <p class="map-add-empty hidden" data-map-add-empty>
+      No quedan autores por agregar.
+    </p>
+  </details>
+</div>
+
+<style is:global>
+  /* Styles intentionally global: the picker mutates its DOM via JS
+     (renderRow) and JS-created elements don't carry Astro's scoped
+     data-astro-cid attribute, so scoped selectors wouldn't match
+     them. The `.map-` prefix is specific enough to avoid collisions. */
+  .map-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .map-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .map-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgb(231 229 228);
+    background: white;
+    border-radius: 2px;
+  }
+  .map-item-handle {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-right: 0.25rem;
+  }
+  .map-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.25rem;
+    border: 1px solid rgb(231 229 228);
+    background: white;
+    color: rgb(68 64 60);
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .map-btn:hover:not(:disabled) {
+    background: rgb(245 245 244);
+  }
+  .map-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .map-up { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-width: 0; }
+  .map-down { border-top-left-radius: 0; border-top-right-radius: 0; }
+  .map-remove {
+    width: 1.75rem;
+    height: 1.75rem;
+    margin-left: auto;
+  }
+  .map-thumb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    overflow: hidden;
+    background: rgb(245 245 244);
+    flex-shrink: 0;
+  }
+  .map-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .map-thumb-initial {
+    font-family: var(--font-serif, serif);
+    font-size: 0.95rem;
+    color: rgb(120 113 108);
+  }
+  .map-name {
+    font-size: 0.875rem;
+    color: rgb(28 25 23);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .map-empty {
+    font-size: 0.8125rem;
+    color: rgb(120 113 108);
+    margin: 0 0 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed rgb(231 229 228);
+    border-radius: 2px;
+  }
+  .map-empty.hidden { display: none; }
+  .map-add {
+    margin-top: 0.25rem;
+  }
+  .map-add-summary {
+    cursor: pointer;
+    font-size: 0.8125rem;
+    color: rgb(68 64 60);
+    padding: 0.375rem 0.5rem;
+    list-style: none;
+    user-select: none;
+    border: 1px solid rgb(231 229 228);
+    border-radius: 2px;
+    background: white;
+    display: inline-block;
+  }
+  .map-add-summary::-webkit-details-marker { display: none; }
+  .map-add-summary:hover { background: rgb(245 245 244); }
+  .map-add[open] .map-add-summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .map-add-list {
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    border: 1px solid rgb(231 229 228);
+    border-top: 0;
+    border-radius: 0 0 2px 2px;
+    background: white;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .map-add-item { padding: 0; }
+  .map-add-item.hidden { display: none; }
+  .map-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 2px;
+  }
+  .map-add-btn:hover { background: rgb(245 245 244); }
+  .map-add-empty {
+    font-size: 0.8125rem;
+    color: rgb(120 113 108);
+    padding: 0.5rem;
+    margin: 0;
+    border: 1px solid rgb(231 229 228);
+    border-top: 0;
+    border-radius: 0 0 2px 2px;
+    background: white;
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    // Guard so we don't re-bind on Astro view transitions.
+    if (window.__casMultiAuthorInit) return;
+    window.__casMultiAuthorInit = true;
+
+    function renderRow(id, name, photo) {
+      const li = document.createElement("li");
+      li.className = "map-item";
+      li.dataset.mapItem = "";
+      li.dataset.id = id;
+      li.innerHTML =
+        '<div class="map-item-handle" aria-hidden="true">' +
+        '<button type="button" class="map-btn map-up" data-map-up aria-label="Subir">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>' +
+        "</button>" +
+        '<button type="button" class="map-btn map-down" data-map-down aria-label="Bajar">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
+        "</button>" +
+        "</div>" +
+        '<div class="map-thumb">' +
+        (photo
+          ? '<img src="' + photo + '" alt="" loading="lazy">'
+          : '<span class="map-thumb-initial">' + (name.charAt(0) || "?") + "</span>") +
+        "</div>" +
+        '<span class="map-name"></span>' +
+        '<button type="button" class="map-btn map-remove" data-map-remove aria-label="Quitar">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>' +
+        "</button>";
+      li.querySelector(".map-name").textContent = name;
+      return li;
+    }
+
+    function sync(root) {
+      const list = root.querySelector("[data-map-list]");
+      const empty = root.querySelector("[data-map-empty]");
+      const hidden = root.querySelector("[data-map-value]");
+      const addList = root.querySelector("[data-map-add-list]");
+      const addEmpty = root.querySelector("[data-map-add-empty]");
+      const items = Array.from(list.querySelectorAll("[data-map-item]"));
+      const ids = items.map((el) => el.dataset.id);
+      hidden.value = ids.join(",");
+      // Toggle empty banner.
+      if (empty) empty.classList.toggle("hidden", ids.length > 0);
+      // Re-disable end buttons.
+      items.forEach((el, i) => {
+        const up = el.querySelector("[data-map-up]");
+        const down = el.querySelector("[data-map-down]");
+        if (up) up.disabled = i === 0;
+        if (down) down.disabled = i === items.length - 1;
+      });
+      // Hide already-picked rows in the add menu; if none remain show
+      // the "no quedan" message.
+      if (addList) {
+        const used = new Set(ids);
+        let visible = 0;
+        addList.querySelectorAll("[data-map-add-item]").forEach((el) => {
+          const taken = used.has(el.dataset.id);
+          el.classList.toggle("hidden", taken);
+          if (!taken) visible++;
+        });
+        if (addEmpty) addEmpty.classList.toggle("hidden", visible > 0);
+      }
+    }
+
+    function init(root) {
+      if (root.dataset.mapBound) return;
+      root.dataset.mapBound = "1";
+
+      const list = root.querySelector("[data-map-list]");
+
+      // Belt-and-suspenders: re-sync the hidden input right before the
+      // containing form is submitted, so the payload always reflects the
+      // current visible list regardless of whatever mutation paths the
+      // user took to get there. Without this, any subtle bug in the
+      // click handlers would silently drop authors at save time.
+      const form = root.closest("form");
+      if (form && !form.dataset.mapSubmitBound) {
+        form.dataset.mapSubmitBound = "1";
+        form.addEventListener("submit", () => {
+          document
+            .querySelectorAll("[data-map-picker]")
+            .forEach((picker) => sync(picker));
+        });
+      }
+
+      // All mutations route through a single delegated click handler.
+      root.addEventListener("click", (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+
+        const removeBtn = t.closest("[data-map-remove]");
+        if (removeBtn) {
+          const item = removeBtn.closest("[data-map-item]");
+          if (item) item.remove();
+          sync(root);
+          return;
+        }
+
+        const upBtn = t.closest("[data-map-up]");
+        if (upBtn) {
+          const item = upBtn.closest("[data-map-item]");
+          const prev = item && item.previousElementSibling;
+          if (item && prev) list.insertBefore(item, prev);
+          sync(root);
+          return;
+        }
+
+        const downBtn = t.closest("[data-map-down]");
+        if (downBtn) {
+          const item = downBtn.closest("[data-map-item]");
+          const next = item && item.nextElementSibling;
+          if (item && next) list.insertBefore(next, item);
+          sync(root);
+          return;
+        }
+
+        const addItem = t.closest("[data-map-add-item]");
+        if (addItem) {
+          // Don't navigate or submit — the <details> button is a button,
+          // not a submit, but stop just in case.
+          e.preventDefault();
+          const id = addItem.dataset.id;
+          const name = addItem.dataset.name || "";
+          const photo = addItem.dataset.photo || "";
+          if (id && !list.querySelector('[data-id="' + id + '"]')) {
+            list.appendChild(renderRow(id, name, photo));
+          }
+          sync(root);
+          // Auto-close the details for a smoother flow.
+          const details = root.querySelector("[data-map-add]");
+          if (details) details.open = false;
+        }
+      });
+
+      // Initial pass to enforce the disabled-at-ends rule.
+      sync(root);
+    }
+
+    function initAll() {
+      document.querySelectorAll("[data-map-picker]").forEach(init);
+    }
+
+    initAll();
+    document.addEventListener("astro:page-load", initAll);
+  })();
+</script>

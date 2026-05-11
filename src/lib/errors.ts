@@ -7,8 +7,17 @@
  * SQL state codes.
  */
 export function friendlyError(err: unknown): string {
-  if (!(err instanceof Error)) return "Ocurrió un error inesperado.";
-  const raw = err.message ?? "";
+  // Supabase / PostgREST errors are plain objects with `.message`, not
+  // Error instances. Unwrap any object that exposes a string message so
+  // we can match it against the rules below instead of silently falling
+  // through to the catch-all.
+  const raw =
+    err instanceof Error
+      ? err.message ?? ""
+      : err && typeof err === "object" && typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : "";
+  if (!raw) return "Ocurrió un error inesperado.";
   const lower = raw.toLowerCase();
 
   if (lower.includes("duplicate key") || lower.includes("violates unique")) {

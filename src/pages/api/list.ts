@@ -100,9 +100,13 @@ export const GET: APIRoute = async (ctx) => {
   let items: Item[] = [];
 
   if (resource === "posts") {
+    // Disambiguate the FK: with the post_authors junction in place,
+    // PostgREST has two paths from posts to authors and refuses to
+    // embed without an explicit hint. We want the primary author from
+    // posts.author_id for the list row, not the full junction.
     const { data } = await supabase
       .from("posts")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!posts_updated_by_fkey(id, full_name, email)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors!posts_author_id_fkey(name), editor:profiles!posts_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((p: any) => ({
       id: p.id,
@@ -116,9 +120,11 @@ export const GET: APIRoute = async (ctx) => {
       imageStyle: "cover",
     }));
   } else if (resource === "books") {
+    // See note above for posts: the book_authors junction introduced
+    // ambiguity in the books→authors relation, so we pin the FK.
     const { data } = await supabase
       .from("books")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors(name), editor:profiles!books_updated_by_fkey(id, full_name, email)")
+      .select("id, title, slug, status, updated_at, cover_image_url, authors!books_author_id_fkey(name), editor:profiles!books_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false });
     items = (data ?? []).map((b: any) => ({
       id: b.id,

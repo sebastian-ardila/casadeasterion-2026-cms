@@ -7,10 +7,12 @@ import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import AiSuggest from "~/components/AiSuggest.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
+import MultiAuthorPicker from "~/components/MultiAuthorPicker.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray, slugify } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
+import { parseAuthorIds, syncPostAuthors } from "~/lib/multi-author";
 
 const guard = await requirePermission(Astro, "posts", "edit");
 if (guard instanceof Response) return guard;
@@ -28,6 +30,8 @@ if (Astro.request.method === "POST") {
 
     const reading = Math.max(1, Math.round(content_md.split(/\s+/).length / 220));
 
+    // author_id intentionally omitted: it's set by a Postgres trigger
+    // from the post_authors junction (synced below).
     const { data, error } = await supabase
       .from("posts")
       .insert({
@@ -38,7 +42,6 @@ if (Astro.request.method === "POST") {
         content_md,
         cover_image_url: str(fd, "cover_image_url"),
         category_id: str(fd, "category_id"),
-        author_id: str(fd, "author_id"),
         status,
         published_at: status === "published" ? new Date().toISOString() : null,
         reading_time_minutes: num(fd, "reading_time_minutes") ?? reading,
@@ -52,6 +55,7 @@ if (Astro.request.method === "POST") {
       .select("id")
       .single();
     if (error) throw error;
+    await syncPostAuthors(supabase, data.id, parseAuthorIds(fd, "author_ids"));
     const willPublish = status === "published";
     return Astro.redirect(`/posts/${data.id}?saved=1&action=created&entity=post${willPublish ? "&publish=1" : ""}`);
   } catch (err) {
@@ -59,20 +63,11 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const [{ data: authors }, { data: categories }] = await Promise.all([
+const [{ data: authorsData }, { data: categories }] = await Promise.all([
   supabase.from("authors").select("id, name, photo_url").order("name"),
   supabase.from("categories").select("id, name, icon").order("name"),
 ]);
-
-const authorOptions = [
-  { value: "", label: "Sin autor", iconStyle: "person" as const },
-  ...(authors ?? []).map((a) => ({
-    value: a.id,
-    label: a.name,
-    imageUrl: a.photo_url ?? null,
-    iconStyle: "person" as const,
-  })),
-];
+const authors = authorsData ?? [];
 const categoryOptions = [
   { value: "", label: "Sin categoría" },
   ...(categories ?? []).map((c) => ({
@@ -124,10 +119,14 @@ const statusOptions = [
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="cell-stack">
-          <span class="label">Autor</span>
-          <Dropdown name="author_id" options={authorOptions} placeholder="Sin autor" />
+          <MultiAuthorPicker
+            name="author_ids"
+            label="Autores"
+            authors={authors}
+            selectedIds={[]}
+          />
         </div>
-        <div class="cell-stack">
+        <div class="cell-stack flex flex-col gap-2">
           <span class="label">Categoría</span>
           <Dropdown name="category_id" options={categoryOptions} placeholder="Sin categoría" />
         </div>
