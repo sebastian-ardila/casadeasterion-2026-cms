@@ -303,18 +303,32 @@ const editorName = order.editor ? fullName(order.editor) : null;
   </section>
 
   <script is:inline>
+    // Delegated handler on document so a single binding survives every
+    // Astro view transition. Wiring a fresh listener on every page
+    // load via getElementById doesn't work here: the inline script
+    // gets swapped in but not re-executed, so the button has no
+    // listener when arriving via in-app navigation.
     (() => {
-      const show = document.getElementById("cas-order-delete-show");
-      const panel = document.getElementById("cas-order-delete-warning");
-      const cancel = document.getElementById("cas-order-delete-cancel");
-      if (!show || !panel || !cancel) return;
-      show.addEventListener("click", () => {
-        panel.classList.remove("hidden");
-        show.classList.add("hidden");
-      });
-      cancel.addEventListener("click", () => {
-        panel.classList.add("hidden");
-        show.classList.remove("hidden");
+      if (window.__casOrderDeleteInit) return;
+      window.__casOrderDeleteInit = true;
+      document.addEventListener("click", (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+        const showBtn = t.closest("#cas-order-delete-show");
+        if (showBtn) {
+          const panel = document.getElementById("cas-order-delete-warning");
+          if (panel) panel.classList.remove("hidden");
+          showBtn.classList.add("hidden");
+          return;
+        }
+        const cancelBtn = t.closest("#cas-order-delete-cancel");
+        if (cancelBtn) {
+          const panel = document.getElementById("cas-order-delete-warning");
+          const show = document.getElementById("cas-order-delete-show");
+          if (panel) panel.classList.add("hidden");
+          if (show) show.classList.remove("hidden");
+          return;
+        }
       });
     })();
   </script>
