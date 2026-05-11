@@ -41,11 +41,21 @@ if (Astro.request.method === "POST") {
       // _confirmed=yes (set after the user dismisses the warning).
       const confirmed = fd.get("_confirmed");
       if (confirmed !== "yes") throw new Error("eliminación no confirmada");
-      const { error } = await supabase
+      // Ask for the deleted rows back so we can verify the delete
+      // actually affected something. Postgres RLS silently returns
+      // 0 rows on a policy mismatch (no error), and we don't want
+      // to redirect with "Pedido eliminado" if nothing was removed.
+      const { data: deleted, error } = await supabase
         .from("purchase_intents")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
+      if (!deleted || deleted.length === 0) {
+        throw new Error(
+          "No se pudo eliminar el pedido — verifica tu permiso o que la fila exista.",
+        );
+      }
       return Astro.redirect(
         `/orders?saved=1&msg=${encodeURIComponent("Pedido eliminado.")}`,
       );
