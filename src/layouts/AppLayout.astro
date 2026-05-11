@@ -12,7 +12,7 @@ import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
 const user = Astro.locals.user;
 const permissions = isCmsUser(user) ? await getAllPermissions(Astro, user) : null;
 
-type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "categories"> | "admins";
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "categories"> | "admins" | "orders";
 
 interface Props {
   title?: string;
@@ -25,13 +25,15 @@ interface Props {
 }
 const { title = "CMS", resource, activeId, breadcrumbLabel, wide = false } = Astro.props;
 
-// "admins" is owner-only, so it's not in the permissions map. Treat it
-// like an always-allowed section for the panel-visibility check; the
-// per-page guard in /admins/* still enforces requireOwner.
+// "admins" is owner-only and "orders" is owner+admin — neither is in
+// the per-user permissions matrix. Each has its own page-level guard;
+// here we just decide whether to show the list panel.
 const showListPanel = !!resource && (
   resource === "admins"
     ? user?.role === "owner"
-    : !!permissions && permissions[resource] !== "none"
+    : resource === "orders"
+      ? user?.role === "owner" || user?.role === "admin"
+      : !!permissions && permissions[resource] !== "none"
 );
 const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
 ---
@@ -71,7 +73,7 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
           <ListPanel
             resource={resource!}
             activeId={activeId}
-            permission={resource === "admins" ? "edit" : permissions![resource!]}
+            permission={resource === "admins" || resource === "orders" ? "edit" : permissions![resource!]}
             hideOnMobile={isDetailRoute}
             transition:persist={`list-panel-${resource}`}
           />
@@ -148,6 +150,7 @@ const isDetailRoute = !!activeId || Astro.url.pathname.endsWith("/new");
           authors: { title: "Autores", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
           categories: { title: "Categorías", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
           admins: { title: "Usuarios", newHref: "/admins/new", newLabel: "+ Nuevo usuario" },
+          orders: { title: "Pedidos", newHref: "", newLabel: "" },
         };
 
         const pathToResource = (path) => {

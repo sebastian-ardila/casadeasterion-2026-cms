@@ -1,0 +1,311 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import BackToList from "~/components/BackToList.astro";
+import { requireUserManager } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { strReq } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+import { formatAgo, fullName } from "~/lib/relative-time";
+
+const guard = await requireUserManager(Astro);
+if (guard instanceof Response) return guard;
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/orders");
+
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+  try {
+    const fd = await Astro.request.formData();
+    const action = strReq(fd, "_action");
+
+    if (action === "set_status") {
+      const status = strReq(fd, "status");
+      if (!["pending", "sent", "cancelled", "completed"].includes(status)) {
+        throw new Error("estado inválido");
+      }
+      const { error } = await supabase
+        .from("purchase_intents")
+        .update({ status })
+        .eq("id", id);
+      if (error) throw error;
+      return Astro.redirect(
+        `/orders/${id}?saved=1&msg=${encodeURIComponent("Estado actualizado.")}`,
+      );
+    }
+
+    if (action === "delete") {
+      // Acknowledged-warning gate: the client form must include
+      // _confirmed=yes (set after the user dismisses the warning).
+      const confirmed = fd.get("_confirmed");
+      if (confirmed !== "yes") throw new Error("eliminación no confirmada");
+      const { error } = await supabase
+        .from("purchase_intents")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      return Astro.redirect(
+        `/orders?saved=1&msg=${encodeURIComponent("Pedido eliminado.")}`,
+      );
+    }
+
+    throw new Error("acción desconocida");
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: order, error: orderErr } = await sb
+  .from("purchase_intents")
+  .select(
+    "id, profile_id, email, full_name, phone, notes, total_amount, currency, status, whatsapp_message, created_at, updated_at, updated_by, items:purchase_intent_items(id, book_title, book_slug, book_isbn, cover_image_url, unit_price, currency, quantity, position), editor:profiles!purchase_intents_updated_by_fkey(id, full_name, email)",
+  )
+  .eq("id", id)
+  .maybeSingle();
+
+if (orderErr || !order) {
+  return Astro.redirect("/orders?error=not_found");
+}
+
+const items = ((order.items ?? []) as any[])
+  .slice()
+  .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Pendiente",
+  sent: "Enviado",
+  completed: "Completado",
+  cancelled: "Cancelado",
+};
+const STATUS_BG: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-900 border-amber-200",
+  sent: "bg-blue-50 text-blue-900 border-blue-200",
+  completed: "bg-green-50 text-green-900 border-green-200",
+  cancelled: "bg-stone-100 text-stone-600 border-stone-200",
+};
+
+const formatMoney = (amount: number | null | undefined, currency: string) => {
+  if (amount == null) return "—";
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: currency || "COP",
+    maximumFractionDigits: 0,
+  }).format(Number(amount));
+};
+
+const itemCount = items.reduce((s, it: any) => s + (it.quantity ?? 0), 0);
+const itemsLabel = itemCount === 1 ? "1 libro" : `${itemCount} libros`;
+
+const savedMsg = Astro.url.searchParams.get("msg");
+const editorName = order.editor ? fullName(order.editor) : null;
+---
+
+<AppLayout title={order.full_name} resource="orders" activeId={order.id} breadcrumbLabel={order.full_name}>
+  <BackToList href="/orders" label="Pedidos" />
+
+  {savedMsg && (
+    <p class="bg-green-50 border border-green-200 text-green-900 text-sm p-3 mb-6">
+      {savedMsg}
+    </p>
+  )}
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <header class="mb-6 flex items-start justify-between gap-4 flex-wrap">
+    <div class="min-w-0">
+      <h1 class="font-serif text-3xl md:text-4xl mb-1.5 leading-tight">
+        {order.profile_id ? (
+          <a href={`/admins/${order.profile_id}`} class="hover:underline">{order.full_name}</a>
+        ) : order.full_name}
+      </h1>
+      <p class="text-stone-500 text-sm">
+        {order.email}{order.phone ? ` · ${order.phone}` : ""}
+      </p>
+      <p class="text-xs text-stone-400 mt-1">
+        Creado {formatAgo(order.created_at)}
+        {editorName && order.updated_by && order.updated_by !== order.profile_id && (
+          <> · estado cambiado por <a href={`/admins/${order.updated_by}`} class="underline">{editorName}</a> {formatAgo(order.updated_at)}</>
+        )}
+      </p>
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+      <span class:list={["text-[10px] uppercase tracking-[0.16em] px-2.5 py-1 border", STATUS_BG[order.status] ?? STATUS_BG.pending]}>
+        {STATUS_LABEL[order.status] ?? order.status}
+      </span>
+      <p class="font-serif text-3xl tabular-nums">{formatMoney(order.total_amount, order.currency)}</p>
+    </div>
+  </header>
+
+  {/* Items */}
+  <section class="card mb-6">
+    <header class="flex items-baseline justify-between mb-4">
+      <h2 class="card-section-title">Libros pedidos</h2>
+      <p class="text-xs text-stone-500">{itemsLabel}</p>
+    </header>
+    <ul class="divide-y divide-stone-100">
+      {items.map((it: any) => (
+        <li class="py-3 flex items-center gap-3">
+          {it.cover_image_url ? (
+            <img src={it.cover_image_url} alt="" loading="lazy" class="w-12 h-16 object-cover bg-stone-100 shrink-0" />
+          ) : (
+            <div class="w-12 h-16 bg-stone-100 shrink-0"></div>
+          )}
+          <div class="flex-1 min-w-0">
+            <a href={`/catalogo/${it.book_slug}`} class="text-sm font-medium hover:underline" target="_blank" rel="noopener">
+              {it.book_title}
+            </a>
+            <p class="text-xs text-stone-500">
+              Cantidad: {it.quantity}
+              {it.book_isbn && <> · ISBN {it.book_isbn}</>}
+            </p>
+          </div>
+          <div class="text-right shrink-0">
+            <p class="text-sm tabular-nums">{formatMoney(it.unit_price, it.currency)}</p>
+            <p class="text-[11px] text-stone-500 tabular-nums">
+              ×{it.quantity} = {formatMoney((it.unit_price ?? 0) * (it.quantity ?? 0), it.currency)}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ul>
+    <div class="flex items-baseline justify-between pt-4 mt-3 border-t border-stone-200">
+      <span class="text-xs uppercase tracking-[0.14em] text-stone-500">Total</span>
+      <span class="font-serif text-2xl tabular-nums">{formatMoney(order.total_amount, order.currency)}</span>
+    </div>
+  </section>
+
+  {/* Customer notes */}
+  {order.notes && (
+    <section class="card mb-6">
+      <h2 class="card-section-title mb-3">Notas del cliente</h2>
+      <p class="text-sm text-stone-700 whitespace-pre-wrap">{order.notes}</p>
+    </section>
+  )}
+
+  {/* WhatsApp message preview */}
+  {order.whatsapp_message && (
+    <section class="card mb-6">
+      <h2 class="card-section-title mb-3">Mensaje que se envió a WhatsApp</h2>
+      <pre class="text-xs text-stone-700 bg-stone-50 border border-stone-100 p-3 whitespace-pre-wrap font-sans leading-relaxed">{order.whatsapp_message}</pre>
+    </section>
+  )}
+
+  {/* Status change */}
+  <section class="card mb-6">
+    <h2 class="card-section-title mb-3">Cambiar estado</h2>
+    <p class="text-xs text-stone-500 mb-4">
+      Marca el pedido a medida que avanza la conversación con el cliente.
+      Si se canceló, prefiere <strong>Cancelado</strong> antes que eliminar
+      (mantiene el rastro para análisis).
+    </p>
+    <form method="POST" class="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="_action" value="set_status" />
+      <input type="hidden" name="id" value={order.id} />
+      {(["pending","sent","completed","cancelled"] as const).map((s) => {
+        const isCurrent = s === order.status;
+        return (
+          <button
+            type="submit"
+            name="status"
+            value={s}
+            disabled={isCurrent}
+            class:list={[
+              "text-xs px-3 py-2 border uppercase tracking-[0.14em] transition-colors",
+              isCurrent
+                ? "border-stone-300 bg-stone-100 text-stone-400 cursor-not-allowed"
+                : "border-stone-300 hover:border-stone-900 hover:bg-stone-900 hover:text-white cursor-pointer",
+            ]}
+          >
+            {STATUS_LABEL[s]}
+          </button>
+        );
+      })}
+    </form>
+  </section>
+
+  {/* Delete with warning */}
+  <section class="card border-red-100">
+    <h2 class="card-section-title mb-2 text-red-900">Eliminar pedido</h2>
+    <p class="text-xs text-stone-500 leading-relaxed mb-4">
+      Casi nunca conviene. Los detalles del aviso abajo.
+    </p>
+    <button
+      type="button"
+      id="cas-order-delete-show"
+      class="text-xs px-3 py-2 border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-700 transition-colors cursor-pointer uppercase tracking-[0.14em]"
+    >
+      Quiero eliminar este pedido
+    </button>
+
+    <div id="cas-order-delete-warning" class="hidden mt-5 border border-amber-300 bg-amber-50 p-4">
+      <div class="flex items-start gap-3">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="text-amber-700 shrink-0 mt-0.5" aria-hidden="true">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <div class="text-sm text-amber-900 leading-relaxed">
+          <p class="font-semibold mb-2">Mantener la intención de compra es preferible a borrarla.</p>
+          <p class="mb-2">
+            Cada pedido es un dato escaso: te dice qué libros generan
+            interés real, qué porcentaje de carritos convierte en venta
+            por WhatsApp y quién es un cliente que volvió. Borrarlo
+            elimina esa señal de forma permanente — y dos años después,
+            cuando quieras ver cuántos pedidos hubo de un título o
+            mandarles algo a quienes mostraron interés en un autor, no
+            podrás reconstruirla.
+          </p>
+          <p class="mb-2">
+            Si la conversación con el cliente se canceló, marca el estado
+            como <strong>Cancelado</strong>: la traza se conserva y queda
+            claro que no avanzó.
+          </p>
+          <p class="mb-3">
+            Borrar solo tiene sentido si es <strong>spam</strong>, un
+            <strong> duplicado por error</strong> o un <strong>pedido de
+            prueba</strong>.
+          </p>
+          <form method="POST" class="flex flex-wrap items-center gap-3 pt-3 border-t border-amber-200">
+            <input type="hidden" name="_action" value="delete" />
+            <input type="hidden" name="id" value={order.id} />
+            <input type="hidden" name="_confirmed" value="yes" />
+            <button
+              type="submit"
+              class="text-xs px-3 py-2 bg-red-700 text-white border border-red-700 hover:bg-red-800 transition-colors cursor-pointer uppercase tracking-[0.14em]"
+            >
+              Sí, eliminar igualmente
+            </button>
+            <button
+              type="button"
+              id="cas-order-delete-cancel"
+              class="text-xs px-3 py-2 border border-stone-300 text-stone-700 hover:border-stone-900 hover:bg-stone-100 transition-colors cursor-pointer uppercase tracking-[0.14em]"
+            >
+              Cancelar
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script is:inline>
+    (() => {
+      const show = document.getElementById("cas-order-delete-show");
+      const panel = document.getElementById("cas-order-delete-warning");
+      const cancel = document.getElementById("cas-order-delete-cancel");
+      if (!show || !panel || !cancel) return;
+      show.addEventListener("click", () => {
+        panel.classList.remove("hidden");
+        show.classList.add("hidden");
+      });
+      cancel.addEventListener("click", () => {
+        panel.classList.add("hidden");
+        show.classList.remove("hidden");
+      });
+    })();
+  </script>
+</AppLayout>

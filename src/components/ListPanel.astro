@@ -2,9 +2,10 @@
 import { Icon } from "astro-icon/components";
 import type { Resource, Level } from "~/lib/auth";
 
-// "admins" is owner-only and isn't a Resource (no permission level),
-// so we accept it as a literal extension here.
-type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "categories"> | "admins";
+// "admins" and "orders" are special panels with their own auth gates
+// (owner-only and owner+admin respectively) and aren't part of the
+// per-user permissions matrix.
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "categories"> | "admins" | "orders";
 
 interface Props {
   resource: PanelResource;
@@ -17,14 +18,29 @@ interface Props {
 const { resource, activeId, permission, hideOnMobile = false } = Astro.props;
 const canEdit = permission === "edit";
 
-const headerByResource: Record<PanelResource, { title: string; icon: string; newHref: string; newLabel: string }> = {
+const headerByResource: Record<PanelResource, { title: string; icon: string; newHref: string; newLabel: string; showNew?: boolean }> = {
   posts: { title: "Artículos", icon: "lucide:newspaper", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
   books: { title: "Libros", icon: "lucide:book-open", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", icon: "lucide:users", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
   categories: { title: "Categorías", icon: "lucide:folder-tree", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
   admins: { title: "Usuarios", icon: "lucide:users-round", newHref: "/admins/new", newLabel: "+ Nuevo usuario" },
+  // Orders: leads always originate from the public site, never the
+  // CMS — so there's no "+ Nuevo pedido" affordance.
+  orders: { title: "Pedidos", icon: "lucide:shopping-bag", newHref: "", newLabel: "", showNew: false },
 };
 const header = headerByResource[resource];
+const showNewBtn = header.showNew !== false;
+
+// Status filter chips, currently only used for /orders. Rendered as
+// segmented buttons under the search input so the user can narrow the
+// list without leaving the page.
+const ORDER_FILTERS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "pending", label: "Pendientes" },
+  { value: "sent", label: "Enviados" },
+  { value: "completed", label: "Completados" },
+  { value: "cancelled", label: "Cancelados" },
+];
 
 // Treat /new as a virtual active row at the top.
 const isNew = Astro.url.pathname.endsWith("/new");
@@ -41,7 +57,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
   <div class="px-5 pt-5 pb-3 border-b border-stone-200">
     <div class="flex items-center justify-between gap-3 mb-3">
       <h2 class="font-serif text-lg">{header.title}</h2>
-      {canEdit && (
+      {canEdit && showNewBtn && (
         <a
           href={header.newHref}
           data-astro-prefetch
@@ -67,6 +83,26 @@ const isNew = Astro.url.pathname.endsWith("/new");
         data-list-search
       />
     </div>
+    {resource === "orders" && (
+      <div class="mt-3 -mx-1 overflow-x-auto" data-list-filters>
+        <div class="flex gap-1 px-1 min-w-max">
+          {ORDER_FILTERS.map((f, idx) => (
+            <button
+              type="button"
+              data-status-filter={f.value}
+              class:list={[
+                "lp-filter-chip text-[11px] px-2.5 py-1 border transition uppercase tracking-[0.08em] cursor-pointer",
+                idx === 0
+                  ? "lp-filter-active border-stone-900 bg-stone-900 text-white"
+                  : "border-stone-300 text-stone-600 hover:border-stone-900 hover:text-stone-900",
+              ]}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
   </div>
 
   <nav class="flex-1 overflow-y-auto" data-list-nav>
@@ -122,6 +158,32 @@ const isNew = Astro.url.pathname.endsWith("/new");
   .lp-status-editor {
     background: #f5f5f4;
     color: #44403c;
+  }
+  /* Order statuses */
+  .lp-status-pending {
+    background: #fef3c7;
+    color: #92400e;
+  }
+  .lp-status-sent {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+  .lp-status-completed {
+    background: #dcfce7;
+    color: #14532d;
+  }
+  .lp-status-cancelled {
+    background: #e7e5e4;
+    color: #57534e;
+  }
+  /* Filter chip active state — used by /orders. */
+  .lp-filter-chip {
+    white-space: nowrap;
+  }
+  .lp-filter-chip.lp-filter-active {
+    background: #1c1917;
+    color: #fafaf9;
+    border-color: #1c1917;
   }
   .lp-link {
     display: flex;
@@ -473,24 +535,55 @@ const isNew = Astro.url.pathname.endsWith("/new");
       const list = panel.querySelector("[data-list-items]");
       if (!input || !list) return;
       const q = normalize(input.value.trim());
+      // Active filter (orders only). data-active-filter lives on the
+      // panel itself so it survives re-renders.
+      const filter = panel.dataset.activeFilter || "all";
+      const hasFilter = filter !== "all";
       let visible = 0;
       list.querySelectorAll("[data-list-row]").forEach((li) => {
         const text = li.dataset.searchText || "";
-        const match = !q || text.includes(q);
+        const status = li.dataset.status || "";
+        const matchQ = !q || text.includes(q);
+        const matchFilter = !hasFilter || status === filter;
+        const match = matchQ && matchFilter;
         li.classList.toggle("hidden", !match);
         if (match) visible++;
       });
-      // Toggle the empty state for the search-no-results case.
+      // Toggle the empty state for the no-results case (search or filter).
       const empty = panel.querySelector("[data-list-empty]");
       if (empty) {
-        if (q && visible === 0) {
-          empty.textContent = "Sin resultados.";
+        if ((q || hasFilter) && visible === 0) {
+          empty.textContent = q ? "Sin resultados." : "Sin pedidos con ese estado.";
           empty.classList.remove("hidden");
-        } else if (q) {
+        } else if (q || hasFilter) {
           empty.classList.add("hidden");
         }
-        // When q is empty, leave whatever state hydrate() set.
+        // When everything is cleared, leave whatever state hydrate() set.
       }
+    };
+
+    // Wire filter chips (orders only). Idempotent — flag on the panel.
+    const wireFilters = (panel) => {
+      if (panel.dataset.filtersWired) return;
+      const container = panel.querySelector("[data-list-filters]");
+      if (!container) return;
+      panel.dataset.filtersWired = "1";
+      container.addEventListener("click", (e) => {
+        const t = e.target instanceof Element ? e.target.closest("[data-status-filter]") : null;
+        if (!t) return;
+        const value = t.getAttribute("data-status-filter") || "all";
+        panel.dataset.activeFilter = value;
+        container.querySelectorAll("[data-status-filter]").forEach((b) => {
+          const active = b === t;
+          b.classList.toggle("lp-filter-active", active);
+          b.classList.toggle("border-stone-900", active);
+          b.classList.toggle("bg-stone-900", active);
+          b.classList.toggle("text-white", active);
+          b.classList.toggle("border-stone-300", !active);
+          b.classList.toggle("text-stone-600", !active);
+        });
+        applySearch(panel);
+      });
     };
 
     // Derive the active id from the current URL (more reliable than the SSR
@@ -709,6 +802,11 @@ const isNew = Astro.url.pathname.endsWith("/new");
             owner:     { cls: "lp-status-owner",  label: "owner" },
             admin:     { cls: "lp-status-admin",  label: "admin" },
             editor:    { cls: "lp-status-editor", label: "editor" },
+            // Order statuses — kept short to fit the row.
+            pending:   { cls: "lp-status-pending",   label: "pend" },
+            sent:      { cls: "lp-status-sent",      label: "env" },
+            completed: { cls: "lp-status-completed", label: "ok"  },
+            cancelled: { cls: "lp-status-cancelled", label: "canc" },
           };
           const sv = STATUS_VARIANTS[it.status];
           const status = sv
@@ -717,8 +815,11 @@ const isNew = Astro.url.pathname.endsWith("/new");
 
           const isPhoto = it.imageStyle === "photo";
           const isEmoji = it.imageStyle === "emoji";
+          const isNone  = it.imageStyle === "none";
           let thumb = "";
-          if (isEmoji) {
+          if (isNone) {
+            // Intentionally empty — no thumb at all (orders).
+          } else if (isEmoji) {
             const variant = KIND_VARIANTS[it.subtitle || ""] || "other";
             thumb = `<div class="lp-thumb lp-thumb-emoji lp-thumb-emoji-${variant}">${escape(it.imageUrl || "◇")}</div>`;
           } else {
@@ -744,7 +845,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
           const searchText = normalize(`${it.title || ""} ${it.subtitle || ""}`);
 
           return `
-            <li data-list-row data-search-text="${escape(searchText)}">
+            <li data-list-row data-search-text="${escape(searchText)}" data-status="${escape(it.status || "")}">
               <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch data-id="${escape(it.id)}">
                 <span class="lp-link-body">
                   ${grip}
@@ -828,6 +929,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
     const hydrateAll = () => {
       document.querySelectorAll("[data-list-panel]").forEach((panel) => {
         wireSearch(panel);
+        wireFilters(panel);
         // Only hydrate once per page load; activeId update is handled below.
         if (!panel.dataset.hydrated) {
           panel.dataset.hydrated = "1";
@@ -943,7 +1045,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
       if (url.searchParams.has("saved")) {
-        ["posts", "books", "authors"].forEach((r) => {
+        ["posts", "books", "authors", "categories", "orders"].forEach((r) => {
           try {
             sessionStorage.removeItem(cacheKey(r));
           } catch {}

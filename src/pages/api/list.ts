@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { requirePermission, type Resource } from "~/lib/auth";
+import { requirePermission, requireUserManager, type Resource } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { editorMeta } from "~/lib/relative-time";
 
@@ -18,8 +18,9 @@ type Item = {
   href: string;
   imageUrl?: string | null;
   /** "photo" → round, used for authors. "cover" → rectangular, used for books/articles.
-   *  "emoji" → render `imageUrl` as a literal character/emoji (used for categories). */
-  imageStyle?: "photo" | "cover" | "emoji";
+   *  "emoji" → render `imageUrl` as a literal character/emoji (used for categories).
+   *  "none"  → no thumb at all (used for orders, where there's no natural image). */
+  imageStyle?: "photo" | "cover" | "emoji" | "none";
   /** Categories: extra metadata used to render reorder controls. */
   reorderable?: boolean;
 };
@@ -46,8 +47,10 @@ function formatRelative(iso: string): string {
 }
 
 
-type ListResource = Resource;
-const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins"]);
+// Orders isn't part of the per-user permissions matrix (gated by
+// requireUserManager — owner+admin only), so we widen the union here.
+type ListResource = Resource | "orders";
+const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins", "orders"]);
 
 const KIND_EMOJI: Record<string, string> = {
   philosophy: "✦",
@@ -73,12 +76,24 @@ export const GET: APIRoute = async (ctx) => {
     });
   }
 
-  const guard = await requirePermission(ctx, resource, "view");
-  if (guard instanceof Response) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-      headers: { "content-type": "application/json" },
-    });
+  // Orders has its own owner+admin gate; everything else routes
+  // through the per-user permission matrix.
+  if (resource === "orders") {
+    const ord = await requireUserManager(ctx);
+    if (ord instanceof Response) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
+  } else {
+    const guard = await requirePermission(ctx, resource as Resource, "view");
+    if (guard instanceof Response) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
   }
 
   const supabase = getSupabaseServerClient(ctx.request, ctx.cookies);
@@ -148,6 +163,40 @@ export const GET: APIRoute = async (ctx) => {
       imageStyle: "emoji",
       reorderable: true,
     }));
+  } else if (resource === "orders") {
+    // Pull the count of items per order in a single query via the
+    // PostgREST aggregate. Sort by most recent first.
+    const { data } = await supabase
+      .from("purchase_intents")
+      .select(
+        "id, full_name, email, total_amount, currency, status, updated_at, items:purchase_intent_items(id), editor:profiles!purchase_intents_updated_by_fkey(id, full_name, email)",
+      )
+      .order("updated_at", { ascending: false });
+    const formatMoney = (amount: number | null, currency: string) => {
+      if (amount == null) return "—";
+      return new Intl.NumberFormat("es-CO", {
+        style: "currency",
+        currency: currency || "COP",
+        maximumFractionDigits: 0,
+      }).format(Number(amount));
+    };
+    items = (data ?? []).map((o: any) => {
+      const count = Array.isArray(o.items) ? o.items.length : 0;
+      const itemsLabel = count === 1 ? "1 libro" : `${count} libros`;
+      return {
+        id: o.id,
+        title: o.full_name || o.email,
+        // Subtitle bundles money + item count so the row tells a
+        // complete story without needing to open the detail panel.
+        subtitle: `${formatMoney(o.total_amount, o.currency)} · ${itemsLabel}`,
+        meta: editorMeta(o.updated_at, o.editor),
+        editorId: o.editor?.id ?? null,
+        status: o.status,
+        href: `/orders/${o.id}`,
+        imageUrl: null,
+        imageStyle: "none" as const,
+      };
+    });
   } else if (resource === "admins") {
     // Use the SECURITY DEFINER RPC so we can join auth.users.last_sign_in_at
     // (which lives in the protected auth schema). Sort client-side because
