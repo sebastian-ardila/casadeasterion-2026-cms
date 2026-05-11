@@ -1,0 +1,71 @@
+---
+// Site-wide typography panel for the public detail pages
+// (/catalogo/[slug] and /articulos/[slug]). The editor picks one
+// typeface for the title (h1) and one for the body / description /
+// content block. The chosen values are stored in a single JSONB
+// column in site_configuration and applied globally to every book
+// (or every article) — not per row.
+
+import Dropdown from "~/components/Dropdown.astro";
+import CardHeader from "~/components/CardHeader.astro";
+import { FONT_OPTIONS } from "~/lib/fonts";
+
+interface Props {
+  /** Visual heading of the panel ("Catálogo", "Artículos"). */
+  title: string;
+  /** Short, one-line description above the controls. */
+  description: string;
+  /** Icon shown next to the heading. */
+  icon: string;
+  /** Form input name prefix; backend writes to
+   *  `${namePrefix}_title_font` and `${namePrefix}_body_font`. */
+  namePrefix: "book_detail" | "article_detail";
+  /** Label rendered under "Tipo de letra del título". */
+  titleLabel: string;
+  /** Label rendered under "Tipo de letra del cuerpo". */
+  bodyLabel: string;
+  /** Currently-saved values. Pass "serif" for both as the default. */
+  titleFont: string;
+  bodyFont: string;
+  /** Hint shown at the bottom of the panel reminding editors that
+   *  these settings apply to every row. */
+  scopeNote: string;
+}
+
+const {
+  title,
+  description,
+  icon,
+  namePrefix,
+  titleLabel,
+  bodyLabel,
+  titleFont,
+  bodyFont,
+  scopeNote,
+} = Astro.props as Props;
+---
+
+<section class="card space-y-5">
+  <CardHeader icon={icon} title={title} description={description} />
+
+  <div class="grid sm:grid-cols-2 gap-4">
+    <div class="flex flex-col gap-2">
+      <span class="label">{titleLabel}</span>
+      <Dropdown
+        name={`${namePrefix}_title_font`}
+        value={titleFont}
+        options={FONT_OPTIONS}
+      />
+    </div>
+    <div class="flex flex-col gap-2">
+      <span class="label">{bodyLabel}</span>
+      <Dropdown
+        name={`${namePrefix}_body_font`}
+        value={bodyFont}
+        options={FONT_OPTIONS}
+      />
+    </div>
+  </div>
+
+  <p class="text-xs text-stone-500">{scopeNote}</p>
+</section>

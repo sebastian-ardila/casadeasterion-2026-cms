@@ -7,6 +7,7 @@ import Dropdown from "~/components/Dropdown.astro";
 import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astro";
 import ColorEditor from "~/components/ColorEditor.astro";
 import PageStub from "~/components/PageStub.astro";
+import DetailTypographyPanel from "~/components/DetailTypographyPanel.astro";
 import { fullName, formatAgo } from "~/lib/relative-time";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
@@ -75,9 +76,16 @@ let LATEST_BOOK: LatestBook = null;
 // — shown next to "Guardar configuración" so the team can see at a
 // glance who saved last.
 let LAST_SITE_EDIT: { updated_at: string; editor: { id: string; full_name: string | null; email: string | null } | null } | null = null;
+
+// Persisted typography for /catalogo/[slug] and /articulos/[slug]. We
+// hydrate the two DetailTypographyPanel dropdowns server-side so the
+// editor never sees a flash of the default "Cormorant Garamond" while
+// the saved choice is fetched.
+let BOOK_DETAIL_TYPO: { title_font: string; body_font: string } = { title_font: "serif", body_font: "serif" };
+let ARTICLE_DETAIL_TYPO: { title_font: string; body_font: string } = { title_font: "serif", body_font: "serif" };
 try {
   const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
-  const [postsRes, booksRes, authorsRes, latestPostRes, latestBookRes, siteEditRes] = await Promise.all([
+  const [postsRes, booksRes, authorsRes, latestPostRes, latestBookRes, siteEditRes, typoRes] = await Promise.all([
     sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("authors").select("slug, name").order("name").limit(40),
@@ -88,6 +96,9 @@ try {
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    sb.from("site_configuration")
+      .select("key, value")
+      .in("key", ["book_detail_typography", "article_detail_typography"]),
   ]);
   const books = (booksRes.data ?? []).filter((r) => r?.slug);
   const posts = (postsRes.data ?? []).filter((r) => r?.slug);
@@ -101,6 +112,16 @@ try {
   if (latestPostRes.data) LATEST_POST = latestPostRes.data as LatestPost;
   if (latestBookRes.data) LATEST_BOOK = latestBookRes.data as LatestBook;
   if (siteEditRes.data) LAST_SITE_EDIT = siteEditRes.data as typeof LAST_SITE_EDIT;
+  for (const row of typoRes.data ?? []) {
+    const v = row.value as { title_font?: string; body_font?: string } | null;
+    if (!v || typeof v !== "object") continue;
+    const merged = {
+      title_font: typeof v.title_font === "string" && v.title_font ? v.title_font : "serif",
+      body_font: typeof v.body_font === "string" && v.body_font ? v.body_font : "serif",
+    };
+    if (row.key === "book_detail_typography") BOOK_DETAIL_TYPO = merged;
+    if (row.key === "article_detail_typography") ARTICLE_DETAIL_TYPO = merged;
+  }
 } catch {
   // Network / RLS hiccup — keep the static picker only.
 }
@@ -139,6 +160,23 @@ if (Astro.request.method === "POST") {
       { key: "organization_logo_url", value: str(fd, "organization_logo_url") ?? "" },
       { key: "hero_image_url",        value: str(fd, "hero_image_url") ?? "" },
       { key: "hero_bg_color",         value: str(fd, "hero_bg_color") ?? "" },
+      {
+        // Tipografía global de /catalogo/[slug]. Se aplica a TODOS los
+        // libros — no a un libro individual.
+        key: "book_detail_typography",
+        value: {
+          title_font: str(fd, "book_detail_title_font") ?? "serif",
+          body_font: str(fd, "book_detail_body_font") ?? "serif",
+        },
+      },
+      {
+        // Tipografía global de /articulos/[slug].
+        key: "article_detail_typography",
+        value: {
+          title_font: str(fd, "article_detail_title_font") ?? "serif",
+          body_font: str(fd, "article_detail_body_font") ?? "serif",
+        },
+      },
     ];
 
     // Hero card config travels as a single JSON blob in a hidden input.
@@ -174,6 +212,7 @@ if (Astro.request.method === "POST") {
 const HERO_CARD_FONTS_MAP: Record<string, string> = {
   serif:               '"Cormorant Garamond", Georgia, serif',
   "eb-garamond":       '"EB Garamond", Georgia, serif',
+  goudy:               '"Sorts Mill Goudy", "EB Garamond", Georgia, serif',
   playfair:            '"Playfair Display", Georgia, serif',
   lora:                '"Lora", Georgia, serif',
   "libre-baskerville": '"Libre Baskerville", Georgia, serif',
@@ -785,15 +824,40 @@ const DEFAULT_HERO_CARD = {
 
   </div>{/* /[data-page-tab-panel="home"] */}
 
-  {/* Placeholder panels for the other site pages. Each one shows a
-      simple "en construcción" card; the real editor wiring will land
-      in follow-up work. */}
+  {/* Catálogo > Libro — tipografía global para /catalogo/[slug]. Los
+      defaults ("serif") se hidratan client-side desde site_configuration
+      vía /api/page-data?type=site, por lo que aquí pasamos el default
+      tipográfico y dejamos que el script reescriba el dropdown cuando
+      llega la respuesta. */}
   <div data-page-tab-panel="catalogo" hidden>
-    <PageStub icon="lucide:book-open" title="Catálogo" />
+    <DetailTypographyPanel
+      icon="lucide:book-open"
+      title="Libro"
+      description="Tipografía de la ficha individual de cada libro en /catalogo/[slug]. Aplica al título y a la descripción de TODOS los libros."
+      namePrefix="book_detail"
+      titleLabel="Tipo de letra del título"
+      bodyLabel="Tipo de letra de la descripción"
+      titleFont={BOOK_DETAIL_TYPO.title_font}
+      bodyFont={BOOK_DETAIL_TYPO.body_font}
+      scopeNote="Estos ajustes son globales: cambian la tipografía de todos los libros del catálogo a la vez, no de un libro en particular."
+    />
   </div>
+
+  {/* Artículos > Artículo — tipografía global para /articulos/[slug]. */}
   <div data-page-tab-panel="articulos" hidden>
-    <PageStub icon="lucide:newspaper" title="Artículos" />
+    <DetailTypographyPanel
+      icon="lucide:newspaper"
+      title="Artículo"
+      description="Tipografía de la página individual de cada artículo en /articulos/[slug]. Aplica al título y al contenido de TODOS los artículos."
+      namePrefix="article_detail"
+      titleLabel="Tipo de letra del título"
+      bodyLabel="Tipo de letra del contenido"
+      titleFont={ARTICLE_DETAIL_TYPO.title_font}
+      bodyFont={ARTICLE_DETAIL_TYPO.body_font}
+      scopeNote="Estos ajustes son globales: cambian la tipografía de todos los artículos a la vez, no de uno en particular."
+    />
   </div>
+
   <div data-page-tab-panel="autores" hidden>
     <PageStub icon="lucide:users" title="Autores" />
   </div>
