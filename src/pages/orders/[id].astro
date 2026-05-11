@@ -237,98 +237,116 @@ const editorName = order.editor ? fullName(order.editor) : null;
     </form>
   </section>
 
-  {/* Delete with warning */}
+  {/* Delete trigger */}
   <section class="card border-red-100">
     <h2 class="card-section-title mb-2 text-red-900">Eliminar pedido</h2>
-    <p class="text-xs text-stone-500 leading-relaxed mb-4">
-      Casi nunca conviene. Los detalles del aviso abajo.
+    <p class="text-xs text-stone-500 leading-relaxed mb-4 max-w-prose">
+      Casi nunca conviene — el registro es la única huella de la
+      demanda. Si la conversación se canceló, prefiere
+      <strong>Cancelado</strong> arriba.
     </p>
     <button
       type="button"
-      id="cas-order-delete-show"
+      data-cas-order-delete-open
       class="text-xs px-3 py-2 border border-red-300 text-red-700 hover:bg-red-50 hover:border-red-700 transition-colors cursor-pointer uppercase tracking-[0.14em]"
     >
-      Quiero eliminar este pedido
+      Eliminar pedido…
     </button>
-
-    <div id="cas-order-delete-warning" class="hidden mt-5 border border-amber-300 bg-amber-50 p-4">
-      <div class="flex items-start gap-3">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="text-amber-700 shrink-0 mt-0.5" aria-hidden="true">
-          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        <div class="text-sm text-amber-900 leading-relaxed">
-          <p class="font-semibold mb-2">Mantener la intención de compra es preferible a borrarla.</p>
-          <p class="mb-2">
-            Cada pedido es un dato escaso: te dice qué libros generan
-            interés real, qué porcentaje de carritos convierte en venta
-            por WhatsApp y quién es un cliente que volvió. Borrarlo
-            elimina esa señal de forma permanente — y dos años después,
-            cuando quieras ver cuántos pedidos hubo de un título o
-            mandarles algo a quienes mostraron interés en un autor, no
-            podrás reconstruirla.
-          </p>
-          <p class="mb-2">
-            Si la conversación con el cliente se canceló, marca el estado
-            como <strong>Cancelado</strong>: la traza se conserva y queda
-            claro que no avanzó.
-          </p>
-          <p class="mb-3">
-            Borrar solo tiene sentido si es <strong>spam</strong>, un
-            <strong> duplicado por error</strong> o un <strong>pedido de
-            prueba</strong>.
-          </p>
-          <form method="POST" class="flex flex-wrap items-center gap-3 pt-3 border-t border-amber-200">
-            <input type="hidden" name="_action" value="delete" />
-            <input type="hidden" name="id" value={order.id} />
-            <input type="hidden" name="_confirmed" value="yes" />
-            <button
-              type="submit"
-              class="text-xs px-3 py-2 bg-red-700 text-white border border-red-700 hover:bg-red-800 transition-colors cursor-pointer uppercase tracking-[0.14em]"
-            >
-              Sí, eliminar igualmente
-            </button>
-            <button
-              type="button"
-              id="cas-order-delete-cancel"
-              class="text-xs px-3 py-2 border border-stone-300 text-stone-700 hover:border-stone-900 hover:bg-stone-100 transition-colors cursor-pointer uppercase tracking-[0.14em]"
-            >
-              Cancelar
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
   </section>
 
+  {/* Modal — lives outside the section so its fixed positioning
+      doesn't get clipped by any ancestor overflow. */}
+  <div
+    id="cas-order-delete-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="cas-order-delete-title"
+    class="hidden fixed inset-0 z-50 flex items-center justify-center px-4"
+  >
+    <div data-cas-order-delete-backdrop class="absolute inset-0 bg-stone-900/55 backdrop-blur-sm"></div>
+    <div class="relative bg-white border border-stone-200 shadow-2xl max-w-md w-full">
+      <header class="flex items-start gap-3 p-5 border-b border-stone-100">
+        <span class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-amber-100 text-amber-700 shrink-0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </span>
+        <div class="min-w-0">
+          <p id="cas-order-delete-title" class="font-serif text-lg leading-tight">¿Eliminar este pedido?</p>
+          <p class="text-xs text-stone-500 mt-1">{order.full_name}</p>
+        </div>
+      </header>
+      <div class="px-5 py-4 text-sm text-stone-700 leading-relaxed">
+        <p>
+          Borrarlo destruye la única traza de demanda de este cliente —
+          análisis, recontacto y métricas de conversión se pierden para
+          siempre.
+        </p>
+      </div>
+      <form method="POST" class="flex items-center justify-end gap-2 px-5 py-4 border-t border-stone-100 bg-stone-50">
+        <input type="hidden" name="_action" value="delete" />
+        <input type="hidden" name="id" value={order.id} />
+        <input type="hidden" name="_confirmed" value="yes" />
+        <button
+          type="button"
+          data-cas-order-delete-cancel
+          class="text-xs px-3 py-2 border border-stone-300 text-stone-700 hover:border-stone-900 hover:bg-white transition-colors cursor-pointer uppercase tracking-[0.14em]"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="text-xs px-3 py-2 bg-red-700 text-white border border-red-700 hover:bg-red-800 transition-colors cursor-pointer uppercase tracking-[0.14em]"
+        >
+          Eliminar
+        </button>
+      </form>
+    </div>
+  </div>
+
   <script is:inline>
-    // Delegated handler on document so a single binding survives every
-    // Astro view transition. Wiring a fresh listener on every page
-    // load via getElementById doesn't work here: the inline script
-    // gets swapped in but not re-executed, so the button has no
-    // listener when arriving via in-app navigation.
+    // Delegated handler on document so the wiring survives Astro view
+    // transitions (inline scripts swapped in via the ClientRouter
+    // don't re-execute).
     (() => {
       if (window.__casOrderDeleteInit) return;
       window.__casOrderDeleteInit = true;
+
+      const openModal = () => {
+        const modal = document.getElementById("cas-order-delete-modal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        document.body.style.overflow = "hidden";
+      };
+      const closeModal = () => {
+        const modal = document.getElementById("cas-order-delete-modal");
+        if (!modal) return;
+        modal.classList.add("hidden");
+        document.body.style.overflow = "";
+      };
+
       document.addEventListener("click", (e) => {
         const t = e.target;
         if (!(t instanceof Element)) return;
-        const showBtn = t.closest("#cas-order-delete-show");
-        if (showBtn) {
-          const panel = document.getElementById("cas-order-delete-warning");
-          if (panel) panel.classList.remove("hidden");
-          showBtn.classList.add("hidden");
+        if (t.closest("[data-cas-order-delete-open]")) {
+          openModal();
           return;
         }
-        const cancelBtn = t.closest("#cas-order-delete-cancel");
-        if (cancelBtn) {
-          const panel = document.getElementById("cas-order-delete-warning");
-          const show = document.getElementById("cas-order-delete-show");
-          if (panel) panel.classList.add("hidden");
-          if (show) show.classList.remove("hidden");
+        if (
+          t.closest("[data-cas-order-delete-cancel]") ||
+          t.closest("[data-cas-order-delete-backdrop]")
+        ) {
+          closeModal();
           return;
         }
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        const modal = document.getElementById("cas-order-delete-modal");
+        if (modal && !modal.classList.contains("hidden")) closeModal();
       });
     })();
   </script>
