@@ -48,7 +48,6 @@ if (Astro.request.method === "POST") {
         format: str(fd, "format"),
         price_amount: num(fd, "price_amount"),
         price_currency: str(fd, "price_currency") ?? "COP",
-        whatsapp_message_override: str(fd, "whatsapp_message_override"),
         keywords: parseTags(fd, "keywords"),
         canonical_url: str(fd, "canonical_url"),
         cover_image_alt: str(fd, "cover_image_alt"),
@@ -170,17 +169,6 @@ const statusOptions = [
         </div>
         <Field label="Tags" name="tags" description="Separados por coma." />
       </div>
-    </section>
-
-    <section class="card space-y-5">
-      <CardHeader icon="lucide:message-circle" title="Compra por WhatsApp" description="Mensaje específico para este libro. Si lo dejas vacío, se usa la plantilla global." />
-      <Field
-        label="Mensaje WhatsApp (opcional)"
-        name="whatsapp_message_override"
-        type="textarea"
-        rows={3}
-        description="Variables disponibles: {{title}}, {{author}}, {{isbn}}, {{slug}}."
-      />
     </section>
 
     <section class="card space-y-5">
