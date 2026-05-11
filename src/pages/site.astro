@@ -58,9 +58,7 @@ const URL_STATIC: UrlOpt[] = [
   { value: "/catalogo",    label: "Catálogo",   hint: "Lista de libros",         icon: "lucide:book-open" },
   { value: "/articulos",   label: "Artículos",  hint: "Lista de artículos",      icon: "lucide:newspaper" },
   { value: "/autores",     label: "Autores",    hint: "Lista de autores",        icon: "lucide:users" },
-  { value: "/filosofia",   label: "Filosofía",  hint: "Sección filosofía",       icon: "lucide:scroll-text" },
-  { value: "/poesia",      label: "Poesía",     hint: "Sección poesía",          icon: "lucide:feather" },
-  { value: "/contacto",    label: "Contacto",   hint: "Formulario de contacto",  icon: "lucide:phone" },
+  { value: "/#contacto",   label: "Contacto",   hint: "Sección de contacto",     icon: "lucide:phone" },
 ];
 let URL_OPTIONS: UrlOpt[] = [...URL_STATIC];
 // The "Contenido de la card" mini preview also wants the latest
@@ -268,21 +266,9 @@ const DEFAULT_HERO_CARD = {
       <Icon name="lucide:newspaper" class="w-4 h-4" aria-hidden="true" />
       <span>Artículos</span>
     </button>
-    <button type="button" data-page-tab="filosofia" class="cas-pagechip">
-      <Icon name="lucide:scroll-text" class="w-4 h-4" aria-hidden="true" />
-      <span>Filosofía</span>
-    </button>
-    <button type="button" data-page-tab="poesia" class="cas-pagechip">
-      <Icon name="lucide:feather" class="w-4 h-4" aria-hidden="true" />
-      <span>Poesía</span>
-    </button>
     <button type="button" data-page-tab="autores" class="cas-pagechip">
       <Icon name="lucide:users" class="w-4 h-4" aria-hidden="true" />
       <span>Autores</span>
-    </button>
-    <button type="button" data-page-tab="contacto" class="cas-pagechip">
-      <Icon name="lucide:phone" class="w-4 h-4" aria-hidden="true" />
-      <span>Contacto</span>
     </button>
   </nav>
 
@@ -808,17 +794,8 @@ const DEFAULT_HERO_CARD = {
   <div data-page-tab-panel="articulos" hidden>
     <PageStub icon="lucide:newspaper" title="Artículos" />
   </div>
-  <div data-page-tab-panel="filosofia" hidden>
-    <PageStub icon="lucide:scroll-text" title="Filosofía" />
-  </div>
-  <div data-page-tab-panel="poesia" hidden>
-    <PageStub icon="lucide:feather" title="Poesía" />
-  </div>
   <div data-page-tab-panel="autores" hidden>
     <PageStub icon="lucide:users" title="Autores" />
-  </div>
-  <div data-page-tab-panel="contacto" hidden>
-    <PageStub icon="lucide:phone" title="Contacto" />
   </div>
 </AppLayout>
 
@@ -1947,8 +1924,7 @@ const DEFAULT_HERO_CARD = {
     const TAB_LABELS = { hero: "Hero", editorial: "Editorial", contacto: "Contacto", seo: "SEO" };
     const PAGE_LABELS = {
       home: "Home", catalogo: "Catálogo", articulos: "Artículos",
-      filosofia: "Filosofía", poesia: "Poesía", autores: "Autores",
-      contacto: "Contacto",
+      autores: "Autores",
     };
     // Rewrite the trailing crumbs of the breadcrumb (Webpage / Home / Hero
     // chain) to match the current page-tab and inner tab. Mirrors the
@@ -3466,7 +3442,7 @@ const DEFAULT_HERO_CARD = {
     // chip swap panels without a real navigation, replaceState the URL
     // so refresh keeps you on the same page, and dispatch a custom
     // event so the sidebar's sub-nav can highlight the matching item.
-    const PAGE_KEYS = ["home", "catalogo", "articulos", "filosofia", "poesia", "autores", "contacto"];
+    const PAGE_KEYS = ["home", "catalogo", "articulos", "autores"];
     const currentPageKey = () => {
       const k = (new URL(window.location.href).searchParams.get("page") || "home").toLowerCase();
       return PAGE_KEYS.includes(k) ? k : "home";
