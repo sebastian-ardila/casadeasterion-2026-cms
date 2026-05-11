@@ -93,6 +93,11 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
               )}
             </span>
           )}
+          {current.icon && (
+            <span class="cas-dd-display-glyph shrink-0">
+              <Icon name={current.icon} class="w-4 h-4" aria-hidden="true" />
+            </span>
+          )}
           <span class="truncate" style={current.fontFamily ? `font-family: ${current.fontFamily}` : undefined}>{current.label}</span>
         </>
       ) : (
@@ -371,11 +376,15 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
   .cas-dd-thumb-option {
     margin-right: 8px;
   }
-  .cas-dd-option-glyph {
+  .cas-dd-option-glyph,
+  .cas-dd-display-glyph {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: #57534e; /* stone-600 */
+  }
+  .cas-dd-display-glyph {
+    color: #1c1917;
   }
   .cas-dd-option-selected .cas-dd-option-glyph {
     color: #d6d3d1; /* stone-300 over dark bg */
@@ -519,8 +528,21 @@ const PERSON_FALLBACK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
           thumbHtml = `<span class="cas-dd-thumb shrink-0">${PERSON_FALLBACK}</span>`;
         }
       }
+      // Clone the lucide glyph from the chosen option (already prerendered
+      // by astro-icon SSR) into the display. Avoids needing iconify at runtime.
+      let glyphHtml = "";
+      const optionEl = root.querySelector(
+        `[data-dd-option][data-value="${option.value.replace(/"/g, '\\"')}"]`,
+      );
+      const srcGlyph = optionEl?.querySelector(".cas-dd-option-glyph svg");
+      if (srcGlyph) {
+        glyphHtml = `<span class="cas-dd-display-glyph shrink-0">${srcGlyph.outerHTML}</span>`;
+      }
       const fontStyle = option.fontFamily ? ` style="font-family: ${escapeHtml(option.fontFamily)}"` : "";
-      display.innerHTML = thumbHtml + `<span class="truncate"${fontStyle}>${escapeHtml(label)}</span>`;
+      display.innerHTML =
+        thumbHtml +
+        glyphHtml +
+        `<span class="truncate"${fontStyle}>${escapeHtml(label)}</span>`;
 
       // Update aria-selected on options
       root.querySelectorAll("[data-dd-option]").forEach((o) => {

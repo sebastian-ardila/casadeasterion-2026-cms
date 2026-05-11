@@ -1,12 +1,13 @@
 ---
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
-import Dropdown from "~/components/Dropdown.astro";
+import IconPicker from "~/components/IconPicker.astro";
 import BackToList from "~/components/BackToList.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
+import { CATEGORY_ICON_SET } from "~/lib/category-icons";
 
 const guard = await requirePermission(Astro, "categories", "view");
 if (guard instanceof Response) return guard;
@@ -31,13 +32,19 @@ if (Astro.request.method === "POST") {
     }
 
     const name = strReq(fd, "name");
+    const rawIcon = (str(fd, "icon") ?? "").trim();
+    const icon = CATEGORY_ICON_SET.has(rawIcon) ? rawIcon : null;
     const { error } = await supabase
       .from("categories")
       .update({
         name,
         slug: strReq(fd, "slug"),
-        kind: strReq(fd, "kind"),
+        // `kind` intentionally omitted — it's a legacy column from
+        // when /filosofia and /poesia were standalone routes. Books
+        // and posts now route by category_id alone, so the field
+        // isn't surfaced anymore; existing values are left untouched.
         description: str(fd, "description"),
+        icon,
         // sort_order intentionally omitted — managed via /api/categories/reorder.
       })
       .eq("id", id);
@@ -51,12 +58,6 @@ if (Astro.request.method === "POST") {
 const { data: category } = await supabase.from("categories").select("*").eq("id", id).maybeSingle();
 if (!category) return Astro.redirect("/categories");
 
-const kindOptions = [
-  { value: "philosophy", label: "Filosofía", hint: "ensayo, pensamiento" },
-  { value: "poetry", label: "Poesía", hint: "verso, antología" },
-  { value: "book", label: "Libro", hint: "para libros del catálogo" },
-  { value: "other", label: "Otro", hint: "narrativa, varios" },
-];
 ---
 
 <AppLayout title={category.name} resource="categories" activeId={category.id} breadcrumbLabel={category.name}>
@@ -64,7 +65,7 @@ const kindOptions = [
 
   <header class="mb-8">
     <h1 class="font-serif text-3xl md:text-4xl mb-2 leading-tight">{category.name}</h1>
-    <p class="text-stone-500 text-xs">/{category.slug} · orden {category.sort_order ?? 0}</p>
+    <p class="text-stone-500 text-xs">/{category.slug}</p>
   </header>
 
   {!canEdit && (
@@ -93,10 +94,10 @@ const kindOptions = [
 
     <section class="card space-y-5">
       <div>
-        <h2 class="card-section-title">Tipo</h2>
-        <p class="card-section-desc">Determina dónde aparece la categoría en el sitio público.</p>
+        <h2 class="card-section-title">Icono</h2>
+        <p class="card-section-desc">Acompaña el nombre de la categoría en el sitio y en el CMS. Opcional.</p>
       </div>
-      <Dropdown name="kind" value={category.kind} options={kindOptions} />
+      <IconPicker name="icon" value={category.icon} />
     </section>
 
     <section class="card space-y-5">
@@ -106,10 +107,6 @@ const kindOptions = [
       </div>
       <Field label="Descripción" name="description" type="textarea" rows={3} value={category.description} description="Opcional." />
     </section>
-
-    <p class="text-xs text-stone-500">
-      El <strong>orden</strong> se ajusta arrastrando categorías en el panel de la izquierda o con los botones <span class="font-mono">↑</span> <span class="font-mono">↓</span>. No es un campo editable aquí.
-    </p>
 
     <div class="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t border-stone-200">
       {canEdit ? (

@@ -77,7 +77,7 @@ if (Astro.request.method === "POST") {
 const [postRes, authorsRes, categoriesRes] = await Promise.all([
   supabase.from("posts").select("*").eq("id", id).maybeSingle(),
   supabase.from("authors").select("id, name, photo_url").order("name"),
-  supabase.from("categories").select("id, name").order("name"),
+  supabase.from("categories").select("id, name, icon").order("name"),
 ]);
 const post = postRes.data;
 const authors = authorsRes.data;
@@ -95,7 +95,11 @@ const authorOptions = [
 ];
 const categoryOptions = [
   { value: "", label: "Sin categoría" },
-  ...(categories ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ...(categories ?? []).map((c) => ({
+    value: c.id,
+    label: c.name,
+    icon: c.icon ? `lucide:${c.icon}` : undefined,
+  })),
 ];
 const statusOptions = [
   { value: "draft", label: "Borrador", hint: "no visible al público" },

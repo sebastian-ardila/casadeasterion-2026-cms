@@ -813,10 +813,17 @@ const isNew = Astro.url.pathname.endsWith("/new");
 
           const isPhoto = it.imageStyle === "photo";
           const isEmoji = it.imageStyle === "emoji";
+          const isIcon  = it.imageStyle === "icon";
           const isNone  = it.imageStyle === "none";
           let thumb = "";
           if (isNone) {
             // Intentionally empty — no thumb at all (orders).
+          } else if (isIcon) {
+            // imageUrl is a pre-rendered <svg> string. The server side
+            // is trusted (only ships icons from a curated set), so it's
+            // safe to inject as-is.
+            const variant = KIND_VARIANTS[it.subtitle || ""] || "other";
+            thumb = `<div class="lp-thumb lp-thumb-emoji lp-thumb-emoji-${variant} lp-thumb-icon">${it.imageUrl || ""}</div>`;
           } else if (isEmoji) {
             const variant = KIND_VARIANTS[it.subtitle || ""] || "other";
             thumb = `<div class="lp-thumb lp-thumb-emoji lp-thumb-emoji-${variant}">${escape(it.imageUrl || "◇")}</div>`;

@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { requirePermission, requireUserManager, type Resource } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { editorMeta } from "~/lib/relative-time";
+import { lucideSvg } from "~/lib/category-icons";
 
 type Item = {
   id: string;
@@ -18,9 +19,10 @@ type Item = {
   href: string;
   imageUrl?: string | null;
   /** "photo" → round, used for authors. "cover" → rectangular, used for books/articles.
-   *  "emoji" → render `imageUrl` as a literal character/emoji (used for categories).
+   *  "emoji" → render `imageUrl` as a literal character/emoji.
+   *  "icon"  → render `imageUrl` as a raw inline SVG (used for categories).
    *  "none"  → no thumb at all (used for orders, where there's no natural image). */
-  imageStyle?: "photo" | "cover" | "emoji" | "none";
+  imageStyle?: "photo" | "cover" | "emoji" | "icon" | "none";
   /** Categories: extra metadata used to render reorder controls. */
   reorderable?: boolean;
 };
@@ -52,17 +54,15 @@ function formatRelative(iso: string): string {
 type ListResource = Resource | "orders";
 const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins", "orders"]);
 
+// Legacy fallback emoji per category `kind`. Used only when a
+// category hasn't been given a lucide icon yet. The `kind` column
+// itself is no longer surfaced — categories now route purely by
+// their association to books/posts.
 const KIND_EMOJI: Record<string, string> = {
   philosophy: "✦",
   poetry: "❀",
   book: "❑",
   other: "◇",
-};
-const KIND_LABEL: Record<string, string> = {
-  philosophy: "Filosofía",
-  poetry: "Poesía",
-  book: "Libro",
-  other: "Otro",
 };
 
 export const GET: APIRoute = async (ctx) => {
@@ -149,20 +149,31 @@ export const GET: APIRoute = async (ctx) => {
   } else if (resource === "categories") {
     const { data } = await supabase
       .from("categories")
-      .select("id, name, slug, kind, sort_order, updated_at, editor:profiles!categories_updated_by_fkey(id, full_name, email)")
-      .order("sort_order")
+      .select("id, name, slug, description, kind, icon, updated_at, editor:profiles!categories_updated_by_fkey(id, full_name, email)")
       .order("name");
-    items = (data ?? []).map((c: any) => ({
-      id: c.id,
-      title: c.name,
-      subtitle: KIND_LABEL[c.kind] ?? c.kind,
-      meta: editorMeta(c.updated_at, c.editor),
-      editorId: c.editor?.id ?? null,
-      href: `/categories/${c.id}`,
-      imageUrl: KIND_EMOJI[c.kind] ?? KIND_EMOJI.other,
-      imageStyle: "emoji",
-      reorderable: true,
-    }));
+    items = (data ?? []).map((c: any) => {
+      // Prefer the user-picked lucide icon. Fall back to the kind-based
+      // emoji character so old categories without an icon still render.
+      const svg = lucideSvg(c.icon, { size: 18 });
+      // Subtitle: short description if present, else the slug. The
+      // legacy `kind` column is no longer surfaced.
+      const subtitle = (c.description || "").trim() || `/${c.slug}`;
+      return {
+        id: c.id,
+        title: c.name,
+        subtitle,
+        meta: editorMeta(c.updated_at, c.editor),
+        editorId: c.editor?.id ?? null,
+        href: `/categories/${c.id}`,
+        imageUrl: svg ?? (KIND_EMOJI[c.kind] ?? KIND_EMOJI.other),
+        imageStyle: svg ? "icon" as const : "emoji" as const,
+        // Drag/reorder removed: with categories now driven by their
+        // association to books/posts (and shown alphabetically as
+        // filter chips), there's no editorial reason to pick a custom
+        // order anymore.
+        reorderable: false,
+      };
+    });
   } else if (resource === "orders") {
     // Pull the count of items per order in a single query via the
     // PostgREST aggregate. Sort by most recent first.
