@@ -5,6 +5,7 @@ import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import AiSuggest from "~/components/AiSuggest.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
+import FormActions from "~/components/FormActions.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq, tags as parseTags } from "~/lib/forms";
@@ -128,16 +129,7 @@ const links = (collaborator.links as Record<string, string>) ?? {};
       <Field label="Palabras clave (SEO)" name="keywords" value={collaborator.keywords?.join(", ")} description="Separadas por coma." />
     </section>
 
-    <div class="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t border-stone-200">
-      {canEdit ? (
-        <>
-          <button type="submit" class="btn-primary">Guardar</button>
-          <a href="/collaborators" class="btn">Cancelar</a>
-        </>
-      ) : (
-        <a href="/collaborators" class="btn">Volver a la lista</a>
-      )}
-    </div>
+    <FormActions cancelHref="/collaborators" canEdit={canEdit} />
     </fieldset>
   </form>
 

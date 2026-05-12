@@ -9,6 +9,7 @@ import GalleryUpload from "~/components/GalleryUpload.astro";
 import AiSuggest from "~/components/AiSuggest.astro";
 import CardHeader from "~/components/CardHeader.astro";
 import MultiAuthorPicker from "~/components/MultiAuthorPicker.astro";
+import FormActions from "~/components/FormActions.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray, slugify } from "~/lib/forms";
@@ -185,9 +186,6 @@ const statusOptions = [
       </div>
     </section>
 
-    <div class="flex flex-col sm:flex-row gap-3 pt-4">
-      <button type="submit" class="btn-primary">Crear libro</button>
-      <a href="/books" class="btn">Cancelar</a>
-    </div>
+    <FormActions cancelHref="/books" saveLabel="Crear libro" />
   </form>
 </AppLayout>

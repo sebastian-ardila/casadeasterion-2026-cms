@@ -8,6 +8,7 @@ import AiSuggest from "~/components/AiSuggest.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import GalleryUpload from "~/components/GalleryUpload.astro";
 import MultiAuthorPicker from "~/components/MultiAuthorPicker.astro";
+import FormActions from "~/components/FormActions.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray } from "~/lib/forms";
@@ -235,24 +236,7 @@ const statusOptions = [
       <Field label="URL canónica" name="canonical_url" type="url" value={post.canonical_url} description="Solo si publicaste el mismo contenido en otro lado. Apunta a la versión original." />
     </section>
 
-    {/* Sticky save bar at the bottom of the viewport — mismo patrón
-        que /site (webpage > home / catálogo). Incluye Guardar, Cancelar
-        y, debajo, una zona de peligro con el botón Borrar. */}
-    {canEdit && (
-      <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
-        <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
-          <button type="submit" class="btn-primary">Guardar</button>
-          <a href="/posts" class="btn">Cancelar</a>
-        </div>
-      </div>
-    )}
-    {!canEdit && (
-      <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
-        <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
-          <a href="/posts" class="btn">Volver a la lista</a>
-        </div>
-      </div>
-    )}
+    <FormActions cancelHref="/posts" canEdit={canEdit} />
     </fieldset>
   </form>
 

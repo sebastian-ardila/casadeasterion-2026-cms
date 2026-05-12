@@ -8,6 +8,7 @@ import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astr
 import ColorEditor from "~/components/ColorEditor.astro";
 import PageStub from "~/components/PageStub.astro";
 import DetailTypographyPanel from "~/components/DetailTypographyPanel.astro";
+import FormActions from "~/components/FormActions.astro";
 import { fullName, formatAgo } from "~/lib/relative-time";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
@@ -871,13 +872,7 @@ const DEFAULT_HERO_CARD = {
 
       <div class="flex-1"></div>{/* spacer pushes the save bar to the bottom */}
 
-      {canEdit && (
-        <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
-          <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
-            <button type="submit" class="btn-primary">Guardar configuración</button>
-          </div>
-        </div>
-      )}
+      <FormActions canEdit={canEdit} saveLabel="Guardar configuración" />
     </form>
   </div>
 
@@ -901,13 +896,7 @@ const DEFAULT_HERO_CARD = {
 
       <div class="flex-1"></div>
 
-      {canEdit && (
-        <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
-          <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
-            <button type="submit" class="btn-primary">Guardar configuración</button>
-          </div>
-        </div>
-      )}
+      <FormActions canEdit={canEdit} saveLabel="Guardar configuración" />
     </form>
   </div>
 

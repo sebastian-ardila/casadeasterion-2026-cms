@@ -5,6 +5,7 @@ import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
 import AiSuggest from "~/components/AiSuggest.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
+import FormActions from "~/components/FormActions.astro";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq, slugify, tags as parseTags } from "~/lib/forms";
@@ -102,9 +103,6 @@ if (Astro.request.method === "POST") {
       <Field label="Palabras clave (SEO)" name="keywords" description="Separadas por coma." />
     </section>
 
-    <div class="flex flex-col sm:flex-row gap-3 pt-4">
-      <button type="submit" class="btn-primary">Crear autor</button>
-      <a href="/authors" class="btn">Cancelar</a>
-    </div>
+    <FormActions cancelHref="/authors" saveLabel="Crear autor" />
   </form>
 </AppLayout>

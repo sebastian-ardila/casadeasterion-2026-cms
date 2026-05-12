@@ -1,0 +1,124 @@
+---
+// Sticky bottom action bar shared by every editable form in the CMS.
+//
+// Renders a "Guardar" submit button + "Cancelar" link, pinned to the
+// bottom of the viewport. Wires up dirty-state detection so the save
+// button stays disabled until the user actually changes something —
+// works in both create and edit modes since the snapshot is taken
+// from the rendered initial values.
+//
+// Usage:
+//   <FormActions cancelHref="/posts" />
+//   <FormActions cancelHref="/posts" saveLabel="Crear publicación" />
+//   <FormActions cancelHref="/posts" canEdit={false} />  // read-only
+//
+// The component must live *inside* the <form> it controls. The dirty
+// detector walks up via .closest('form') from the bar root.
+
+interface Props {
+  /** URL where Cancelar navigates. Omit to hide the Cancelar button
+   *  (used by webpage config panels where reverting means a reload). */
+  cancelHref?: string;
+  /** Label of the submit button. Defaults to "Guardar". */
+  saveLabel?: string;
+  /** When false, hides Guardar and only shows "Volver a la lista"
+   *  (or nothing if cancelHref is also omitted). */
+  canEdit?: boolean;
+  /** Optional override for the disabled-on-clean behavior. Defaults
+   *  to true; set false to keep Guardar always enabled (rare). */
+  dirtyAware?: boolean;
+}
+
+const {
+  cancelHref,
+  saveLabel = "Guardar",
+  canEdit = true,
+  dirtyAware = true,
+} = Astro.props;
+---
+
+{canEdit ? (
+  <div
+    class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8"
+    data-cas-form-bar
+    data-cas-dirty-aware={dirtyAware ? "1" : "0"}
+  >
+    <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+      <button type="submit" class="btn-primary" data-cas-save-btn>{saveLabel}</button>
+      {cancelHref && <a href={cancelHref} class="btn">Cancelar</a>}
+      <slot name="meta" />
+    </div>
+  </div>
+) : cancelHref ? (
+  <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+    <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+      <a href={cancelHref} class="btn">Volver a la lista</a>
+    </div>
+  </div>
+) : null}
+
+<script>
+  // Dirty-form detection. Each [data-cas-form-bar] finds its parent
+  // form, takes an initial snapshot of all named fields, and
+  // disables its [data-cas-save-btn] until a change happens.
+  //
+  // We re-snapshot when the page is shown via bfcache (browsers
+  // restore the previous state on back-nav) so the button doesn't
+  // start enabled with stale dirty=true.
+  function snapshotForm(form: HTMLFormElement): string {
+    const arr: [string, string][] = [];
+    form.querySelectorAll<HTMLElement>("[name]").forEach((el) => {
+      const e = el as HTMLInputElement;
+      // Skip elements without a usable name (e.g. <fieldset>).
+      if (!e.name) return;
+      if (e.type === "checkbox" || e.type === "radio") {
+        arr.push([e.name + ":" + (e.value || ""), e.checked ? "1" : ""]);
+      } else if (e.type === "file") {
+        arr.push([e.name, e.files && e.files.length ? "file:" + e.files.length : ""]);
+      } else if (e.type === "submit" || e.type === "button" || e.type === "reset") {
+        // Buttons participate in form data but we don't want them to
+        // count as "dirty".
+        return;
+      } else {
+        arr.push([e.name, e.value ?? ""]);
+      }
+    });
+    return JSON.stringify(arr.sort());
+  }
+
+  function bindBar(bar: HTMLElement) {
+    if (bar.dataset.casBound === "1") return;
+    if (bar.dataset.casDirtyAware === "0") return;
+    const form = bar.closest("form");
+    if (!form) return;
+    const saveBtn = bar.querySelector<HTMLButtonElement>("[data-cas-save-btn]");
+    if (!saveBtn) return;
+    bar.dataset.casBound = "1";
+
+    let initial = snapshotForm(form);
+    const apply = () => {
+      const dirty = snapshotForm(form) !== initial;
+      saveBtn.disabled = !dirty;
+      saveBtn.classList.toggle("opacity-50", !dirty);
+      saveBtn.classList.toggle("cursor-not-allowed", !dirty);
+    };
+
+    apply();
+    form.addEventListener("input", apply);
+    form.addEventListener("change", apply);
+    // Some widgets (Tiptap, custom uploaders, multi-author picker)
+    // mutate hidden inputs directly without firing the native events.
+    // They can opt in by dispatching a "cas:dirty" CustomEvent that
+    // bubbles up to the form.
+    form.addEventListener("cas:dirty", apply);
+
+    window.addEventListener("pageshow", (e) => {
+      if ((e as PageTransitionEvent).persisted) {
+        initial = snapshotForm(form);
+        apply();
+      }
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>("[data-cas-form-bar]").forEach(bindBar);
+</script>
