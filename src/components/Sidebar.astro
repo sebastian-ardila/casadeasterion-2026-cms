@@ -17,21 +17,22 @@ const isOwner = user?.role === "owner";
 // active. Used by Landing Page to expose Home / Catálogo / Artículos / etc.
 type SidebarSub = { href: string; label: string; icon: string; pageKey?: string };
 const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string; subItems?: SidebarSub[] }> = [
-  { href: "/",            label: "Inicio",       icon: "lucide:home" },
-  { href: "/books",       label: "Libros",       icon: "lucide:book-open",       resource: "books",      countKey: "books" },
-  { href: "/posts",       label: "Artículos",    icon: "lucide:newspaper",       resource: "posts",      countKey: "posts" },
-  { href: "/authors",     label: "Autores",      icon: "lucide:users",           resource: "authors",    countKey: "authors" },
-  { href: "/categories",  label: "Categorías",   icon: "lucide:folder-tree",     resource: "categories", countKey: "categories" },
+  { href: "/",              label: "Inicio",        icon: "lucide:home" },
+  { href: "/books",         label: "Libros",        icon: "lucide:book-open",       resource: "books",         countKey: "books" },
+  { href: "/posts",         label: "Publicaciones", icon: "lucide:newspaper",       resource: "posts",         countKey: "posts" },
+  { href: "/authors",       label: "Autores",       icon: "lucide:users",           resource: "authors",       countKey: "authors" },
+  { href: "/collaborators", label: "Colaboradores", icon: "lucide:user-plus",       resource: "collaborators", countKey: "collaborators" },
+  { href: "/categories",    label: "Categorías",    icon: "lucide:folder-tree",     resource: "categories",    countKey: "categories" },
   {
     href: "/site",
     label: "Webpage",
     icon: "lucide:layout-template",
     resource: "site",
     subItems: [
-      { href: "/site",                 label: "Home",      icon: "lucide:home",         pageKey: "home"      },
-      { href: "/site?page=catalogo",   label: "Catálogo",  icon: "lucide:book-open",    pageKey: "catalogo"  },
-      { href: "/site?page=articulos",  label: "Artículos", icon: "lucide:newspaper",    pageKey: "articulos" },
-      { href: "/site?page=autores",    label: "Autores",   icon: "lucide:users",        pageKey: "autores"   },
+      { href: "/site",                  label: "Home",          icon: "lucide:home",         pageKey: "home"      },
+      { href: "/site?page=catalogo",    label: "Catálogo",      icon: "lucide:book-open",    pageKey: "catalogo"  },
+      { href: "/site?page=articulos",   label: "Publicaciones", icon: "lucide:newspaper",    pageKey: "articulos" },
+      { href: "/site?page=autores",     label: "Autores",       icon: "lucide:users",        pageKey: "autores"   },
     ],
   },
   { href: "/orders",      label: "Pedidos",      icon: "lucide:shopping-bag",    managerOnly: true,      countKey: "orders" },

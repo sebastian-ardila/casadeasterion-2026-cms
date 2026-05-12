@@ -12,7 +12,7 @@ import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray, slugify } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
-import { parseAuthorIds, syncPostAuthors } from "~/lib/multi-author";
+import { parseAuthorIds, syncPostAuthors, syncPostCollaborators } from "~/lib/multi-author";
 
 const guard = await requirePermission(Astro, "posts", "edit");
 if (guard instanceof Response) return guard;
@@ -31,7 +31,8 @@ if (Astro.request.method === "POST") {
     const reading = Math.max(1, Math.round(content_md.split(/\s+/).length / 220));
 
     // author_id intentionally omitted: it's set by a Postgres trigger
-    // from the post_authors junction (synced below).
+    // from the post_authors junction (synced below). book_id is the
+    // optional parent book link.
     const { data, error } = await supabase
       .from("posts")
       .insert({
@@ -42,6 +43,7 @@ if (Astro.request.method === "POST") {
         content_md,
         cover_image_url: str(fd, "cover_image_url"),
         category_id: str(fd, "category_id"),
+        book_id: str(fd, "book_id"),
         status,
         published_at: status === "published" ? new Date().toISOString() : null,
         reading_time_minutes: num(fd, "reading_time_minutes") ?? reading,
@@ -56,6 +58,7 @@ if (Astro.request.method === "POST") {
       .single();
     if (error) throw error;
     await syncPostAuthors(supabase, data.id, parseAuthorIds(fd, "author_ids"));
+    await syncPostCollaborators(supabase, data.id, parseAuthorIds(fd, "collaborator_ids"));
     const willPublish = status === "published";
     return Astro.redirect(`/posts/${data.id}?saved=1&action=created&entity=post${willPublish ? "&publish=1" : ""}`);
   } catch (err) {
@@ -63,11 +66,15 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const [{ data: authorsData }, { data: categories }] = await Promise.all([
+const [{ data: authorsData }, { data: collaboratorsData }, { data: categories }, { data: booksData }] = await Promise.all([
   supabase.from("authors").select("id, name, photo_url").order("name"),
+  supabase.from("collaborators").select("id, name, photo_url").order("name"),
   supabase.from("categories").select("id, name, icon").order("name"),
+  supabase.from("books").select("id, title").eq("status", "published").order("title"),
 ]);
 const authors = authorsData ?? [];
+const collaborators = collaboratorsData ?? [];
+const books = booksData ?? [];
 const categoryOptions = [
   { value: "", label: "Sin categoría" },
   ...(categories ?? []).map((c) => ({
@@ -76,15 +83,19 @@ const categoryOptions = [
     icon: c.icon ? `lucide:${c.icon}` : undefined,
   })),
 ];
+const bookOptions = [
+  { value: "", label: "No pertenece a un libro" },
+  ...books.map((b) => ({ value: b.id, label: b.title, icon: "lucide:book-open" })),
+];
 const statusOptions = [
   { value: "draft", label: "Borrador", hint: "no visible al público" },
   { value: "published", label: "Publicado", hint: "dispara rebuild" },
 ];
 ---
 
-<AppLayout title="Nuevo artículo" resource="posts">
-  <BackToList href="/posts" label="Artículos" />
-  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nuevo artículo</h1>
+<AppLayout title="Nueva publicación" resource="posts">
+  <BackToList href="/posts" label="Publicaciones" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nueva publicación</h1>
 
   {formError && (
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
@@ -94,12 +105,12 @@ const statusOptions = [
 
     <section class="card space-y-5">
       <div>
-        <h2 class="card-section-title">Identidad del artículo</h2>
-        <p class="card-section-desc">Cómo se nombra y se encuentra el artículo en el sitio.</p>
+        <h2 class="card-section-title">Identidad de la publicación</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra la publicación en el sitio.</p>
       </div>
       <Field label="Título" name="title" required description="El encabezado principal que verán los lectores." />
       <Field label="Slug" name="slug" description="Se autogenera del título si lo dejas vacío. Aparece en la URL: /articulos/<slug>." />
-      <Field label="Subtítulo" name="subtitle" description="Aparece debajo del título en la página del artículo. Opcional." />
+      <Field label="Subtítulo" name="subtitle" description="Aparece debajo del título en la página de la publicación. Opcional." />
       <Field label="Resumen (excerpt)" name="excerpt" type="textarea" rows={3} description="Texto corto que se muestra en tarjetas de listado y al compartir en redes." />
     </section>
 
@@ -109,13 +120,13 @@ const statusOptions = [
         <p class="card-section-desc">Las imágenes se convierten automáticamente a WebP al subirlas.</p>
       </div>
       <ImageUpload name="cover_image_url" label="Imagen de portada" bucket="covers" />
-      <GalleryUpload name="gallery_urls" label="Galería de imágenes" bucket="content" hint="Imágenes adicionales del artículo (aparte de la portada)." />
+      <GalleryUpload name="gallery_urls" label="Galería de imágenes" bucket="content" hint="Imágenes adicionales (aparte de la portada)." />
     </section>
 
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Clasificación</h2>
-        <p class="card-section-desc">Asocia el artículo a un autor y a una categoría del menú.</p>
+        <p class="card-section-desc">Asocia la publicación a autores, colaboradores, una categoría del menú, y opcionalmente a un libro.</p>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="cell-stack">
@@ -126,9 +137,23 @@ const statusOptions = [
             selectedIds={[]}
           />
         </div>
+        <div class="cell-stack">
+          <MultiAuthorPicker
+            name="collaborator_ids"
+            label="Colaboradores"
+            authors={collaborators}
+            selectedIds={[]}
+          />
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
         <div class="cell-stack flex flex-col gap-2">
           <span class="label">Categoría</span>
           <Dropdown name="category_id" options={categoryOptions} placeholder="Sin categoría" />
+        </div>
+        <div class="cell-stack flex flex-col gap-2">
+          <span class="label">Pertenece a un libro</span>
+          <Dropdown name="book_id" options={bookOptions} placeholder="No pertenece a un libro" />
         </div>
       </div>
     </section>
@@ -144,7 +169,7 @@ const statusOptions = [
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Metadatos y estado</h2>
-        <p class="card-section-desc">Información complementaria y si el artículo es visible al público.</p>
+        <p class="card-section-desc">Información complementaria y si la publicación es visible al público.</p>
       </div>
       <div class="grid sm:grid-cols-3 gap-4">
         <Field label="Tiempo (min)" name="reading_time_minutes" type="number" description="Vacío = se calcula del contenido." />
@@ -163,14 +188,18 @@ const statusOptions = [
       </div>
       <AiSuggest kind="post" contentField="content_md" />
       <Field label="Meta description" name="meta_description" type="textarea" rows={2} description="Aparece en buscadores y al compartir. 140-160 caracteres recomendado. Vacío = usa el resumen." />
-      <Field label="Palabras clave (SEO)" name="keywords" description="Términos por los que esperas que la gente encuentre este artículo. Separadas por coma." />
+      <Field label="Palabras clave (SEO)" name="keywords" description="Términos por los que esperas que la gente encuentre esta publicación. Separadas por coma." />
       <Field label="Texto alt de la imagen de portada" name="cover_image_alt" description="Descripción de la imagen para lectores de pantalla y SEO." />
       <Field label="URL canónica" name="canonical_url" type="url" description="Solo si publicaste el mismo contenido en otro lado. Apunta a la versión original." />
     </section>
 
-    <div class="flex flex-col sm:flex-row gap-3 pt-4">
-      <button type="submit" class="btn-primary">Crear artículo</button>
-      <a href="/posts" class="btn">Cancelar</a>
+    {/* Sticky bottom bar — Crear + Cancelar siempre visibles, igual
+        que /site (webpage > home / catálogo). */}
+    <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+      <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+        <button type="submit" class="btn-primary">Crear publicación</button>
+        <a href="/posts" class="btn">Cancelar</a>
+      </div>
     </div>
   </form>
 </AppLayout>

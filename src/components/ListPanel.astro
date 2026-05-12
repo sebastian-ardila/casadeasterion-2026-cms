@@ -5,7 +5,7 @@ import type { Resource, Level } from "~/lib/auth";
 // "admins" and "orders" are special panels with their own auth gates
 // (owner-only and owner+admin respectively) and aren't part of the
 // per-user permissions matrix.
-type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "categories"> | "admins" | "orders";
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "categories"> | "admins" | "orders";
 
 interface Props {
   resource: PanelResource;
@@ -19,9 +19,10 @@ const { resource, activeId, permission, hideOnMobile = false } = Astro.props;
 const canEdit = permission === "edit";
 
 const headerByResource: Record<PanelResource, { title: string; icon: string; newHref: string; newLabel: string; showNew?: boolean }> = {
-  posts: { title: "Artículos", icon: "lucide:newspaper", newHref: "/posts/new", newLabel: "+ Nuevo artículo" },
+  posts: { title: "Publicaciones", icon: "lucide:newspaper", newHref: "/posts/new", newLabel: "+ Nueva publicación" },
   books: { title: "Libros", icon: "lucide:book-open", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", icon: "lucide:users", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
+  collaborators: { title: "Colaboradores", icon: "lucide:user-plus", newHref: "/collaborators/new", newLabel: "+ Nuevo colaborador" },
   categories: { title: "Categorías", icon: "lucide:folder-tree", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
   admins: { title: "Usuarios", icon: "lucide:users-round", newHref: "/admins/new", newLabel: "+ Nuevo usuario" },
   // Orders: leads always originate from the public site, never the

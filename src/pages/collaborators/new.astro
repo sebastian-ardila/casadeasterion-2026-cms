@@ -1,0 +1,110 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
+import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import AiSuggest from "~/components/AiSuggest.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq, slugify, tags as parseTags } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requirePermission(Astro, "collaborators", "edit");
+if (guard instanceof Response) return guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const name = strReq(fd, "name");
+    const slug = str(fd, "slug") ?? slugify(name);
+
+    const { data, error } = await supabase
+      .from("collaborators")
+      .insert({
+        name,
+        slug,
+        bio_md: str(fd, "bio_md"),
+        photo_url: str(fd, "photo_url"),
+        links: {
+          twitter: str(fd, "link_twitter") ?? "",
+          web: str(fd, "link_web") ?? "",
+          instagram: str(fd, "link_instagram") ?? "",
+        },
+        keywords: parseTags(fd, "keywords"),
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return Astro.redirect(`/collaborators/${data.id}?saved=1&action=created&entity=collaborator&publish=1`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+---
+
+<AppLayout title="Nuevo colaborador" resource="collaborators">
+  <BackToList href="/collaborators" label="Colaboradores" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nuevo colaborador</h1>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se nombra al colaborador en el sitio.</p>
+      </div>
+      <Field label="Nombre" name="name" required description="Nombre completo." />
+      <Field label="Slug" name="slug" description="Se autogenera del nombre si lo dejas vacío." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Foto</h2>
+        <p class="card-section-desc">Imagen cuadrada, mínimo 600×600px. Se convierte a WebP.</p>
+      </div>
+      <ImageUpload name="photo_url" label="Foto" bucket="authors" />
+    </section>
+
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Biografía</h2>
+        <p class="card-section-desc">Texto introductorio. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="bio_md" label="" />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Enlaces</h2>
+        <p class="card-section-desc">Páginas externas vinculadas al colaborador (opcional).</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <Field label="Web" name="link_web" type="url" description="Sitio personal." />
+        <Field label="Twitter" name="link_twitter" type="url" description="URL del perfil." />
+        <Field label="Instagram" name="link_instagram" type="url" description="URL del perfil." />
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO</h2>
+        <p class="card-section-desc">Términos para que la ficha del colaborador aparezca en buscadores.</p>
+      </div>
+      <AiSuggest kind="author" contentField="bio_md" />
+      <Field label="Palabras clave (SEO)" name="keywords" description="Separadas por coma." />
+    </section>
+
+    <div class="flex flex-col sm:flex-row gap-3 pt-4">
+      <button type="submit" class="btn-primary">Crear colaborador</button>
+      <a href="/collaborators" class="btn">Cancelar</a>
+    </div>
+  </form>
+</AppLayout>

@@ -25,11 +25,12 @@ export const GET: APIRoute = async (ctx) => {
   };
 
   const tasks: Promise<unknown>[] = [];
-  if (perms.books       !== "none") tasks.push(countOf("books",       "books"));
-  if (perms.posts       !== "none") tasks.push(countOf("posts",       "posts"));
-  if (perms.authors     !== "none") tasks.push(countOf("authors",     "authors"));
-  if (perms.categories  !== "none") tasks.push(countOf("categories",  "categories"));
-  if (perms.subscribers !== "none") tasks.push(countOf("subscribers", "subscribers"));
+  if (perms.books         !== "none") tasks.push(countOf("books",         "books"));
+  if (perms.posts         !== "none") tasks.push(countOf("posts",         "posts"));
+  if (perms.authors       !== "none") tasks.push(countOf("authors",       "authors"));
+  if (perms.collaborators !== "none") tasks.push(countOf("collaborators", "collaborators"));
+  if (perms.categories    !== "none") tasks.push(countOf("categories",    "categories"));
+  if (perms.subscribers   !== "none") tasks.push(countOf("subscribers",   "subscribers"));
   // Orders are visible to anyone with the admins capability
   // (owners + admins). Permissions don't include "orders" yet, so we
   // mirror the admins gate.

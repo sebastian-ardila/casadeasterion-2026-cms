@@ -52,7 +52,15 @@ function formatRelative(iso: string): string {
 // Orders isn't part of the per-user permissions matrix (gated by
 // requireUserManager — owner+admin only), so we widen the union here.
 type ListResource = Resource | "orders";
-const ALLOWED = new Set<ListResource>(["posts", "books", "authors", "categories", "admins", "orders"]);
+const ALLOWED = new Set<ListResource>([
+  "posts",
+  "books",
+  "authors",
+  "collaborators",
+  "categories",
+  "admins",
+  "orders",
+]);
 
 // Legacy fallback emoji per category `kind`. Used only when a
 // category hasn't been given a lucide icon yet. The `kind` column
@@ -149,6 +157,24 @@ export const GET: APIRoute = async (ctx) => {
       meta: editorMeta(a.updated_at, a.editor),
       editorId: a.editor?.id ?? null,
       href: `/authors/${a.id}`,
+      imageUrl: a.photo_url ?? null,
+      imageStyle: "photo",
+    }));
+  } else if (resource === "collaborators") {
+    // Mirror of authors. Same shape & FK pattern; lives in its own
+    // table so editors can keep contributing roles (translator,
+    // illustrator, prologue writer) separate from the canonical author.
+    const { data } = await supabase
+      .from("collaborators")
+      .select("id, name, slug, photo_url, updated_at, editor:profiles!collaborators_updated_by_fkey(id, full_name, email)")
+      .order("name");
+    items = (data ?? []).map((a: any) => ({
+      id: a.id,
+      title: a.name,
+      subtitle: `/${a.slug}`,
+      meta: editorMeta(a.updated_at, a.editor),
+      editorId: a.editor?.id ?? null,
+      href: `/collaborators/${a.id}`,
       imageUrl: a.photo_url ?? null,
       imageStyle: "photo",
     }));

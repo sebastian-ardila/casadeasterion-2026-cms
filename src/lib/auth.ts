@@ -4,22 +4,47 @@ import { getSupabaseServerClient } from "./supabase-server";
 
 export type AdminUser = NonNullable<App.Locals["user"]>;
 
-export type Resource = "posts" | "books" | "authors" | "categories" | "site" | "subscribers" | "admins";
+export type Resource =
+  | "posts"
+  | "books"
+  | "authors"
+  | "collaborators"
+  | "categories"
+  | "site"
+  | "subscribers"
+  | "admins";
 export type Level = "none" | "view" | "edit";
 
 /** A CMS account role. owner > admin > editor > viewer (no CMS access). */
 export type CmsRole = "owner" | "admin" | "editor";
 
 /** Resources whose permissions are configurable per-user (in admin_permissions). */
-export const RESOURCES: Resource[] = ["posts", "books", "authors", "categories", "site", "subscribers", "admins"];
+export const RESOURCES: Resource[] = [
+  "posts",
+  "books",
+  "authors",
+  "collaborators",
+  "categories",
+  "site",
+  "subscribers",
+  "admins",
+];
 
 /** The configurable subset that admins/editors can have row-level overrides for. */
-export const CONFIGURABLE_RESOURCES: Resource[] = ["posts", "books", "authors", "categories", "site"];
+export const CONFIGURABLE_RESOURCES: Resource[] = [
+  "posts",
+  "books",
+  "authors",
+  "collaborators",
+  "categories",
+  "site",
+];
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
-  posts: "Artículos",
+  posts: "Publicaciones",
   books: "Libros",
   authors: "Autores",
+  collaborators: "Colaboradores",
   categories: "Categorías",
   site: "Configuración",
   subscribers: "Suscriptores",
@@ -31,6 +56,7 @@ export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   posts: "edit",
   books: "edit",
   authors: "edit",
+  collaborators: "edit",
   categories: "view",
   site: "none",
   subscribers: "none",
@@ -42,6 +68,7 @@ export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   posts: "edit",
   books: "edit",
   authors: "edit",
+  collaborators: "edit",
   categories: "edit",
   site: "edit",
   subscribers: "none",

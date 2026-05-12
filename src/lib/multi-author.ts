@@ -92,3 +92,40 @@ export async function fetchPostAuthorIds(
     .order("sort_order");
   return (data ?? []).map((r) => r.author_id);
 }
+
+// Collaborator junction. Same shape as author junction but with a
+// different child column name; we keep a separate helper instead of
+// generalizing the sync function because the column names differ and
+// PostgREST is strict about insert keys.
+
+export async function syncPostCollaborators(
+  supabase: SupabaseClient<Database>,
+  postId: string,
+  collaboratorIds: string[],
+): Promise<void> {
+  const { error: delErr } = await supabase
+    .from("post_collaborators")
+    .delete()
+    .eq("post_id", postId);
+  if (delErr) throw delErr;
+  if (collaboratorIds.length === 0) return;
+  const rows = collaboratorIds.map((collaborator_id, index) => ({
+    post_id: postId,
+    collaborator_id,
+    sort_order: index,
+  }));
+  const { error: insErr } = await supabase.from("post_collaborators").insert(rows as never);
+  if (insErr) throw insErr;
+}
+
+export async function fetchPostCollaboratorIds(
+  supabase: SupabaseClient<Database>,
+  postId: string,
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("post_collaborators")
+    .select("collaborator_id, sort_order")
+    .eq("post_id", postId)
+    .order("sort_order");
+  return (data ?? []).map((r) => r.collaborator_id);
+}

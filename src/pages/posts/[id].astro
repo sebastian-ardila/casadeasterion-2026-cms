@@ -16,6 +16,8 @@ import {
   parseAuthorIds,
   syncPostAuthors,
   fetchPostAuthorIds,
+  syncPostCollaborators,
+  fetchPostCollaboratorIds,
 } from "~/lib/multi-author";
 
 const guard = await requirePermission(Astro, "posts", "view");
@@ -45,7 +47,7 @@ if (Astro.request.method === "POST") {
     const content_md = strReq(fd, "content_md");
     // author_id is the denormalized "primary author"; a Postgres
     // trigger maintains it from the post_authors junction, which we
-    // sync below.
+    // sync below. book_id is the optional parent book (nullable).
     const update: Record<string, unknown> = {
       title: strReq(fd, "title"),
       slug: strReq(fd, "slug"),
@@ -54,6 +56,7 @@ if (Astro.request.method === "POST") {
       content_md,
       cover_image_url: str(fd, "cover_image_url"),
       category_id: str(fd, "category_id"),
+      book_id: str(fd, "book_id"),
       status: newStatus,
       reading_time_minutes:
         num(fd, "reading_time_minutes") ??
@@ -75,6 +78,7 @@ if (Astro.request.method === "POST") {
     const { error } = await supabase.from("posts").update(update).eq("id", id);
     if (error) throw error;
     await syncPostAuthors(supabase, id, parseAuthorIds(fd, "author_ids"));
+    await syncPostCollaborators(supabase, id, parseAuthorIds(fd, "collaborator_ids"));
     const triggersRebuild = newStatus === "published" || existing?.status === "published";
     return Astro.redirect(`/posts/${id}?saved=1&action=updated&entity=post${triggersRebuild ? "&publish=1" : ""}`);
   } catch (err) {
@@ -83,15 +87,20 @@ if (Astro.request.method === "POST") {
 }
 
 // Run all SSR fetches in parallel — single round trip instead of two.
-const [postRes, authorsRes, categoriesRes, selectedAuthorIds] = await Promise.all([
+const [postRes, authorsRes, collaboratorsRes, categoriesRes, booksRes, selectedAuthorIds, selectedCollaboratorIds] = await Promise.all([
   supabase.from("posts").select("*").eq("id", id).maybeSingle(),
   supabase.from("authors").select("id, name, photo_url").order("name"),
+  supabase.from("collaborators").select("id, name, photo_url").order("name"),
   supabase.from("categories").select("id, name, icon").order("name"),
+  supabase.from("books").select("id, title").eq("status", "published").order("title"),
   fetchPostAuthorIds(supabase, id),
+  fetchPostCollaboratorIds(supabase, id),
 ]);
 const post = postRes.data;
 const authors = authorsRes.data ?? [];
+const collaborators = collaboratorsRes.data ?? [];
 const categories = categoriesRes.data;
+const books = booksRes.data ?? [];
 if (!post) return Astro.redirect("/posts");
 const categoryOptions = [
   { value: "", label: "Sin categoría" },
@@ -101,6 +110,10 @@ const categoryOptions = [
     icon: c.icon ? `lucide:${c.icon}` : undefined,
   })),
 ];
+const bookOptions = [
+  { value: "", label: "No pertenece a un libro" },
+  ...books.map((b) => ({ value: b.id, label: b.title, icon: "lucide:book-open" })),
+];
 const statusOptions = [
   { value: "draft", label: "Borrador", hint: "no visible al público" },
   { value: "published", label: "Publicado", hint: "dispara rebuild" },
@@ -109,7 +122,7 @@ const statusOptions = [
 
 <AppLayout title={post.title} resource="posts" activeId={post.id} breadcrumbLabel={post.title}>
 
-  <BackToList href="/posts" label="Artículos" />
+  <BackToList href="/posts" label="Publicaciones" />
 
   <header class="mb-8">
     <h1 class="font-serif text-3xl md:text-4xl mb-2 leading-tight">{post.title}</h1>
@@ -122,7 +135,7 @@ const statusOptions = [
         <rect x="3" y="11" width="18" height="11" rx="2"/>
         <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
       </svg>
-      <span>Solo lectura — tienes permiso de ver pero no de editar este artículo.</span>
+      <span>Solo lectura — tienes permiso de ver pero no de editar esta publicación.</span>
     </p>
   )}
   {formError && (
@@ -134,28 +147,28 @@ const statusOptions = [
 
     <section class="card space-y-5">
       <div>
-        <h2 class="card-section-title">Identidad del artículo</h2>
-        <p class="card-section-desc">Cómo se nombra y se encuentra el artículo en el sitio.</p>
+        <h2 class="card-section-title">Identidad de la publicación</h2>
+        <p class="card-section-desc">Cómo se nombra y se encuentra la publicación en el sitio.</p>
       </div>
       <Field label="Título" name="title" value={post.title} required description="El encabezado principal que verán los lectores." />
       <Field label="Slug" name="slug" value={post.slug} required description="Identificador único en la URL: /articulos/<slug>. Solo minúsculas, números y guiones." />
-      <Field label="Subtítulo" name="subtitle" value={post.subtitle} description="Aparece debajo del título en la página del artículo. Opcional." />
+      <Field label="Subtítulo" name="subtitle" value={post.subtitle} description="Aparece debajo del título en la página de la publicación. Opcional." />
       <Field label="Resumen (excerpt)" name="excerpt" type="textarea" rows={3} value={post.excerpt} description="Texto corto que se muestra en tarjetas de listado y en redes sociales." />
     </section>
 
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Imagen y galería</h2>
-        <p class="card-section-desc">Visuales del artículo. Las imágenes se convierten automáticamente a WebP.</p>
+        <p class="card-section-desc">Visuales de la publicación. Las imágenes se convierten automáticamente a WebP.</p>
       </div>
       <ImageUpload name="cover_image_url" value={post.cover_image_url} label="Imagen de portada" bucket="covers" />
-      <GalleryUpload name="gallery_urls" value={post.gallery_urls} label="Galería de imágenes" bucket="content" hint="Imágenes adicionales del artículo (aparte de la portada). Arrastra para reordenar." />
+      <GalleryUpload name="gallery_urls" value={post.gallery_urls} label="Galería de imágenes" bucket="content" hint="Imágenes adicionales (aparte de la portada). Arrastra para reordenar." />
     </section>
 
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Clasificación</h2>
-        <p class="card-section-desc">Asocia el artículo a un autor y a una categoría del menú.</p>
+        <p class="card-section-desc">Asocia la publicación a autores, colaboradores, una categoría del menú, y opcionalmente a un libro.</p>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="cell-stack">
@@ -166,9 +179,23 @@ const statusOptions = [
             selectedIds={selectedAuthorIds}
           />
         </div>
+        <div class="cell-stack">
+          <MultiAuthorPicker
+            name="collaborator_ids"
+            label="Colaboradores"
+            authors={collaborators}
+            selectedIds={selectedCollaboratorIds}
+          />
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
         <div class="cell-stack flex flex-col gap-2">
           <span class="label">Categoría</span>
           <Dropdown name="category_id" value={post.category_id ?? ""} options={categoryOptions} placeholder="Sin categoría" />
+        </div>
+        <div class="cell-stack flex flex-col gap-2">
+          <span class="label">Pertenece a un libro</span>
+          <Dropdown name="book_id" value={post.book_id ?? ""} options={bookOptions} placeholder="No pertenece a un libro" />
         </div>
       </div>
     </section>
@@ -184,7 +211,7 @@ const statusOptions = [
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Metadatos y estado</h2>
-        <p class="card-section-desc">Información complementaria para visibilidad y si el artículo es visible.</p>
+        <p class="card-section-desc">Información complementaria y si la publicación es visible al público.</p>
       </div>
       <div class="grid sm:grid-cols-3 gap-4">
         <Field label="Tiempo (min)" name="reading_time_minutes" type="number" value={post.reading_time_minutes} description="Vacío = se calcula del contenido." />
@@ -203,21 +230,29 @@ const statusOptions = [
       </div>
       <AiSuggest kind="post" contentField="content_md" />
       <Field label="Meta description" name="meta_description" type="textarea" rows={2} value={post.meta_description} description="Descripción que aparece en buscadores y al compartir el enlace. Recomendado: 140-160 caracteres. Si la dejas vacía, se usa el resumen." />
-      <Field label="Palabras clave (SEO)" name="keywords" value={post.keywords?.join(", ")} description="Términos por los que esperas que la gente encuentre este artículo. Separadas por coma. Distintas a las tags internas — estas son visibles a buscadores." />
-      <Field label="Texto alt de la imagen de portada" name="cover_image_alt" value={post.cover_image_alt} description="Descripción de la imagen para lectores de pantalla y SEO de imágenes. Si la dejas vacía, se usa el título del artículo." />
-      <Field label="URL canónica" name="canonical_url" type="url" value={post.canonical_url} description="Solo si publicaste el mismo contenido en otro lado. Apunta a la versión original para evitar penalización por contenido duplicado." />
+      <Field label="Palabras clave (SEO)" name="keywords" value={post.keywords?.join(", ")} description="Términos por los que esperas que la gente encuentre esta publicación. Separadas por coma." />
+      <Field label="Texto alt de la imagen de portada" name="cover_image_alt" value={post.cover_image_alt} description="Descripción de la imagen para lectores de pantalla y SEO. Si la dejas vacía, se usa el título." />
+      <Field label="URL canónica" name="canonical_url" type="url" value={post.canonical_url} description="Solo si publicaste el mismo contenido en otro lado. Apunta a la versión original." />
     </section>
 
-    <div class="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t border-stone-200">
-      {canEdit ? (
-        <>
+    {/* Sticky save bar at the bottom of the viewport — mismo patrón
+        que /site (webpage > home / catálogo). Incluye Guardar, Cancelar
+        y, debajo, una zona de peligro con el botón Borrar. */}
+    {canEdit && (
+      <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+        <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
           <button type="submit" class="btn-primary">Guardar</button>
           <a href="/posts" class="btn">Cancelar</a>
-        </>
-      ) : (
-        <a href="/posts" class="btn">Volver a la lista</a>
-      )}
-    </div>
+        </div>
+      </div>
+    )}
+    {!canEdit && (
+      <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+        <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+          <a href="/posts" class="btn">Volver a la lista</a>
+        </div>
+      </div>
+    )}
     </fieldset>
   </form>
 
@@ -225,14 +260,14 @@ const statusOptions = [
   <form
     method="POST"
     class="mt-12 pt-6 border-t border-red-200 max-w-5xl"
-    data-cas-confirm="Esta acción es permanente. El artículo y todas sus relaciones se eliminan."
-    data-cas-confirm-title="¿Borrar este artículo?"
+    data-cas-confirm="Esta acción es permanente. La publicación y todas sus relaciones se eliminan."
+    data-cas-confirm-title="¿Borrar esta publicación?"
     data-cas-confirm-subtitle={post.title}
     data-cas-confirm-label="Borrar"
   >
     <input type="hidden" name="_action" value="delete" />
     <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>
-    <button type="submit" class="btn-danger">Borrar artículo</button>
+    <button type="submit" class="btn-danger">Borrar publicación</button>
   </form>
   )}
 </AppLayout>
