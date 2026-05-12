@@ -131,7 +131,37 @@ if (Astro.request.method === "POST") {
   const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
   try {
     const fd = await Astro.request.formData();
+    // Cada panel (home, catalogo, articulos) tiene su propio <form>
+    // y envía un hidden _panel para identificarse. El handler escribe
+    // SOLO las claves de ese panel — el resto del site_configuration
+    // queda intacto.
+    const panel = str(fd, "_panel") ?? "home";
 
+    if (panel === "catalogo") {
+      const value = {
+        title_font: str(fd, "book_detail_title_font") ?? "serif",
+        body_font: str(fd, "book_detail_body_font") ?? "serif",
+      };
+      const { error } = await supabase
+        .from("site_configuration")
+        .upsert([{ key: "book_detail_typography", value }] as never, { onConflict: "key" });
+      if (error) throw error;
+      return Astro.redirect("/site?saved=1&action=updated&entity=site&publish=1&page=catalogo");
+    }
+
+    if (panel === "articulos") {
+      const value = {
+        title_font: str(fd, "article_detail_title_font") ?? "serif",
+        body_font: str(fd, "article_detail_body_font") ?? "serif",
+      };
+      const { error } = await supabase
+        .from("site_configuration")
+        .upsert([{ key: "article_detail_typography", value }] as never, { onConflict: "key" });
+      if (error) throw error;
+      return Astro.redirect("/site?saved=1&action=updated&entity=site&publish=1&page=articulos");
+    }
+
+    // Default: panel === "home" → guarda toda la config de la home.
     const rows: Array<{ key: string; value: unknown }> = [
       { key: "hero_quote",                value: strReq(fd, "hero_quote") },
       { key: "hero_quote_author",         value: strReq(fd, "hero_quote_author") },
@@ -160,23 +190,9 @@ if (Astro.request.method === "POST") {
       { key: "organization_logo_url", value: str(fd, "organization_logo_url") ?? "" },
       { key: "hero_image_url",        value: str(fd, "hero_image_url") ?? "" },
       { key: "hero_bg_color",         value: str(fd, "hero_bg_color") ?? "" },
-      {
-        // Tipografía global de /catalogo/[slug]. Se aplica a TODOS los
-        // libros — no a un libro individual.
-        key: "book_detail_typography",
-        value: {
-          title_font: str(fd, "book_detail_title_font") ?? "serif",
-          body_font: str(fd, "book_detail_body_font") ?? "serif",
-        },
-      },
-      {
-        // Tipografía global de /articulos/[slug].
-        key: "article_detail_typography",
-        value: {
-          title_font: str(fd, "article_detail_title_font") ?? "serif",
-          body_font: str(fd, "article_detail_body_font") ?? "serif",
-        },
-      },
+      // book_detail_typography / article_detail_typography ya no se
+      // tocan desde aquí: cada uno tiene su propio panel + form +
+      // botón Guardar y se persiste por separado.
     ];
 
     // Hero card config travels as a single JSON blob in a hidden input.
@@ -365,8 +381,14 @@ const DEFAULT_HERO_CARD = {
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
+  {/* Cada panel de "webpage" tiene su PROPIO form + botón Guardar para
+      que los cambios sean independientes — guardar tipografía de libro
+      no toca la home y viceversa. El handler POST identifica qué panel
+      mandó la request leyendo el hidden _panel input y solo actualiza
+      las claves relevantes. */}
   <div data-page-tab-panel="home">
   <form method="POST" data-site-form>
+    <input type="hidden" name="_panel" value="home">
     <input type="hidden" name="hero_card_config_json" data-hero-json>
     <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
 
@@ -824,38 +846,69 @@ const DEFAULT_HERO_CARD = {
 
   </div>{/* /[data-page-tab-panel="home"] */}
 
-  {/* Catálogo > Libro — tipografía global para /catalogo/[slug]. Los
-      defaults ("serif") se hidratan client-side desde site_configuration
-      vía /api/page-data?type=site, por lo que aquí pasamos el default
-      tipográfico y dejamos que el script reescriba el dropdown cuando
-      llega la respuesta. */}
-  <div data-page-tab-panel="catalogo" hidden>
-    <DetailTypographyPanel
-      icon="lucide:book-open"
-      title="Libro"
-      description="Tipografía de la ficha individual de cada libro en /catalogo/[slug]. Aplica al título y a la descripción de TODOS los libros."
-      namePrefix="book_detail"
-      titleLabel="Tipo de letra del título"
-      bodyLabel="Tipo de letra de la descripción"
-      titleFont={BOOK_DETAIL_TYPO.title_font}
-      bodyFont={BOOK_DETAIL_TYPO.body_font}
-      scopeNote="Estos ajustes son globales: cambian la tipografía de todos los libros del catálogo a la vez, no de un libro en particular."
-    />
+  {/* === Catálogo > Libro =================================================
+       Form independiente con su propio botón Guardar. El POST handler
+       lee el hidden _panel para saber que viene de aquí y solo escribe
+       book_detail_typography. La home queda intacta. El min-h-[...] +
+       flex-col + spacer hacen que la barra del botón quede pegada al
+       borde inferior del viewport aunque el contenido sea corto. */}
+  <div data-page-tab-panel="catalogo" hidden class="flex flex-col min-h-[calc(100vh-180px)]">
+    <form method="POST" class="flex flex-col flex-1">
+      <input type="hidden" name="_panel" value="catalogo">
+      <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
+        <DetailTypographyPanel
+          icon="lucide:book-open"
+          title="Libro"
+          description="Tipografía de la ficha individual de cada libro en /catalogo/[slug]. Aplica al título y a la descripción de TODOS los libros."
+          namePrefix="book_detail"
+          titleLabel="Tipo de letra del título"
+          bodyLabel="Tipo de letra de la descripción"
+          titleFont={BOOK_DETAIL_TYPO.title_font}
+          bodyFont={BOOK_DETAIL_TYPO.body_font}
+          scopeNote="Estos ajustes son globales: cambian la tipografía de todos los libros del catálogo a la vez, no de un libro en particular."
+        />
+      </fieldset>
+
+      <div class="flex-1"></div>{/* spacer pushes the save bar to the bottom */}
+
+      {canEdit && (
+        <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+          <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+            <button type="submit" class="btn-primary">Guardar configuración</button>
+          </div>
+        </div>
+      )}
+    </form>
   </div>
 
-  {/* Artículos > Artículo — tipografía global para /articulos/[slug]. */}
-  <div data-page-tab-panel="articulos" hidden>
-    <DetailTypographyPanel
-      icon="lucide:newspaper"
-      title="Artículo"
-      description="Tipografía de la página individual de cada artículo en /articulos/[slug]. Aplica al título y al contenido de TODOS los artículos."
-      namePrefix="article_detail"
-      titleLabel="Tipo de letra del título"
-      bodyLabel="Tipo de letra del contenido"
-      titleFont={ARTICLE_DETAIL_TYPO.title_font}
-      bodyFont={ARTICLE_DETAIL_TYPO.body_font}
-      scopeNote="Estos ajustes son globales: cambian la tipografía de todos los artículos a la vez, no de uno en particular."
-    />
+  {/* === Artículos > Artículo ============================================ */}
+  <div data-page-tab-panel="articulos" hidden class="flex flex-col min-h-[calc(100vh-180px)]">
+    <form method="POST" class="flex flex-col flex-1">
+      <input type="hidden" name="_panel" value="articulos">
+      <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
+        <DetailTypographyPanel
+          icon="lucide:newspaper"
+          title="Artículo"
+          description="Tipografía de la página individual de cada artículo en /articulos/[slug]. Aplica al título y al contenido de TODOS los artículos."
+          namePrefix="article_detail"
+          titleLabel="Tipo de letra del título"
+          bodyLabel="Tipo de letra del contenido"
+          titleFont={ARTICLE_DETAIL_TYPO.title_font}
+          bodyFont={ARTICLE_DETAIL_TYPO.body_font}
+          scopeNote="Estos ajustes son globales: cambian la tipografía de todos los artículos a la vez, no de uno en particular."
+        />
+      </fieldset>
+
+      <div class="flex-1"></div>
+
+      {canEdit && (
+        <div class="sticky bottom-0 bg-white border-t border-stone-200 z-10 -mx-5 md:-mx-8 lg:-mx-10 -mb-6 md:-mb-10 mt-8">
+          <div class="px-5 md:px-8 lg:px-10 py-3 flex items-center gap-3 flex-wrap">
+            <button type="submit" class="btn-primary">Guardar configuración</button>
+          </div>
+        </div>
+      )}
+    </form>
   </div>
 
   <div data-page-tab-panel="autores" hidden>
