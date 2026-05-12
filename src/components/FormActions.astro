@@ -111,6 +111,14 @@ const {
     // They can opt in by dispatching a "cas:dirty" CustomEvent that
     // bubbles up to the form.
     form.addEventListener("cas:dirty", apply);
+    // Forms that hydrate async (e.g. /site panel "home" that fetches
+    // its values from /api/page-data after mount) must re-snapshot
+    // once the initial values are set, otherwise everything looks
+    // dirty from the start. They fire cas:resnapshot on the form.
+    form.addEventListener("cas:resnapshot", () => {
+      initial = snapshotForm(form);
+      apply();
+    });
 
     window.addEventListener("pageshow", (e) => {
       if ((e as PageTransitionEvent).persisted) {
