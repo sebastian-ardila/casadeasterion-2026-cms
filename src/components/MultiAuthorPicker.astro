@@ -320,7 +320,7 @@ const initialValue = selectedIds.join(",");
       return li;
     }
 
-    function sync(root) {
+    function sync(root, opts) {
       const list = root.querySelector("[data-map-list]");
       const empty = root.querySelector("[data-map-empty]");
       const hidden = root.querySelector("[data-map-value]");
@@ -328,7 +328,21 @@ const initialValue = selectedIds.join(",");
       const addEmpty = root.querySelector("[data-map-add-empty]");
       const items = Array.from(list.querySelectorAll("[data-map-item]"));
       const ids = items.map((el) => el.dataset.id);
-      hidden.value = ids.join(",");
+      const next = ids.join(",");
+      const changed = hidden.value !== next;
+      hidden.value = next;
+      // Notify the form so FormActions can recompute dirty state. Hidden
+      // inputs don't fire input/change events on programmatic writes, so
+      // we must announce manually. The initial sync() during init() is
+      // opts.initial → fire cas:resnapshot instead, baselining the form
+      // off the post-hydration value.
+      if (opts && opts.initial) {
+        const form = root.closest("form");
+        if (form) form.dispatchEvent(new CustomEvent("cas:resnapshot", { bubbles: true }));
+      } else if (changed) {
+        const form = root.closest("form");
+        if (form) form.dispatchEvent(new CustomEvent("cas:dirty", { bubbles: true }));
+      }
       // Toggle empty banner.
       if (empty) empty.classList.toggle("hidden", ids.length > 0);
       // Re-disable end buttons.
@@ -423,7 +437,7 @@ const initialValue = selectedIds.join(",");
       });
 
       // Initial pass to enforce the disabled-at-ends rule.
-      sync(root);
+      sync(root, { initial: true });
     }
 
     function initAll() {

@@ -127,6 +127,9 @@ const id = `up-${name}-${Math.random().toString(36).slice(2, 8)}`;
           detail: { url: url || "", name: urlInput.name },
         }),
       );
+      // Hidden inputs don't fire input/change on programmatic writes;
+      // notify FormActions explicitly so the Guardar button can flip.
+      wrapper.dispatchEvent(new CustomEvent("cas:dirty", { bubbles: true }));
     };
 
     const upload = async (file) => {

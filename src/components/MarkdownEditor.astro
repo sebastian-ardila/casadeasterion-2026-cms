@@ -568,6 +568,13 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
     };
 
     // ── Sync hidden input + counts ──
+    // TipTap re-serializes markdown on every change. The initial pass
+    // (right after editor mount) normalizes the SSR value (e.g. trims
+    // trailing whitespace, canonicalizes list markers) — if FormActions
+    // already took its snapshot, the form will look "dirty" from the
+    // start. Solution: after the first sync, dispatch cas:resnapshot on
+    // the parent form so FormActions re-baselines off the normalized value.
+    let firstSync = true;
     const syncStats = () => {
       const md = editor.storage.markdown.getMarkdown();
       hidden.value = md;
@@ -575,6 +582,20 @@ const id = `tt-${name}-${Math.random().toString(36).slice(2, 8)}`;
       wordsEl.textContent = `${words} ${words === 1 ? "palabra" : "palabras"}`;
       const minutes = Math.max(1, Math.round(words / 220));
       readingEl.textContent = `${minutes} min lectura`;
+      if (firstSync) {
+        firstSync = false;
+        const form = root.closest("form");
+        if (form) {
+          form.dispatchEvent(new CustomEvent("cas:resnapshot", { bubbles: true }));
+        }
+      } else {
+        // Subsequent edits: tell FormActions to re-check dirty state,
+        // since hidden inputs don't fire native "input" events.
+        const form = root.closest("form");
+        if (form) {
+          form.dispatchEvent(new CustomEvent("cas:dirty", { bubbles: true }));
+        }
+      }
     };
     syncStats();
 
