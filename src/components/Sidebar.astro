@@ -35,8 +35,8 @@ const allItems: Array<{ href: string; label: string; icon: string; resource?: Re
       { href: "/site?page=autores",     label: "Autores",       icon: "lucide:users",        pageKey: "autores"   },
     ],
   },
-  { href: "/orders",      label: "Pedidos",      icon: "lucide:shopping-bag",    managerOnly: true,      countKey: "orders" },
-  { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail",            ownerOnly: true,        countKey: "subscribers" },
+  { href: "/orders",      label: "Pedidos",      icon: "lucide:shopping-bag",    resource: "orders",       countKey: "orders" },
+  { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail",            resource: "subscribers",  countKey: "subscribers" },
   { href: "/admins",      label: "Usuarios",     icon: "lucide:users-round",     managerOnly: true,      countKey: "admins" },
 ];
 

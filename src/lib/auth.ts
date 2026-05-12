@@ -11,6 +11,7 @@ export type Resource =
   | "collaborators"
   | "categories"
   | "site"
+  | "orders"
   | "subscribers"
   | "admins";
 export type Level = "none" | "view" | "edit";
@@ -26,11 +27,15 @@ export const RESOURCES: Resource[] = [
   "collaborators",
   "categories",
   "site",
+  "orders",
   "subscribers",
   "admins",
 ];
 
-/** The configurable subset that admins/editors can have row-level overrides for. */
+/** The configurable subset that admins/editors can have row-level overrides
+ *  for. "admins" stays role-derived (only owner/admin can manage users), but
+ *  orders + subscribers are now per-user configurable so an admin can grant
+ *  an editor access to those panels without promoting them. */
 export const CONFIGURABLE_RESOURCES: Resource[] = [
   "posts",
   "books",
@@ -38,6 +43,8 @@ export const CONFIGURABLE_RESOURCES: Resource[] = [
   "collaborators",
   "categories",
   "site",
+  "orders",
+  "subscribers",
 ];
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
@@ -46,7 +53,8 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   authors: "Autores",
   collaborators: "Colaboradores",
   categories: "Categorías",
-  site: "Configuración",
+  site: "Webpage",
+  orders: "Pedidos",
   subscribers: "Suscriptores",
   admins: "Usuarios",
 };
@@ -59,6 +67,7 @@ export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   collaborators: "edit",
   categories: "view",
   site: "none",
+  orders: "none",
   subscribers: "none",
   admins: "none",
 };
@@ -71,7 +80,8 @@ export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   collaborators: "edit",
   categories: "edit",
   site: "edit",
-  subscribers: "none",
+  orders: "edit",
+  subscribers: "edit",
   admins: "none",
 };
 
@@ -246,8 +256,9 @@ export async function getAllPermissions(
   if (cached) return cached;
 
   const out: Record<Resource, Level> = {
-    posts: "none", books: "none", authors: "none", categories: "none",
-    site: "none", subscribers: "none", admins: "none",
+    posts: "none", books: "none", authors: "none", collaborators: "none",
+    categories: "none", site: "none", orders: "none", subscribers: "none",
+    admins: "none",
   };
   if (user.role === "owner") {
     for (const r of RESOURCES) out[r] = "edit";
@@ -268,10 +279,11 @@ export async function getAllPermissions(
       out[row.resource as Resource] = row.level as Level;
     }
   }
-  // Role-derived permissions: subscribers + admins (user management) are
-  // not stored per-row. They come straight from the role.
-  out.subscribers = user.role === "owner" ? "edit" : "none";
-  out.admins      = user.role === "owner" || user.role === "admin" ? "edit" : "none";
+  // "admins" (user management) remains role-derived: only owner/admin
+  // can manage CMS users, regardless of admin_permissions rows. Every
+  // other resource — including orders and subscribers — now comes from
+  // the per-user admin_permissions table.
+  out.admins = user.role === "owner" || user.role === "admin" ? "edit" : "none";
   permsCache.set(user.id, out);
   return out;
 }

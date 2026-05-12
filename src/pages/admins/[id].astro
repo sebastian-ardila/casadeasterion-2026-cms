@@ -78,11 +78,13 @@ const isSelf = profile.id === owner.id;
 // admins/owner but cannot change permissions or revoke them.
 const canEdit = grantedEdit && (isOwner || isEditorRow);
 
-// Build current permissions map (only the configurable subset; subscribers
-// and admins-management are role-derived, not stored).
+// Build current permissions map. Only "admins" (user management) stays
+// role-derived; everything else — including orders and subscribers — is
+// stored per-user in admin_permissions and editable from this page.
 type ConfigurableResource = (typeof CONFIGURABLE_RESOURCES)[number];
 const perms: Record<ConfigurableResource, Level> = {
-  posts: "none", books: "none", authors: "none", collaborators: "none", categories: "none", site: "none",
+  posts: "none", books: "none", authors: "none", collaborators: "none",
+  categories: "none", site: "none", orders: "none", subscribers: "none",
 };
 if (isOwnerRow) {
   for (const r of CONFIGURABLE_RESOURCES) perms[r] = "edit";
@@ -110,6 +112,8 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
   collaborators: "lucide:user-plus",
   categories: "lucide:folder-tree",
   site: "lucide:settings",
+  orders: "lucide:shopping-bag",
+  subscribers: "lucide:mail",
 };
 ---
 

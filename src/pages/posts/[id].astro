@@ -142,7 +142,7 @@ const statusOptions = [
     <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
   )}
 
-  <form method="POST" class="space-y-6 max-w-5xl">
+  <form method="POST" class="space-y-6">
     <fieldset disabled={!canEdit} class="space-y-6 m-0 p-0 border-0 min-w-0">
 
     <section class="card space-y-5">
@@ -259,7 +259,7 @@ const statusOptions = [
   {canEdit && (
   <form
     method="POST"
-    class="mt-12 pt-6 border-t border-red-200 max-w-5xl"
+    class="mt-12 pt-6 border-t border-red-200"
     data-cas-confirm="Esta acción es permanente. La publicación y todas sus relaciones se eliminan."
     data-cas-confirm-title="¿Borrar esta publicación?"
     data-cas-confirm-subtitle={post.title}

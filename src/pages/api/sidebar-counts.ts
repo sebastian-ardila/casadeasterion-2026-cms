@@ -31,10 +31,7 @@ export const GET: APIRoute = async (ctx) => {
   if (perms.collaborators !== "none") tasks.push(countOf("collaborators", "collaborators"));
   if (perms.categories    !== "none") tasks.push(countOf("categories",    "categories"));
   if (perms.subscribers   !== "none") tasks.push(countOf("subscribers",   "subscribers"));
-  // Orders are visible to anyone with the admins capability
-  // (owners + admins). Permissions don't include "orders" yet, so we
-  // mirror the admins gate.
-  if (perms.admins      !== "none") tasks.push(countOf("purchase_intents", "orders"));
+  if (perms.orders        !== "none") tasks.push(countOf("purchase_intents", "orders"));
   if (perms.admins      !== "none") {
     // Admins live in auth.users joined via a SECURITY DEFINER RPC;
     // there's no plain count() path. Fetch the list and use length.
