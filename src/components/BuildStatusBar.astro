@@ -18,7 +18,7 @@
 
 <div
   id="cas-build-bar"
-  class="cas-build-bar fixed bottom-6 left-6 z-50 hidden"
+  class="cas-build-bar fixed bottom-6 right-6 z-50 hidden"
   role="status"
   aria-live="polite"
 >
@@ -114,9 +114,11 @@
   }
 
   /* Place the build bar BELOW the toast stack: toasts grow upward from
-     bottom-left, build bar sits at the floor. The toast container is at
+     bottom-right, build bar sits at the floor. The toast container is at
      `bottom: 1.5rem`; the build bar below would overlap. So we shift the
-     toast container up when the build bar is visible. */
+     toast container up when the build bar is visible. Both stacks live
+     on the right side of the viewport to keep the sidebar's "Cerrar
+     sesión" button on the bottom-left fully clickable. */
   body.has-build-bar #cas-toasts {
     bottom: calc(1.5rem + 44px); /* bar height + gap */
   }
