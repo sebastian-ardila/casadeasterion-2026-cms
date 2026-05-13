@@ -1704,9 +1704,10 @@ const DEFAULT_HERO_CARD = {
     border: 1px solid rgb(231 229 228);
     overflow: hidden;
     transition: background-color 200ms ease;
+    container-type: inline-size;
   }
   .cas-hero-pv-web-content {
-    padding: 6% 6% 6% 8%;
+    padding: 4% 6% 4% 8%;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -1717,31 +1718,30 @@ const DEFAULT_HERO_CARD = {
     background-size: cover;
     background-position: center;
   }
+  /* Wordmark — escala con el width total del frame (no la mitad de
+     contenido), igual que en el sitio público donde el `text-[6.2rem]`
+     llena verticalmente la mitad izquierda. ~5cqi del width total =
+     ~9-10% del frame, replicando la presencia tipográfica del original. */
   .cas-hero-pv-title {
     font-family: "Cormorant Garamond", Georgia, serif;
     font-weight: 600;
-    font-size: clamp(1.4rem, 4.2cqi, 3rem);
+    font-size: clamp(1.8rem, 5cqi, 5.5rem);
     line-height: 0.95;
     color: var(--pv-fg);
     margin: 0 0 6%;
     white-space: pre-line;
     word-break: break-word;
-    container-type: inline-size;
   }
-  .cas-hero-pv-web .cas-hero-pv-title {
-    font-size: clamp(1.4rem, 4.5cqi, 3.5rem);
-  }
-  .cas-hero-pv-web-content { container-type: inline-size; }
   .cas-hero-pv-tagline-row {
     display: flex;
     align-items: baseline;
-    gap: 0.875rem;
-    margin-bottom: 8%;
+    gap: 1rem;
+    margin-bottom: 9%;
   }
   .cas-hero-pv-rule {
     flex: 0 0 auto;
     display: block;
-    width: clamp(1rem, 3cqi, 2rem);
+    width: clamp(1rem, 2.4cqi, 2.4rem);
     height: 1px;
     background: var(--pv-fg);
     transform: translateY(-0.6em);
@@ -1749,16 +1749,19 @@ const DEFAULT_HERO_CARD = {
   .cas-hero-pv-tagline {
     font-family: "Cormorant Garamond", Georgia, serif;
     font-style: italic;
-    font-size: clamp(0.75rem, 2cqi, 1.4rem);
+    font-size: clamp(0.9rem, 2.4cqi, 2.4rem);
     line-height: 1.2;
     color: var(--pv-fg-muted);
     margin: 0;
   }
+  /* En el sitio público los CTAs viven en un `space-y-6` (stack
+     vertical), no en row. Reproducirlo aquí para que el editor vea la
+     misma jerarquía visual. */
   .cas-hero-pv-ctas {
     display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.1rem;
   }
   .cas-hero-pv-cta-primary {
     display: inline-flex;
@@ -1771,34 +1774,42 @@ const DEFAULT_HERO_CARD = {
     pointer-events: none;
   }
   .cas-hero-pv-cta-primary > span:first-child {
-    padding: 0 1rem;
-    height: 2rem;
+    padding: 0 clamp(0.75rem, 2cqi, 2rem);
+    height: clamp(2.2rem, 4.5cqi, 3.6rem);
     display: inline-flex;
     align-items: center;
-    font-size: clamp(0.55rem, 1.2cqi, 0.75rem);
+    font-size: clamp(0.55rem, 0.95cqi, 0.85rem);
     text-transform: uppercase;
-    letter-spacing: 0.22em;
+    letter-spacing: 0.26em;
     white-space: nowrap;
   }
   .cas-hero-pv-arrow-box {
-    width: 2rem;
-    height: 2rem;
+    width: clamp(2.2rem, 4.5cqi, 3.6rem);
+    height: clamp(2.2rem, 4.5cqi, 3.6rem);
     border-left: 1px solid color-mix(in oklch, var(--pv-fg) 40%, transparent);
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
+  .cas-hero-pv-arrow-box svg {
+    width: clamp(0.9rem, 1.8cqi, 1.4rem);
+    height: clamp(0.9rem, 1.8cqi, 1.4rem);
+  }
+  .cas-hero-pv-cta-secondary svg {
+    width: clamp(0.7rem, 1.1cqi, 1rem);
+    height: clamp(0.7rem, 1.1cqi, 1rem);
+  }
   .cas-hero-pv-cta-secondary {
     display: inline-flex;
     align-items: center;
-    gap: 0.375rem;
+    gap: 0.4rem;
     text-decoration: none;
     cursor: default;
     user-select: none;
     pointer-events: none;
-    font-size: clamp(0.55rem, 1.2cqi, 0.7rem);
+    font-size: clamp(0.55rem, 0.9cqi, 0.8rem);
     text-transform: uppercase;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.22em;
     color: var(--pv-fg-muted);
   }
   /* Empty states */
