@@ -4,7 +4,6 @@ import Field from "~/components/Field.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
 import CardHeader from "~/components/CardHeader.astro";
 import Dropdown from "~/components/Dropdown.astro";
-import HeroCardPlatformControls from "~/components/HeroCardPlatformControls.astro";
 import ColorEditor from "~/components/ColorEditor.astro";
 import PageStub from "~/components/PageStub.astro";
 import DetailTypographyPanel from "~/components/DetailTypographyPanel.astro";
@@ -189,26 +188,18 @@ if (Astro.request.method === "POST") {
       { key: "twitter_handle",        value: str(fd, "twitter_handle") ?? "" },
       { key: "og_image_default",      value: str(fd, "og_image_default") ?? "" },
       { key: "organization_logo_url", value: str(fd, "organization_logo_url") ?? "" },
-      { key: "hero_image_url",        value: str(fd, "hero_image_url") ?? "" },
-      { key: "hero_bg_color",         value: str(fd, "hero_bg_color") ?? "" },
+      { key: "hero_image_url",            value: str(fd, "hero_image_url") ?? "" },
+      { key: "hero_bg_color",             value: str(fd, "hero_bg_color") ?? "" },
+      { key: "hero_title",                value: strReq(fd, "hero_title") },
+      { key: "hero_tagline",              value: strReq(fd, "hero_tagline") },
+      { key: "hero_cta_primary_label",    value: strReq(fd, "hero_cta_primary_label") },
+      { key: "hero_cta_primary_href",     value: strReq(fd, "hero_cta_primary_href") },
+      { key: "hero_cta_secondary_label",  value: strReq(fd, "hero_cta_secondary_label") },
+      { key: "hero_cta_secondary_href",   value: strReq(fd, "hero_cta_secondary_href") },
       // book_detail_typography / article_detail_typography ya no se
       // tocan desde aquí: cada uno tiene su propio panel + form +
       // botón Guardar y se persiste por separado.
     ];
-
-    // Hero card config travels as a single JSON blob in a hidden input.
-    // If parsing fails or shape is wrong, skip it (don't block the rest).
-    const heroJson = fd.get("hero_card_config_json")?.toString() ?? "";
-    if (heroJson) {
-      try {
-        const parsed = JSON.parse(heroJson);
-        if (parsed && typeof parsed === "object" && parsed.content_source && parsed.desktop && parsed.mobile) {
-          rows.push({ key: "hero_card_config", value: parsed });
-        }
-      } catch {
-        // Malformed JSON — skip silently.
-      }
-    }
 
     const { error } = await supabase
       .from("site_configuration")
@@ -390,263 +381,120 @@ const DEFAULT_HERO_CARD = {
   <div data-page-tab-panel="home">
   <form method="POST" data-site-form>
     <input type="hidden" name="_panel" value="home">
-    <input type="hidden" name="hero_card_config_json" data-hero-json>
     <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
 
       {/* === HERO TAB === */}
       {/* On <lg the aside (preview) goes first so the user sees changes
           immediately without scrolling. On lg+ we reorder so the preview
           sits on the right. */}
-      <div data-tab-panel="hero" class="grid lg:grid-cols-[minmax(0,1fr)_440px] gap-6 items-start">
-        <div class="space-y-6 min-w-0 lg:order-1 order-2">
-
-          {/* Hero image — Tu imagen + Imagen por defecto stacked vertically.
-              On lg+ the form column is already narrow (≈600px after the
-              440px preview takes its share), so a 2-col layout here turns
-              labels into 2-line wraps. Stack instead. */}
-          <section class="card space-y-5">
-            <CardHeader icon="lucide:image" title="Imagen del hero" desc="Foto que ocupa la mitad derecha en desktop y aparece debajo de la card en mobile." />
-            <div class="space-y-4">
-              {/* Page bg color — what shows behind the card and around
-                  the image. Different from the card's own bg color
-                  (per-platform, set in "Estilo de la card") and the
-                  card's optional bg image (also per-platform). */}
-              <div class="block min-w-0">
-                <span class="label flex items-center gap-1.5">
-                  <Icon name="lucide:paint-bucket" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
-                  Color de fondo del hero
-                </span>
-                <p class="hcc-hint mb-2">Color visible detrás de la card y alrededor de la imagen. Pulsa la X para volver al color por defecto del sitio.</p>
-                <ColorEditor
-                  hiddenName="hero_bg_color"
-                  defaultValue=""
-                  ariaLabel="Color de fondo del hero"
-                  editorId="hero-bg"
-                />
-              </div>
-              <ImageUpload
-                name="hero_image_url"
-                label="Tu imagen"
-                bucket="covers"
-                hint="Click o arrastra. Recomendado: 2400×1600px o más, horizontal."
+      <div data-tab-panel="hero" class="space-y-6 max-w-3xl">
+        {/* Imagen y fondo */}
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:image" title="Imagen del hero" desc="Foto que ocupa la mitad derecha en desktop y aparece debajo del contenido en mobile." />
+          <div class="space-y-4">
+            <div class="block min-w-0">
+              <span class="label flex items-center gap-1.5">
+                <Icon name="lucide:paint-bucket" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+                Color de fondo del hero
+              </span>
+              <p class="hcc-hint mb-2">Color visible alrededor de la imagen. Pulsa la X para volver al color por defecto del sitio.</p>
+              <ColorEditor
+                hiddenName="hero_bg_color"
+                defaultValue=""
+                ariaLabel="Color de fondo del hero"
+                editorId="hero-bg"
               />
-              <div class="block min-w-0">
-                <span class="label flex items-center justify-between gap-2">
-                  <span>Imagen por defecto</span>
-                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded-sm bg-stone-100 text-stone-500 border border-stone-200" title="Esta imagen no se puede modificar desde el CMS">
-                    <Icon name="lucide:lock" class="w-3 h-3" aria-hidden="true" />
-                    Bloqueado
-                  </span>
+            </div>
+            <ImageUpload
+              name="hero_image_url"
+              label="Tu imagen"
+              bucket="covers"
+              hint="Click o arrastra. Recomendado: 2400×1600px o más, horizontal."
+            />
+            <div class="block min-w-0">
+              <span class="label flex items-center justify-between gap-2">
+                <span>Imagen por defecto</span>
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider rounded-sm bg-stone-100 text-stone-500 border border-stone-200" title="Esta imagen no se puede modificar desde el CMS">
+                  <Icon name="lucide:lock" class="w-3 h-3" aria-hidden="true" />
+                  Bloqueado
                 </span>
-                <div class="relative flex items-stretch gap-4 border border-stone-200 bg-stone-50/60 p-3" data-hero-fallback>
-                  <div class="relative w-24 h-24 shrink-0 bg-stone-100 border border-stone-200 overflow-hidden">
-                    <img src={HERO_FALLBACK_URL} alt="Imagen por defecto del hero" loading="lazy" class="w-full h-full object-cover" />
-                  </div>
-                  <div class="flex-1 min-w-0 flex flex-col justify-center text-sm text-stone-700">
-                    <span class="inline-flex items-center gap-1.5 font-medium text-stone-800">
-                      <Icon name="lucide:image" class="w-4 h-4" aria-hidden="true" />
-                      <span>Foto editorial de respaldo</span>
-                    </span>
-                    <span class="text-xs text-stone-500 mt-1 leading-snug">Aparece automáticamente si no defines una propia.</span>
-                    <span class="mt-2 inline-flex items-center gap-1 px-1.5 py-0.5 self-start text-[10px] font-medium uppercase tracking-wider rounded-sm border" data-hero-fallback-status>
-                      <span data-hero-fallback-dot class="w-1.5 h-1.5 rounded-full"></span>
-                      <span data-hero-fallback-label>—</span>
-                    </span>
-                  </div>
+              </span>
+              <div class="relative flex items-stretch gap-4 border border-stone-200 bg-stone-50/60 p-3" data-hero-fallback>
+                <div class="relative w-24 h-24 shrink-0 bg-stone-100 border border-stone-200 overflow-hidden">
+                  <img src={HERO_FALLBACK_URL} alt="Imagen por defecto del hero" loading="lazy" class="w-full h-full object-cover" />
+                </div>
+                <div class="flex-1 min-w-0 flex flex-col justify-center text-sm text-stone-700">
+                  <span class="inline-flex items-center gap-1.5 font-medium text-stone-800">
+                    <Icon name="lucide:image" class="w-4 h-4" aria-hidden="true" />
+                    <span>Foto editorial de respaldo</span>
+                  </span>
+                  <span class="text-xs text-stone-500 mt-1 leading-snug">Aparece automáticamente si no defines una propia.</span>
                 </div>
               </div>
-            </div>
-          </section>
-
-          {/* Hero card content */}
-          <section class="card space-y-4">
-            <CardHeader icon="lucide:newspaper" title="Contenido de la card" desc="Qué se muestra dentro del recuadro principal del hero." />
-            <div data-bind-dd="content_source">
-              <label class="label">Fuente del contenido</label>
-              <Dropdown name="content_source" value="editorial" options={CONTENT_SOURCE_OPTIONS} />
-              <p class="hcc-hint mt-1">Si eliges artículo o libro pero aún no hay nada publicado, se usa la descripción editorial como fallback.</p>
-            </div>
-
-            {/* Mini preview that mirrors EXACTLY how the public site
-                will render the card at desktop breakpoint. The card
-                is rendered at its full configured desktop dimensions
-                (width / min-height / padding) with the same Tailwind
-                classes the public site uses on the .hcc-* elements
-                — same font sizes (text-5xl title, text-base body,
-                text-xs eyebrow/cta), same line-clamp values
-                (4 / 3), same opacity / tracking — so truncation
-                behaves identically to what visitors see. The whole
-                stage is then CSS-scaled to fit the form column.
-                Below the frame, contextual hints surface: a
-                warning when source=latest_post / latest_book but
-                nothing's published; an "Editar editorial" link
-                when source=editorial. */}
-            <div class="hcc-content-preview" data-content-preview>
-              <p class="hcc-preview-eyebrow-label">Preview del contenido</p>
-              <div class="hcc-cp-frame" data-cp-frame>
-                <div class="hcc-cp-stage" data-cp-stage>
-                  <div class="hcc-cp-card flex flex-col justify-between" data-cp-card>
-                    <div>
-                      <p class="hcc-cp-eyebrow uppercase text-xs tracking-[0.2em] opacity-70 mb-5" data-cp-eyebrow></p>
-                      <h3 class="hcc-cp-title text-5xl leading-[1.1] mb-5 line-clamp-4" data-cp-title></h3>
-                      <p class="hcc-cp-body text-base opacity-80 leading-relaxed line-clamp-3" data-cp-body></p>
-                    </div>
-                    <span class="hcc-cp-cta uppercase text-xs tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4" data-cp-cta></span>
-                  </div>
-                </div>
-              </div>
-              <p class="hcc-cp-hint" data-cp-warning role="status" hidden></p>
-              <a class="hcc-cp-edit-link" data-cp-edit-editorial href="#" hidden>
-                <Icon name="lucide:external-link" class="w-3 h-3" aria-hidden="true" />
-                Editar la descripción editorial
-              </a>
-            </div>
-            {/* Manual-only fields (eyebrow / title / body): hidden
-                unless content_source = "manual". */}
-            <div data-manual-fields class="space-y-4 pt-4 border-t border-stone-100" hidden>
-              <div class="hcc-field">
-                <label class="hcc-field-label">
-                  <Icon name="lucide:tag" class="w-3.5 h-3.5" aria-hidden="true" />
-                  Eyebrow
-                </label>
-                <p class="hcc-hint">Texto corto en mayúsculas que aparece sobre el título. Ej: <em>Editorial</em>.</p>
-                <input type="text" data-bind="manual.eyebrow" class="hcc-input w-full" />
-              </div>
-              <div class="hcc-field">
-                <label class="hcc-field-label">
-                  <Icon name="lucide:type" class="w-3.5 h-3.5" aria-hidden="true" />
-                  Título
-                </label>
-                <p class="hcc-hint">Frase principal de la card. Mantenla corta y elocuente — es lo primero que se lee.</p>
-                <input type="text" data-bind="manual.title" class="hcc-input w-full" />
-              </div>
-              <div class="hcc-field">
-                <label class="hcc-field-label">
-                  <Icon name="lucide:align-left" class="w-3.5 h-3.5" aria-hidden="true" />
-                  Cuerpo
-                </label>
-                <p class="hcc-hint">Párrafo breve bajo el título (opcional). Una o dos frases máximo.</p>
-                <textarea data-bind="manual.body" rows="3" class="hcc-input w-full"></textarea>
-              </div>
-            </div>
-            {/* CTA fields (text + URL picker): visible for both
-                content_source = "manual" AND "editorial" (the
-                latest_post / latest_book modes link to the article
-                or book detail page directly, so they don't expose
-                a custom CTA). */}
-            <div data-cta-fields class="space-y-4 pt-4 border-t border-stone-100" hidden>
-              <div class="hcc-field">
-                <label class="hcc-field-label">
-                  <Icon name="lucide:mouse-pointer-click" class="w-3.5 h-3.5" aria-hidden="true" />
-                  Texto del botón
-                </label>
-                <p class="hcc-hint">Llamada a la acción visible en el CTA. Ej: <em>Explorar el catálogo</em>.</p>
-                <input type="text" data-bind="manual.cta_label" class="hcc-input w-full" placeholder="Explorar el catálogo" />
-              </div>
-              <div class="hcc-field">
-                <label class="hcc-field-label">
-                  <Icon name="lucide:link" class="w-3.5 h-3.5" aria-hidden="true" />
-                  URL del botón
-                </label>
-                <p class="hcc-hint">Escribe una ruta o elige una página detectada del sitio.</p>
-                <div class="hcc-url-combo" data-url-combo>
-                  <input
-                    type="text"
-                    data-bind="manual.cta_href"
-                    data-url-combo-input
-                    class="hcc-input w-full"
-                    placeholder="/catalogo"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                  <button
-                    type="button"
-                    class="hcc-url-combo-toggle"
-                    data-url-combo-toggle
-                    aria-label="Mostrar sugerencias"
-                  >
-                    <Icon name="lucide:chevron-down" class="w-4 h-4" aria-hidden="true" />
-                  </button>
-                  <ul class="hcc-url-combo-list" data-url-combo-list role="listbox" hidden></ul>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Hero card style: desktop */}
-          <section class="card space-y-4" data-platform-section="desktop">
-            <CardHeader icon="lucide:monitor" title="Estilo de la card (Web)" desc="Cómo se ve la card en pantallas medianas y grandes." />
-            <HeroCardPlatformControls platform="desktop" />
-          </section>
-
-          {/* Hero card style: mobile */}
-          <section class="card space-y-4" data-platform-section="mobile">
-            <CardHeader icon="lucide:smartphone" title="Estilo de la card (Mobile)" desc="Cómo se ve la card en celulares." />
-            <HeroCardPlatformControls platform="mobile" />
-          </section>
-
-        </div>
-
-        {/* Live preview pane.
-            On lg+ it sticks below the tab nav (~46px tall, sticky at
-            md:top-0 inside main). 60px ≈ tab nav + small breathing
-            room. The breadcrumb lives outside main now, so it does
-            NOT count against this offset. */}
-        <aside class="cas-preview-aside lg:sticky space-y-3 lg:order-2 order-1">
-          <div class="flex items-center gap-2 flex-wrap">
-            <button type="button" data-preview-tab="desktop" class="cas-preview-tab cas-preview-tab-active">
-              <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
-              Web
-            </button>
-            <button type="button" data-preview-tab="mobile" class="cas-preview-tab">
-              <Icon name="lucide:smartphone" class="w-3.5 h-3.5" aria-hidden="true" />
-              Mobile
-            </button>
-            {/* Zoom controls — multiply the auto-fit scale by this
-                factor so editors can inspect tiny details (a 12px
-                eyebrow on a 1440px frame ≈ 4px on screen at 1×). */}
-            <div class="cas-preview-zoom ml-auto flex items-center gap-0.5 border border-stone-200 rounded-sm" role="group" aria-label="Zoom del preview">
-              <button type="button" data-preview-zoom-out class="cas-preview-zoom-btn" aria-label="Reducir zoom" title="Reducir zoom">
-                <Icon name="lucide:minus" class="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <span class="cas-preview-zoom-value tabular-nums" data-preview-zoom-value>100%</span>
-              <button type="button" data-preview-zoom-in class="cas-preview-zoom-btn" aria-label="Aumentar zoom" title="Aumentar zoom">
-                <Icon name="lucide:plus" class="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <button type="button" data-preview-zoom-reset class="cas-preview-zoom-btn cas-preview-zoom-reset" aria-label="Restablecer zoom" title="Restablecer zoom (100%)">
-                <Icon name="lucide:rotate-ccw" class="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            </div>
-            <span class="text-[11px] uppercase tracking-wider text-stone-400" data-preview-meta>desktop · 1440 × 720</span>
-          </div>
-          {/* The frame's overflow flips to auto when zoom > 1 so the
-              user can pan via scroll. The card link is rendered with
-              pointer-events: none below so a user can't accidentally
-              navigate away by clicking "Explorar el catálogo". */}
-          <div class="cas-preview-frame border border-stone-200 bg-stone-100" data-preview-frame>
-            <div class="relative w-full h-full" data-preview-stage>
-              {/* Right-half image — only visible in desktop preview */}
-              <div data-preview-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
-              {/* The card. Position is computed at render time per platform. */}
-              <a data-preview-card class="cas-preview-noninteractive z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-disabled="true">
-                <div>
-                  <p data-preview-eyebrow class="hcc-eyebrow uppercase tracking-[0.2em] opacity-70"></p>
-                  <h1 data-preview-title class="hcc-title leading-[1.1]"></h1>
-                  <p data-preview-body class="hcc-body opacity-80 leading-relaxed"></p>
-                </div>
-                <span data-preview-cta class="hcc-cta uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
-              </a>
-              {/* Stacked mobile image — only visible in mobile preview */}
-              <img data-preview-mobile-img alt="" class="block w-full" style="display:none;" />
             </div>
           </div>
-          <button type="button" class="text-xs text-stone-500 hover:text-stone-900 underline underline-offset-4" data-reset-hero-btn>
-            Restablecer estilos del hero a default
-          </button>
-        </aside>
+        </section>
+
+        {/* Textos del hero */}
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:type" title="Textos del hero" desc="Lo que se lee en la mitad izquierda del hero de la home." />
+          <Field
+            label="Título grande"
+            name="hero_title"
+            type="textarea"
+            rows={3}
+            required
+            description="Una línea por renglón. Tres líneas funcionan bien (ej: Casa de / Asterión / Ediciones)."
+          />
+          <Field
+            label="Frase debajo del título"
+            name="hero_tagline"
+            type="textarea"
+            rows={3}
+            required
+            description="Frase única en cursiva debajo del título. Se muestra en serif italic."
+          />
+        </section>
+
+        {/* CTAs */}
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:mouse-pointer-click" title="Botones del hero" desc="Acciones que invitan al visitante a entrar al catálogo o leer las publicaciones." />
+          <div class="space-y-4">
+            <p class="label">Botón principal</p>
+            <div class="grid sm:grid-cols-2 gap-4">
+              <Field
+                label="Texto"
+                name="hero_cta_primary_label"
+                required
+                description="Ej: Entrar al catálogo."
+              />
+              <Field
+                label="Enlace"
+                name="hero_cta_primary_href"
+                required
+                description="Ruta interna (ej: /catalogo) o URL completa."
+              />
+            </div>
+          </div>
+          <div class="space-y-4 pt-4 border-t border-stone-100">
+            <p class="label">Enlace secundario</p>
+            <div class="grid sm:grid-cols-2 gap-4">
+              <Field
+                label="Texto"
+                name="hero_cta_secondary_label"
+                required
+                description="Ej: Leer publicaciones."
+              />
+              <Field
+                label="Enlace"
+                name="hero_cta_secondary_href"
+                required
+                description="Ruta interna o URL completa."
+              />
+            </div>
+          </div>
+        </section>
       </div>
-
-      {/* === EDITORIAL TAB === */}
       <div data-tab-panel="editorial" class="space-y-6 max-w-3xl" hidden>
         <section class="card space-y-5">
           <CardHeader icon="lucide:scroll-text" title="Editorial" desc="Información general que aparece en footer, meta tags y al compartir." />
@@ -826,41 +674,6 @@ const DEFAULT_HERO_CARD = {
       )}
     </fieldset>
   </form>
-
-  {/* Fullscreen preview modal — outside the form so the submit button
-      doesn't pick up its inputs. The card content elements use the
-      same data-preview-{eyebrow,title,body,cta} attribute names as
-      the inline preview because applyContent() queries by those
-      selectors on whatever card it gets — keeping them consistent
-      lets one set of render fns target either preview. */}
-  <div data-fullscreen-modal hidden class="fixed inset-0 z-[60] bg-stone-900 flex flex-col">
-    <header class="flex items-center justify-between px-4 h-14 border-b border-stone-700 text-stone-100 shrink-0">
-      <div class="flex items-center gap-3 min-w-0">
-        <span data-fullscreen-platform class="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider px-2 py-1 rounded bg-stone-800">
-          <Icon name="lucide:monitor" class="w-3.5 h-3.5" aria-hidden="true" />
-          <span data-fullscreen-platform-label>Web</span>
-        </span>
-        <span data-fullscreen-meta class="text-[11px] text-stone-400 uppercase tracking-wider truncate">1440 × 720</span>
-      </div>
-      <button type="button" data-fullscreen-close class="text-stone-300 hover:text-white p-2 -mr-2 transition-colors cursor-pointer" aria-label="Cerrar preview">
-        <Icon name="lucide:x" class="w-5 h-5" aria-hidden="true" />
-      </button>
-    </header>
-    <div class="flex-1 relative overflow-hidden bg-stone-100" data-fullscreen-frame>
-      <div class="relative" data-fullscreen-stage>
-        <div data-fullscreen-bg-image class="absolute top-0 right-0 h-full w-1/2 bg-cover bg-center pointer-events-none"></div>
-        <a data-fullscreen-card class="cas-preview-noninteractive z-10 flex flex-col justify-between" target="_blank" rel="noopener noreferrer" tabindex="-1" aria-disabled="true">
-          <div>
-            <p data-preview-eyebrow class="hcc-eyebrow uppercase tracking-[0.2em] opacity-70"></p>
-            <h1 data-preview-title class="hcc-title leading-[1.1]"></h1>
-            <p data-preview-body class="hcc-body opacity-80 leading-relaxed"></p>
-          </div>
-          <span data-preview-cta class="hcc-cta uppercase tracking-[0.18em] border-b border-current/60 pb-1 self-start mt-4"></span>
-        </a>
-        <img data-fullscreen-mobile-img alt="" class="block w-full" style="display:none;" />
-      </div>
-    </div>
-  </div>
 
   </div>{/* /[data-page-tab-panel="home"] */}
 
@@ -2686,6 +2499,10 @@ const DEFAULT_HERO_CARD = {
     };
 
     const renderHeroPreview = () => {
+      // Legacy hero-card panel was removed (replaced by direct text
+      // inputs for the new wordmark hero). If the form no longer has
+      // a [data-hero-json] hidden input, there is nothing to render.
+      if (!$("[data-hero-json]")) return;
       // Raw cfg — preserves empty bg_image_url so the user's intent
       // ("no image set on this side") is what we save to Supabase.
       const cfg = readHeroForm();
@@ -2870,19 +2687,13 @@ const DEFAULT_HERO_CARD = {
         renderColorEditor(heroBgEditor);
       }
 
-      // Hero card config
-      const persisted = cfg.hero_card_config;
-      const heroCfg = persisted && typeof persisted === "object"
-        ? {
-            content_source: persisted.content_source ?? DEFAULT_HERO_CARD.content_source,
-            manual: { ...DEFAULT_HERO_CARD.manual, ...(persisted.manual ?? {}) },
-            desktop: { ...DEFAULT_HERO_CARD.desktop, ...(persisted.desktop ?? {}) },
-            mobile: { ...DEFAULT_HERO_CARD.mobile, ...(persisted.mobile ?? {}) },
-          }
-        : structuredClone(DEFAULT_HERO_CARD);
-      currentHeroCfg = heroCfg;
-      writeHeroForm(heroCfg);
-      renderHeroPreview();
+      // Hero textos — wordmark, tagline, CTAs.
+      set("hero_title", cfg.hero_title ?? "Casa de\nAsterión\nEdiciones");
+      set("hero_tagline", cfg.hero_tagline ?? "Libros que no se apuran: filosofía y poesía editadas con tiempo y oficio.");
+      set("hero_cta_primary_label", cfg.hero_cta_primary_label ?? "Entrar al catálogo");
+      set("hero_cta_primary_href", cfg.hero_cta_primary_href ?? "/catalogo");
+      set("hero_cta_secondary_label", cfg.hero_cta_secondary_label ?? "Leer publicaciones");
+      set("hero_cta_secondary_href", cfg.hero_cta_secondary_href ?? "/articulos");
 
       // The form has just been populated with the server values; tell
       // the FormActions dirty-tracker to take this as the new baseline.
