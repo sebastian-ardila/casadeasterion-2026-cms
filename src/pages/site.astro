@@ -41,6 +41,46 @@ function clip(s: string | undefined, n: number): string {
   return s.length > n ? s.slice(0, n).trimEnd() + "…" : s;
 }
 
+// Surface helpers for the live preview cards. Books and posts come
+// back from Supabase with junction rows; flatten them and pick the
+// first author. Anything missing falls through to a sensible mock.
+type PreviewAuthor = { name: string; photo_url: string | null; bio_md?: string | null };
+function pickAuthors<T extends { sort_order: number; author: PreviewAuthor | null }>(
+  rows: T[] | null | undefined,
+  limit = 2,
+): PreviewAuthor[] {
+  if (!Array.isArray(rows)) return [];
+  return [...rows]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((r) => r.author)
+    .filter((a): a is PreviewAuthor => !!a)
+    .slice(0, limit);
+}
+function formatPriceCOP(amount: number | null | undefined, currency: string | null | undefined): string | null {
+  if (amount == null) return null;
+  try {
+    return new Intl.NumberFormat("es-CO", {
+      style: "currency",
+      currency: currency || "COP",
+      maximumFractionDigits: 0,
+    }).format(Number(amount));
+  } catch {
+    return `${currency || ""} ${amount}`.trim();
+  }
+}
+function formatDateLong(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  try {
+    return new Intl.DateTimeFormat("es-CO", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(iso));
+  } catch {
+    return null;
+  }
+}
+
 // Reads a hidden JSON-encoded list from FormData. Returns [] on
 // missing / malformed input so a corrupt list can never block a
 // site-config save.
@@ -101,7 +141,10 @@ type LatestPost = {
   content_md: string | null;
   subtitle?: string | null;
   cover_image_url?: string | null;
+  published_at?: string | null;
+  reading_time_minutes?: number | null;
   category?: { name: string; icon: string | null } | null;
+  post_authors?: { sort_order: number; author: { name: string; photo_url: string | null; bio_md: string | null } | null }[] | null;
 } | null;
 type LatestBook = {
   slug: string;
@@ -109,6 +152,12 @@ type LatestBook = {
   subtitle: string | null;
   description_md: string | null;
   cover_image_url?: string | null;
+  isbn?: string | null;
+  pages?: number | null;
+  format?: string | null;
+  price_amount?: number | null;
+  price_currency?: string | null;
+  book_authors?: { sort_order: number; author: { name: string; photo_url: string | null } | null }[] | null;
 } | null;
 let LATEST_POST: LatestPost = null;
 let LATEST_BOOK: LatestBook = null;
@@ -129,8 +178,8 @@ try {
     sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("authors").select("slug, name").order("name").limit(40),
-    sb.from("posts").select("slug, title, excerpt, content_md, subtitle, cover_image_url, category:categories(name, icon)").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("books").select("slug, title, subtitle, description_md, cover_image_url").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("posts").select("slug, title, excerpt, content_md, subtitle, cover_image_url, published_at, reading_time_minutes, category:categories(name, icon), post_authors(sort_order, author:authors(name, photo_url, bio_md))").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("books").select("slug, title, subtitle, description_md, cover_image_url, isbn, pages, format, price_amount, price_currency, book_authors(sort_order, author:authors(name, photo_url))").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("site_configuration")
       .select("updated_at, editor:profiles!site_configuration_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false })
@@ -165,6 +214,39 @@ try {
 } catch {
   // Network / RLS hiccup — keep the static picker only.
 }
+
+// Derived view-model for the live previews. Flatten junction rows
+// into a small object the template can read without juggling
+// sort_orders / null guards.
+const BOOK_PV = LATEST_BOOK
+  ? {
+      title: LATEST_BOOK.title,
+      subtitle: LATEST_BOOK.subtitle ?? "",
+      description: clip(stripMd(LATEST_BOOK.description_md)[0], 320),
+      cover: LATEST_BOOK.cover_image_url ?? "",
+      authors: pickAuthors(LATEST_BOOK.book_authors, 2),
+      isbn: LATEST_BOOK.isbn ?? "",
+      pages: LATEST_BOOK.pages ?? null,
+      format: LATEST_BOOK.format ?? "",
+      price: formatPriceCOP(LATEST_BOOK.price_amount, LATEST_BOOK.price_currency),
+    }
+  : null;
+const PUBLICATION_PV = LATEST_POST
+  ? {
+      title: LATEST_POST.title,
+      subtitle: LATEST_POST.subtitle ?? "",
+      body: [
+        clip(stripMd(LATEST_POST.content_md)[0] ?? LATEST_POST.excerpt ?? "", 220),
+        clip(stripMd(LATEST_POST.content_md)[1] ?? "", 180),
+      ].filter(Boolean),
+      cover: LATEST_POST.cover_image_url ?? "",
+      author: pickAuthors(LATEST_POST.post_authors, 1)[0] ?? null,
+      authorBio: clip(stripMd(pickAuthors(LATEST_POST.post_authors, 1)[0]?.bio_md)[0], 130),
+      category: LATEST_POST.category ?? null,
+      publishedAt: formatDateLong(LATEST_POST.published_at),
+      readingMin: LATEST_POST.reading_time_minutes ?? null,
+    }
+  : null;
 
 if (Astro.request.method === "POST") {
   if (!canEdit) return Astro.redirect("/?error=no_permission&section=site");
@@ -824,29 +906,73 @@ const DEFAULT_HERO_CARD = {
 
       {/* === Preview de la ficha de libro ====================================
            Mirror visual de /catalogo/[slug] con el último libro publicado
-           como referencia. Las fuentes del título y de la descripción
-           cambian en vivo cuando el editor toca los dropdowns de arriba.
-           Si no hay libros publicados aún, mostramos placeholders. */}
+           como referencia: breadcrumb, grid 2 columnas (cover + autor +
+           metadata a la izq, título + descripción + CTA a la der), CTA
+           "Agregar al carrito" con icon. Las fuentes del título y de la
+           descripción cambian en vivo cuando el editor toca los
+           dropdowns de arriba. */}
       <section
         class="card space-y-3"
         data-book-detail-preview
         style={`--pv-title-font: ${resolveFontFamily(BOOK_DETAIL_TYPO.title_font)}; --pv-body-font: ${resolveFontFamily(BOOK_DETAIL_TYPO.body_font)};`}
       >
         <CardHeader icon="lucide:eye" title="Vista previa" desc={LATEST_BOOK ? `Cómo se verá la ficha del libro «${LATEST_BOOK.title}» con las tipografías que elijas.` : "Mostramos un libro de muestra. Aparecerá uno real cuando haya un libro publicado."} />
-        <div class="cas-detail-pv cas-detail-pv-book">
-          <div class="cas-detail-pv-cover" data-pv-book-cover></div>
-          <div class="cas-detail-pv-body">
-            <h1 class="cas-detail-pv-title" data-pv-book-title>{LATEST_BOOK?.title ?? "Título del libro"}</h1>
-            <p class="cas-detail-pv-subtitle" data-pv-book-subtitle>{LATEST_BOOK?.subtitle ?? "Subtítulo o aforismo editorial"}</p>
-            <div class="cas-detail-pv-content" data-pv-book-body>
-              <p>{clip(stripMd(LATEST_BOOK?.description_md)[0], 240) || "Aquí aparecerá la descripción editorial del libro tal como la lees en el sitio público. Cada párrafo respeta la tipografía que elijas para el cuerpo."}</p>
-            </div>
-            <div class="cas-detail-pv-cta">
-              <span>Comprar por WhatsApp</span>
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M5 12h14" />
-                <path d="m13 5 7 7-7 7" />
-              </svg>
+        <div class="cas-detail-pv cas-detail-pv-book-frame">
+          {/* Breadcrumb */}
+          <nav class="cas-detail-pv-crumbs" aria-label="Breadcrumb">
+            <span>Inicio</span>
+            <span aria-hidden="true">›</span>
+            <span>Catálogo</span>
+            <span aria-hidden="true">›</span>
+            <span class="cas-detail-pv-crumbs-current">{BOOK_PV?.title ?? "Título del libro"}</span>
+          </nav>
+          <div class="cas-detail-pv-book-grid">
+            <aside class="cas-detail-pv-book-aside">
+              {BOOK_PV?.cover ? (
+                <img src={BOOK_PV.cover} alt="" class="cas-detail-pv-cover" />
+              ) : (
+                <div class="cas-detail-pv-cover" data-empty="1"></div>
+              )}
+              {BOOK_PV?.authors && BOOK_PV.authors.length > 0 && (
+                <div class="cas-detail-pv-authors">
+                  <p class="cas-detail-pv-label">{BOOK_PV.authors.length > 1 ? "Autores" : "Autor"}</p>
+                  {BOOK_PV.authors.map((a) => (
+                    <div class="cas-detail-pv-author-row">
+                      {a.photo_url ? (
+                        <img src={a.photo_url} alt="" class="cas-detail-pv-author-thumb" />
+                      ) : (
+                        <span class="cas-detail-pv-author-thumb cas-detail-pv-author-thumb--empty">{a.name.charAt(0)}</span>
+                      )}
+                      <span class="cas-detail-pv-author-name">{a.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(BOOK_PV?.isbn || BOOK_PV?.pages || BOOK_PV?.format || BOOK_PV?.price) && (
+                <dl class="cas-detail-pv-tech">
+                  {BOOK_PV?.isbn && (<><dt>ISBN</dt><dd>{BOOK_PV.isbn}</dd></>)}
+                  {BOOK_PV?.pages != null && (<><dt>Páginas</dt><dd>{BOOK_PV.pages}</dd></>)}
+                  {BOOK_PV?.format && (<><dt>Formato</dt><dd>{BOOK_PV.format}</dd></>)}
+                  {BOOK_PV?.price && (<><dt>Precio</dt><dd>{BOOK_PV.price}</dd></>)}
+                </dl>
+              )}
+            </aside>
+            <div class="cas-detail-pv-book-main">
+              <h1 class="cas-detail-pv-title" data-pv-book-title>{BOOK_PV?.title ?? "Título del libro de muestra"}</h1>
+              {BOOK_PV?.subtitle && (
+                <p class="cas-detail-pv-subtitle" data-pv-book-subtitle>{BOOK_PV.subtitle}</p>
+              )}
+              <div class="cas-detail-pv-content" data-pv-book-body>
+                <p>{BOOK_PV?.description || "Aquí aparecerá la descripción editorial del libro tal como la lees en el sitio público. Cada párrafo respeta la tipografía que elijas para el cuerpo."}</p>
+              </div>
+              <button type="button" class="cas-detail-pv-cart" tabindex="-1" aria-disabled="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <path d="M16 10a4 4 0 0 1-8 0" />
+                </svg>
+                <span>Agregar al carrito</span>
+              </button>
             </div>
           </div>
         </div>
@@ -877,38 +1003,79 @@ const DEFAULT_HERO_CARD = {
       </fieldset>
 
       {/* === Preview de la página de publicación =============================
-           Mirror visual de /articulos/[slug] con la última publicación como
-           referencia. Header con eyebrow (categoría), título y subtítulo
-           encima del grid; aside con la portada y un párrafo de muestra del
-           cuerpo. Las fuentes se actualizan en vivo. */}
+           Mirror visual de /articulos/[slug] con la última publicación
+           como referencia: breadcrumb, header full-width (eyebrow con
+           icono lucide de la categoría + título + subtítulo) + divider
+           + grid 2 columnas (cover cuadrado, autor card, fecha+lectura
+           a la izq, cuerpo a la der). */}
       <section
         class="card space-y-3"
-        data-article-detail-preview
+        data-publication-detail-preview
         style={`--pv-title-font: ${resolveFontFamily(ARTICLE_DETAIL_TYPO.title_font)}; --pv-body-font: ${resolveFontFamily(ARTICLE_DETAIL_TYPO.body_font)};`}
       >
         <CardHeader icon="lucide:eye" title="Vista previa" desc={LATEST_POST ? `Cómo se verá la publicación «${LATEST_POST.title}» con las tipografías que elijas.` : "Mostramos una publicación de muestra. Aparecerá una real cuando haya publicaciones publicadas."} />
-        <div class="cas-detail-pv cas-detail-pv-article">
-          <div class="cas-detail-pv-article-header">
-            {LATEST_POST?.category && (
-              <p class="cas-detail-pv-eyebrow">
-                <span class="cas-detail-pv-eyebrow-dot" aria-hidden="true"></span>
-                <span>{LATEST_POST.category.name}</span>
-              </p>
+        <div class="cas-detail-pv cas-detail-pv-publication-frame">
+          {/* Breadcrumb */}
+          <nav class="cas-detail-pv-crumbs" aria-label="Breadcrumb">
+            <span>Inicio</span>
+            <span aria-hidden="true">›</span>
+            <span>Publicaciones</span>
+            <span aria-hidden="true">›</span>
+            <span class="cas-detail-pv-crumbs-current">{PUBLICATION_PV?.title ?? "Título de la publicación"}</span>
+          </nav>
+          {/* Header full-width */}
+          <header class="cas-detail-pv-publication-header">
+            <p class="cas-detail-pv-eyebrow">
+              {PUBLICATION_PV?.category?.icon ? (
+                <Icon name={`lucide:${PUBLICATION_PV.category.icon}`} class="cas-detail-pv-eyebrow-icon" aria-hidden="true" />
+              ) : (
+                <Icon name="lucide:bookmark" class="cas-detail-pv-eyebrow-icon" aria-hidden="true" />
+              )}
+              <span>{PUBLICATION_PV?.category?.name ?? "Categoría"}</span>
+            </p>
+            <h1 class="cas-detail-pv-title cas-detail-pv-title--publication" data-pv-publication-title>{PUBLICATION_PV?.title ?? "Título de la publicación"}</h1>
+            {PUBLICATION_PV?.subtitle && (
+              <p class="cas-detail-pv-subtitle cas-detail-pv-subtitle--publication" data-pv-publication-subtitle>{PUBLICATION_PV.subtitle}</p>
             )}
-            {!LATEST_POST?.category && (
-              <p class="cas-detail-pv-eyebrow">
-                <span class="cas-detail-pv-eyebrow-dot" aria-hidden="true"></span>
-                <span>Categoría</span>
-              </p>
-            )}
-            <h1 class="cas-detail-pv-title cas-detail-pv-title--article" data-pv-article-title>{LATEST_POST?.title ?? "Título de la publicación"}</h1>
-            <p class="cas-detail-pv-subtitle" data-pv-article-subtitle>{LATEST_POST?.subtitle ?? "Subtítulo o entradilla"}</p>
-          </div>
-          <div class="cas-detail-pv-article-row">
-            <div class="cas-detail-pv-cover cas-detail-pv-cover--article" data-pv-article-cover></div>
-            <div class="cas-detail-pv-content cas-detail-pv-content--article" data-pv-article-body>
-              <p>{clip(stripMd(LATEST_POST?.content_md)[0], 220) || (LATEST_POST?.excerpt ?? "Aquí aparecerá el cuerpo del artículo con la tipografía que elijas. Cada párrafo, lista o cita respetará esta familia.")}</p>
-              <p>{clip(stripMd(LATEST_POST?.content_md)[1], 200) || "Los títulos H2/H3 dentro del contenido también heredan la misma fuente para mantener una voz tipográfica coherente."}</p>
+          </header>
+          <hr class="cas-detail-pv-divider" />
+          {/* Body row */}
+          <div class="cas-detail-pv-publication-row">
+            <aside class="cas-detail-pv-publication-aside">
+              {PUBLICATION_PV?.cover ? (
+                <img src={PUBLICATION_PV.cover} alt="" class="cas-detail-pv-cover cas-detail-pv-cover--publication" />
+              ) : (
+                <div class="cas-detail-pv-cover cas-detail-pv-cover--publication" data-empty="1"></div>
+              )}
+              {PUBLICATION_PV?.author && (
+                <div class="cas-detail-pv-authors">
+                  <p class="cas-detail-pv-label">Autor</p>
+                  <div class="cas-detail-pv-author-row">
+                    {PUBLICATION_PV.author.photo_url ? (
+                      <img src={PUBLICATION_PV.author.photo_url} alt="" class="cas-detail-pv-author-thumb" />
+                    ) : (
+                      <span class="cas-detail-pv-author-thumb cas-detail-pv-author-thumb--empty">{PUBLICATION_PV.author.name.charAt(0)}</span>
+                    )}
+                    <span class="cas-detail-pv-author-name">{PUBLICATION_PV.author.name}</span>
+                  </div>
+                  {PUBLICATION_PV.authorBio && (
+                    <p class="cas-detail-pv-author-bio">{PUBLICATION_PV.authorBio}</p>
+                  )}
+                </div>
+              )}
+              {(PUBLICATION_PV?.publishedAt || PUBLICATION_PV?.readingMin) && (
+                <dl class="cas-detail-pv-tech">
+                  {PUBLICATION_PV?.publishedAt && (<><dt>Fecha</dt><dd>{PUBLICATION_PV.publishedAt}</dd></>)}
+                  {PUBLICATION_PV?.readingMin != null && (<><dt>Lectura</dt><dd>{PUBLICATION_PV.readingMin} min</dd></>)}
+                </dl>
+              )}
+            </aside>
+            <div class="cas-detail-pv-content cas-detail-pv-content--publication" data-pv-publication-body>
+              {(PUBLICATION_PV?.body && PUBLICATION_PV.body.length > 0
+                ? PUBLICATION_PV.body
+                : ["Aquí aparecerá el cuerpo del artículo con la tipografía que elijas. Cada párrafo, lista o cita respetará esta familia.",
+                   "Los títulos H2/H3 dentro del contenido también heredan la misma fuente para mantener una voz tipográfica coherente."]
+              ).map((para) => (<p>{para}</p>))}
             </div>
           </div>
         </div>
@@ -2020,7 +2187,10 @@ const DEFAULT_HERO_CARD = {
      declara dos CSS vars en su style attribute (--pv-title-font /
      --pv-body-font) que el JS actualiza al vuelo cuando el editor
      cambia un dropdown de tipografía. Colores tomados de los tokens
-     del sitio público (var --bg-alt = oklch(99% 0.003 70) etc.). */
+     del sitio público (var --bg-alt = oklch(99% 0.003 70) etc.).
+     El frame está completamente contenido — usamos container-type:
+     inline-size para que clamp(_, cqi, _) escale con el ancho del
+     preview, no del viewport del CMS. */
   .cas-detail-pv {
     --pv-bg: oklch(99% 0.003 70);
     --pv-fg: oklch(20% 0.01 70);
@@ -2028,110 +2198,60 @@ const DEFAULT_HERO_CARD = {
     --pv-border: oklch(85% 0.005 70);
     background: var(--pv-bg);
     border: 1px solid rgb(231 229 228);
-    padding: clamp(1rem, 2.5cqi, 1.75rem);
+    padding: clamp(1rem, 3cqi, 2.5rem) clamp(1rem, 3.5cqi, 3rem);
     container-type: inline-size;
+    color: var(--pv-fg);
   }
-  .cas-detail-pv-book {
+
+  /* Mini breadcrumb arriba — el mismo uppercase tracking del público. */
+  .cas-detail-pv-crumbs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: clamp(1rem, 2.5cqi, 2rem);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--pv-fg-muted);
+    flex-wrap: wrap;
+  }
+  .cas-detail-pv-crumbs > span[aria-hidden="true"] {
+    color: oklch(75% 0.005 70);
+  }
+  .cas-detail-pv-crumbs-current {
+    color: var(--pv-fg);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 24em;
+  }
+
+  /* ---- LIBRO ---- */
+  .cas-detail-pv-book-frame { /* solo wrapper, los hijos hacen el grid */ }
+  .cas-detail-pv-book-grid {
     display: grid;
-    grid-template-columns: minmax(110px, 22%) 1fr;
-    gap: clamp(1rem, 3cqi, 2rem);
+    grid-template-columns: minmax(120px, 28%) 1fr;
+    gap: clamp(1.25rem, 4cqi, 3rem);
     align-items: start;
   }
+  .cas-detail-pv-book-aside {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(1rem, 2cqi, 1.5rem);
+    min-width: 0;
+  }
+  .cas-detail-pv-book-main { min-width: 0; }
   .cas-detail-pv-cover {
+    display: block;
+    width: 100%;
     aspect-ratio: 3 / 4;
+    object-fit: cover;
     background-color: oklch(92% 0.005 70);
     background-size: cover;
     background-position: center;
-    box-shadow: 0 6px 16px -8px rgba(28, 25, 23, 0.18);
-    border-radius: 1px;
+    box-shadow: 0 8px 20px -10px rgba(28, 25, 23, 0.22);
   }
-  .cas-detail-pv-body {
-    min-width: 0;
-  }
-  .cas-detail-pv-title {
-    font-family: var(--pv-title-font);
-    font-weight: 500;
-    font-size: clamp(1.4rem, 4cqi, 2.6rem);
-    line-height: 1.08;
-    color: var(--pv-fg);
-    margin: 0 0 0.4rem;
-    word-break: break-word;
-  }
-  .cas-detail-pv-subtitle {
-    font-family: var(--pv-body-font);
-    font-style: italic;
-    font-size: clamp(0.85rem, 1.6cqi, 1.15rem);
-    line-height: 1.3;
-    color: var(--pv-fg-muted);
-    margin: 0 0 1rem;
-  }
-  .cas-detail-pv-content {
-    font-family: var(--pv-body-font);
-    color: var(--pv-fg);
-    font-size: clamp(0.85rem, 1.4cqi, 1rem);
-    line-height: 1.55;
-    margin: 0 0 1.2rem;
-  }
-  .cas-detail-pv-content p {
-    margin: 0 0 0.7em;
-  }
-  .cas-detail-pv-content p:last-child {
-    margin-bottom: 0;
-  }
-  .cas-detail-pv-cta {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.55rem 1rem;
-    background: var(--pv-fg);
-    color: var(--pv-bg);
-    font-size: 0.6rem;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    pointer-events: none;
-    user-select: none;
-  }
-
-  /* Variante de la publicación: header full-width (eyebrow + título +
-     subtítulo) seguido de un grid 2 columnas con cover + body. */
-  .cas-detail-pv-article {
-    display: flex;
-    flex-direction: column;
-    gap: clamp(0.875rem, 2cqi, 1.4rem);
-  }
-  .cas-detail-pv-eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0 0 0.75rem;
-    font-size: 0.625rem;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: var(--pv-fg-muted);
-  }
-  .cas-detail-pv-eyebrow-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: var(--pv-fg-muted);
-  }
-  .cas-detail-pv-title--article {
-    font-size: clamp(1.4rem, 3.6cqi, 2.4rem);
-  }
-  .cas-detail-pv-article-row {
-    display: grid;
-    grid-template-columns: minmax(110px, 26%) 1fr;
-    gap: clamp(1rem, 3cqi, 2rem);
-    align-items: start;
-  }
-  .cas-detail-pv-cover--article {
-    aspect-ratio: 4 / 5;
-  }
-  .cas-detail-pv-content--article {
-    margin: 0;
-  }
-  /* Empty cover (sin imagen): pinta un placeholder sutil con un ícono
-     de libro/imagen para que el preview no se vea roto. */
   .cas-detail-pv-cover[data-empty="1"] {
     background-image: linear-gradient(135deg, oklch(95% 0.005 70), oklch(88% 0.008 70));
     position: relative;
@@ -2141,6 +2261,199 @@ const DEFAULT_HERO_CARD = {
     position: absolute;
     inset: 30% 35%;
     border: 1px dashed color-mix(in oklch, var(--pv-fg) 30%, transparent);
+  }
+
+  /* Title + subtitle + body */
+  .cas-detail-pv-title {
+    font-family: var(--pv-title-font);
+    font-weight: 500;
+    font-size: clamp(1.5rem, 4.4cqi, 3rem);
+    line-height: 1.08;
+    color: var(--pv-fg);
+    margin: 0 0 0.4rem;
+    word-break: break-word;
+  }
+  .cas-detail-pv-subtitle {
+    font-family: var(--pv-body-font);
+    font-style: italic;
+    font-size: clamp(0.9rem, 1.8cqi, 1.25rem);
+    line-height: 1.3;
+    color: var(--pv-fg-muted);
+    margin: 0 0 1rem;
+  }
+  .cas-detail-pv-content {
+    font-family: var(--pv-body-font);
+    color: var(--pv-fg);
+    font-size: clamp(0.85rem, 1.4cqi, 1.05rem);
+    line-height: 1.6;
+    margin: 0 0 clamp(1rem, 2cqi, 1.5rem);
+  }
+  .cas-detail-pv-content p { margin: 0 0 0.85em; }
+  .cas-detail-pv-content p:last-child { margin-bottom: 0; }
+
+  /* CTA carrito */
+  .cas-detail-pv-cart {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    width: 100%;
+    height: clamp(2.4rem, 4cqi, 3rem);
+    background: var(--pv-fg);
+    color: var(--pv-bg);
+    font-size: clamp(0.6rem, 1cqi, 0.78rem);
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    border: 0;
+    pointer-events: none;
+    user-select: none;
+    cursor: default;
+  }
+  .cas-detail-pv-cart svg {
+    width: clamp(0.85rem, 1.4cqi, 1.05rem);
+    height: clamp(0.85rem, 1.4cqi, 1.05rem);
+  }
+
+  /* Author card (libro + publicación) */
+  .cas-detail-pv-label {
+    margin: 0 0 0.6rem;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--pv-fg-muted);
+  }
+  .cas-detail-pv-authors {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  .cas-detail-pv-author-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+  }
+  .cas-detail-pv-author-thumb {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    background: oklch(90% 0.005 70);
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--pv-body-font);
+    font-size: 0.85rem;
+    color: var(--pv-fg-muted);
+  }
+  .cas-detail-pv-author-thumb--empty { background: oklch(90% 0.005 70); }
+  .cas-detail-pv-author-name {
+    font-family: var(--pv-body-font);
+    font-size: clamp(0.78rem, 1.2cqi, 0.95rem);
+    color: var(--pv-fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cas-detail-pv-author-bio {
+    margin: 0;
+    font-family: var(--pv-body-font);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--pv-fg-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Tech rows (ISBN, Páginas, …) */
+  .cas-detail-pv-tech {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 1rem;
+    row-gap: 0.5rem;
+    margin: 0;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--pv-border);
+    font-size: 0.7rem;
+  }
+  .cas-detail-pv-tech dt {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.6rem;
+    color: var(--pv-fg-muted);
+    align-self: baseline;
+  }
+  .cas-detail-pv-tech dd {
+    margin: 0;
+    color: var(--pv-fg);
+    font-family: var(--pv-body-font);
+    font-size: 0.78rem;
+  }
+
+  /* ---- PUBLICACIÓN ---- */
+  .cas-detail-pv-publication-frame { /* wrapper */ }
+  .cas-detail-pv-publication-header {
+    margin-bottom: clamp(0.75rem, 1.5cqi, 1.25rem);
+  }
+  .cas-detail-pv-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 0 0.75rem;
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--pv-fg-muted);
+  }
+  .cas-detail-pv-eyebrow-icon {
+    width: 14px;
+    height: 14px;
+  }
+  .cas-detail-pv-subtitle--publication {
+    font-style: normal;
+    font-size: clamp(0.9rem, 1.8cqi, 1.2rem);
+    color: var(--pv-fg);
+    margin-bottom: 0;
+  }
+  .cas-detail-pv-divider {
+    border: 0;
+    border-top: 1px solid var(--pv-border);
+    margin: clamp(1rem, 2.5cqi, 2rem) 0;
+  }
+  .cas-detail-pv-publication-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 28%) 1fr;
+    gap: clamp(1.25rem, 4cqi, 3rem);
+    align-items: start;
+  }
+  .cas-detail-pv-publication-aside {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.85rem, 2cqi, 1.4rem);
+    min-width: 0;
+  }
+  .cas-detail-pv-cover--publication {
+    aspect-ratio: 1 / 1;
+    box-shadow: none;
+  }
+  .cas-detail-pv-content--publication { margin: 0; }
+  .cas-detail-pv-content--publication p { margin: 0 0 1.3em; line-height: 1.7; }
+  .cas-detail-pv-content--publication p:last-child { margin-bottom: 0; }
+  .cas-detail-pv-title--publication {
+    font-size: clamp(1.5rem, 4cqi, 2.8rem);
+  }
+
+  /* Reflow en panel angosto */
+  @container (max-width: 480px) {
+    .cas-detail-pv-book-grid,
+    .cas-detail-pv-publication-row {
+      grid-template-columns: 1fr;
+    }
+    .cas-detail-pv-cover {
+      max-width: 220px;
+    }
   }
 
   /* === Mini content preview (lives inside "Contenido de la card") ===
@@ -3278,20 +3591,20 @@ const DEFAULT_HERO_CARD = {
           bookCover.dataset.empty = "1";
         }
       }
-      const articleCover = document.querySelector("[data-pv-article-cover]");
-      if (articleCover) {
+      const publicationCover = document.querySelector("[data-pv-publication-cover]");
+      if (publicationCover) {
         const url = LATEST_POST?.cover_image_url?.trim();
         if (url) {
-          articleCover.style.backgroundImage = `url('${url.replace(/'/g, "%27")}')`;
-          articleCover.dataset.empty = "0";
+          publicationCover.style.backgroundImage = `url('${url.replace(/'/g, "%27")}')`;
+          publicationCover.dataset.empty = "0";
         } else {
-          articleCover.dataset.empty = "1";
+          publicationCover.dataset.empty = "1";
         }
       }
     };
     const initAllDetailPreviews = () => {
       initDetailPreview(document.querySelector("[data-book-detail-preview]"), "book_detail");
-      initDetailPreview(document.querySelector("[data-article-detail-preview]"), "article_detail");
+      initDetailPreview(document.querySelector("[data-publication-detail-preview]"), "article_detail");
       hydrateDetailCovers();
     };
 
