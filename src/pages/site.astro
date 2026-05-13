@@ -14,6 +14,32 @@ import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { str, strReq, tags as parseTags } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
+import { FONT_OPTIONS } from "~/lib/fonts";
+
+// Map { value → fontFamily } so the in-page preview JS can swap the
+// font of the catalog/article preview card live as the editor picks a
+// typeface from the dropdown — without round-tripping to the server.
+const FONT_FAMILY_MAP: Record<string, string> = Object.fromEntries(
+  FONT_OPTIONS.map((f) => [f.value, f.fontFamily]),
+);
+const resolveFontFamily = (key: string) =>
+  FONT_FAMILY_MAP[key] ?? FONT_FAMILY_MAP.serif;
+
+// Strip the most common markdown noise so the preview shows clean text.
+// Splits on paragraph breaks and returns the first ~N chars of the
+// first paragraph (and second, for the article preview).
+function stripMd(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .replace(/[#*_`>\[\]()]/g, "")
+    .split(/\n\s*\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+function clip(s: string | undefined, n: number): string {
+  if (!s) return "";
+  return s.length > n ? s.slice(0, n).trimEnd() + "…" : s;
+}
 
 // Reads a hidden JSON-encoded list from FormData. Returns [] on
 // missing / malformed input so a corrupt list can never block a
@@ -68,8 +94,22 @@ let URL_OPTIONS: UrlOpt[] = [...URL_STATIC];
 // content_md / description_md let the JS-side teaser builder fall
 // back to the long-form text when the editor hasn't filled an
 // excerpt / subtitle.
-type LatestPost = { slug: string; title: string; excerpt: string | null; content_md: string | null } | null;
-type LatestBook = { slug: string; title: string; subtitle: string | null; description_md: string | null } | null;
+type LatestPost = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  content_md: string | null;
+  subtitle?: string | null;
+  cover_image_url?: string | null;
+  category?: { name: string; icon: string | null } | null;
+} | null;
+type LatestBook = {
+  slug: string;
+  title: string;
+  subtitle: string | null;
+  description_md: string | null;
+  cover_image_url?: string | null;
+} | null;
 let LATEST_POST: LatestPost = null;
 let LATEST_BOOK: LatestBook = null;
 // Most recent site_configuration row + the editor that last touched it
@@ -89,8 +129,8 @@ try {
     sb.from("posts").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("books").select("slug, title").eq("status", "published").order("title").limit(60),
     sb.from("authors").select("slug, name").order("name").limit(40),
-    sb.from("posts").select("slug, title, excerpt, content_md").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("books").select("slug, title, subtitle, description_md").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("posts").select("slug, title, excerpt, content_md, subtitle, cover_image_url, category:categories(name, icon)").eq("status", "published").order("published_at", { ascending: false }).limit(1).maybeSingle(),
+    sb.from("books").select("slug, title, subtitle, description_md, cover_image_url").eq("status", "published").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("site_configuration")
       .select("updated_at, editor:profiles!site_configuration_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false })
@@ -766,7 +806,7 @@ const DEFAULT_HERO_CARD = {
        flex-col + spacer hacen que la barra del botón quede pegada al
        borde inferior del viewport aunque el contenido sea corto. */}
   <div data-page-tab-panel="catalogo" hidden class="flex flex-col min-h-[calc(100vh-180px)]">
-    <form method="POST" class="flex flex-col flex-1">
+    <form method="POST" class="flex flex-col flex-1 space-y-6">
       <input type="hidden" name="_panel" value="catalogo">
       <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
         <DetailTypographyPanel
@@ -782,6 +822,36 @@ const DEFAULT_HERO_CARD = {
         />
       </fieldset>
 
+      {/* === Preview de la ficha de libro ====================================
+           Mirror visual de /catalogo/[slug] con el último libro publicado
+           como referencia. Las fuentes del título y de la descripción
+           cambian en vivo cuando el editor toca los dropdowns de arriba.
+           Si no hay libros publicados aún, mostramos placeholders. */}
+      <section
+        class="card space-y-3"
+        data-book-detail-preview
+        style={`--pv-title-font: ${resolveFontFamily(BOOK_DETAIL_TYPO.title_font)}; --pv-body-font: ${resolveFontFamily(BOOK_DETAIL_TYPO.body_font)};`}
+      >
+        <CardHeader icon="lucide:eye" title="Vista previa" desc={LATEST_BOOK ? `Cómo se verá la ficha del libro «${LATEST_BOOK.title}» con las tipografías que elijas.` : "Mostramos un libro de muestra. Aparecerá uno real cuando haya un libro publicado."} />
+        <div class="cas-detail-pv cas-detail-pv-book">
+          <div class="cas-detail-pv-cover" data-pv-book-cover></div>
+          <div class="cas-detail-pv-body">
+            <h1 class="cas-detail-pv-title" data-pv-book-title>{LATEST_BOOK?.title ?? "Título del libro"}</h1>
+            <p class="cas-detail-pv-subtitle" data-pv-book-subtitle>{LATEST_BOOK?.subtitle ?? "Subtítulo o aforismo editorial"}</p>
+            <div class="cas-detail-pv-content" data-pv-book-body>
+              <p>{clip(stripMd(LATEST_BOOK?.description_md)[0], 240) || "Aquí aparecerá la descripción editorial del libro tal como la lees en el sitio público. Cada párrafo respeta la tipografía que elijas para el cuerpo."}</p>
+            </div>
+            <div class="cas-detail-pv-cta">
+              <span>Comprar por WhatsApp</span>
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12h14" />
+                <path d="m13 5 7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div class="flex-1"></div>{/* spacer pushes the save bar to the bottom */}
 
       <FormActions canEdit={canEdit} saveLabel="Guardar configuración" />
@@ -790,7 +860,7 @@ const DEFAULT_HERO_CARD = {
 
   {/* === Artículos > Artículo ============================================ */}
   <div data-page-tab-panel="articulos" hidden class="flex flex-col min-h-[calc(100vh-180px)]">
-    <form method="POST" class="flex flex-col flex-1">
+    <form method="POST" class="flex flex-col flex-1 space-y-6">
       <input type="hidden" name="_panel" value="articulos">
       <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
         <DetailTypographyPanel
@@ -805,6 +875,44 @@ const DEFAULT_HERO_CARD = {
           scopeNote="Estos ajustes son globales: cambian la tipografía de todas las publicaciones a la vez, no de una en particular."
         />
       </fieldset>
+
+      {/* === Preview de la página de publicación =============================
+           Mirror visual de /articulos/[slug] con la última publicación como
+           referencia. Header con eyebrow (categoría), título y subtítulo
+           encima del grid; aside con la portada y un párrafo de muestra del
+           cuerpo. Las fuentes se actualizan en vivo. */}
+      <section
+        class="card space-y-3"
+        data-article-detail-preview
+        style={`--pv-title-font: ${resolveFontFamily(ARTICLE_DETAIL_TYPO.title_font)}; --pv-body-font: ${resolveFontFamily(ARTICLE_DETAIL_TYPO.body_font)};`}
+      >
+        <CardHeader icon="lucide:eye" title="Vista previa" desc={LATEST_POST ? `Cómo se verá la publicación «${LATEST_POST.title}» con las tipografías que elijas.` : "Mostramos una publicación de muestra. Aparecerá una real cuando haya publicaciones publicadas."} />
+        <div class="cas-detail-pv cas-detail-pv-article">
+          <div class="cas-detail-pv-article-header">
+            {LATEST_POST?.category && (
+              <p class="cas-detail-pv-eyebrow">
+                <span class="cas-detail-pv-eyebrow-dot" aria-hidden="true"></span>
+                <span>{LATEST_POST.category.name}</span>
+              </p>
+            )}
+            {!LATEST_POST?.category && (
+              <p class="cas-detail-pv-eyebrow">
+                <span class="cas-detail-pv-eyebrow-dot" aria-hidden="true"></span>
+                <span>Categoría</span>
+              </p>
+            )}
+            <h1 class="cas-detail-pv-title cas-detail-pv-title--article" data-pv-article-title>{LATEST_POST?.title ?? "Título de la publicación"}</h1>
+            <p class="cas-detail-pv-subtitle" data-pv-article-subtitle>{LATEST_POST?.subtitle ?? "Subtítulo o entradilla"}</p>
+          </div>
+          <div class="cas-detail-pv-article-row">
+            <div class="cas-detail-pv-cover cas-detail-pv-cover--article" data-pv-article-cover></div>
+            <div class="cas-detail-pv-content cas-detail-pv-content--article" data-pv-article-body>
+              <p>{clip(stripMd(LATEST_POST?.content_md)[0], 220) || (LATEST_POST?.excerpt ?? "Aquí aparecerá el cuerpo del artículo con la tipografía que elijas. Cada párrafo, lista o cita respetará esta familia.")}</p>
+              <p>{clip(stripMd(LATEST_POST?.content_md)[1], 200) || "Los títulos H2/H3 dentro del contenido también heredan la misma fuente para mantener una voz tipográfica coherente."}</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div class="flex-1"></div>
 
@@ -1907,6 +2015,134 @@ const DEFAULT_HERO_CARD = {
     background-position: center;
   }
 
+  /* === Vista previa de la ficha de libro y de la publicación ===
+     Mini-replica de /catalogo/[slug] y /articulos/[slug]. Cada preview
+     declara dos CSS vars en su style attribute (--pv-title-font /
+     --pv-body-font) que el JS actualiza al vuelo cuando el editor
+     cambia un dropdown de tipografía. Colores tomados de los tokens
+     del sitio público (var --bg-alt = oklch(99% 0.003 70) etc.). */
+  .cas-detail-pv {
+    --pv-bg: oklch(99% 0.003 70);
+    --pv-fg: oklch(20% 0.01 70);
+    --pv-fg-muted: oklch(45% 0.01 70);
+    --pv-border: oklch(85% 0.005 70);
+    background: var(--pv-bg);
+    border: 1px solid rgb(231 229 228);
+    padding: clamp(1rem, 2.5cqi, 1.75rem);
+    container-type: inline-size;
+  }
+  .cas-detail-pv-book {
+    display: grid;
+    grid-template-columns: minmax(110px, 22%) 1fr;
+    gap: clamp(1rem, 3cqi, 2rem);
+    align-items: start;
+  }
+  .cas-detail-pv-cover {
+    aspect-ratio: 3 / 4;
+    background-color: oklch(92% 0.005 70);
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 6px 16px -8px rgba(28, 25, 23, 0.18);
+    border-radius: 1px;
+  }
+  .cas-detail-pv-body {
+    min-width: 0;
+  }
+  .cas-detail-pv-title {
+    font-family: var(--pv-title-font);
+    font-weight: 500;
+    font-size: clamp(1.4rem, 4cqi, 2.6rem);
+    line-height: 1.08;
+    color: var(--pv-fg);
+    margin: 0 0 0.4rem;
+    word-break: break-word;
+  }
+  .cas-detail-pv-subtitle {
+    font-family: var(--pv-body-font);
+    font-style: italic;
+    font-size: clamp(0.85rem, 1.6cqi, 1.15rem);
+    line-height: 1.3;
+    color: var(--pv-fg-muted);
+    margin: 0 0 1rem;
+  }
+  .cas-detail-pv-content {
+    font-family: var(--pv-body-font);
+    color: var(--pv-fg);
+    font-size: clamp(0.85rem, 1.4cqi, 1rem);
+    line-height: 1.55;
+    margin: 0 0 1.2rem;
+  }
+  .cas-detail-pv-content p {
+    margin: 0 0 0.7em;
+  }
+  .cas-detail-pv-content p:last-child {
+    margin-bottom: 0;
+  }
+  .cas-detail-pv-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1rem;
+    background: var(--pv-fg);
+    color: var(--pv-bg);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Variante de la publicación: header full-width (eyebrow + título +
+     subtítulo) seguido de un grid 2 columnas con cover + body. */
+  .cas-detail-pv-article {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.875rem, 2cqi, 1.4rem);
+  }
+  .cas-detail-pv-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.75rem;
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--pv-fg-muted);
+  }
+  .cas-detail-pv-eyebrow-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--pv-fg-muted);
+  }
+  .cas-detail-pv-title--article {
+    font-size: clamp(1.4rem, 3.6cqi, 2.4rem);
+  }
+  .cas-detail-pv-article-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 26%) 1fr;
+    gap: clamp(1rem, 3cqi, 2rem);
+    align-items: start;
+  }
+  .cas-detail-pv-cover--article {
+    aspect-ratio: 4 / 5;
+  }
+  .cas-detail-pv-content--article {
+    margin: 0;
+  }
+  /* Empty cover (sin imagen): pinta un placeholder sutil con un ícono
+     de libro/imagen para que el preview no se vea roto. */
+  .cas-detail-pv-cover[data-empty="1"] {
+    background-image: linear-gradient(135deg, oklch(95% 0.005 70), oklch(88% 0.008 70));
+    position: relative;
+  }
+  .cas-detail-pv-cover[data-empty="1"]::after {
+    content: "";
+    position: absolute;
+    inset: 30% 35%;
+    border: 1px dashed color-mix(in oklch, var(--pv-fg) 30%, transparent);
+  }
+
   /* === Mini content preview (lives inside "Contenido de la card") ===
      The card itself is rendered at the configured desktop dimensions
      and then transform: scale()-ed to fit the form column — same
@@ -2087,7 +2323,7 @@ const DEFAULT_HERO_CARD = {
   }
 </style>
 
-<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL, HERO_CARD_FONTS_MAP, LATEST_POST, LATEST_BOOK, URL_OPTIONS }}>
+<script is:inline define:vars={{ DEFAULT_HERO_CARD, HERO_FALLBACK_URL, HERO_CARD_FONTS_MAP, LATEST_POST, LATEST_BOOK, URL_OPTIONS, FONT_FAMILY_MAP }}>
   (() => {
     if (window.__casSiteInit) return;
     window.__casSiteInit = true;
@@ -3004,6 +3240,61 @@ const DEFAULT_HERO_CARD = {
       if (mobBg) mobBg.style.backgroundColor = bgValue;
     };
 
+    // ----- Live previews of /catalogo/[slug] and /articulos/[slug] -----
+    // Each panel ("Catálogo > Libro" and "Publicaciones > Publicación")
+    // has a single DetailTypographyPanel + a preview card. The dropdowns
+    // emit `change` events that we listen for and reflect on the preview
+    // via two CSS vars on the wrapper: --pv-title-font / --pv-body-font.
+    // We also seed the cover image with LATEST_BOOK / LATEST_POST so the
+    // editor sees the real piece of content the public site will render.
+    const resolveFamily = (key) => FONT_FAMILY_MAP[key] || FONT_FAMILY_MAP.serif;
+    const initDetailPreview = (root, namePrefix) => {
+      if (!root) return;
+      const titleSelect = document.querySelector(`[name="${namePrefix}_title_font"]`);
+      const bodySelect = document.querySelector(`[name="${namePrefix}_body_font"]`);
+      const apply = () => {
+        if (titleSelect && titleSelect.value) {
+          root.style.setProperty("--pv-title-font", resolveFamily(titleSelect.value));
+        }
+        if (bodySelect && bodySelect.value) {
+          root.style.setProperty("--pv-body-font", resolveFamily(bodySelect.value));
+        }
+      };
+      apply();
+      titleSelect?.addEventListener("change", apply);
+      bodySelect?.addEventListener("change", apply);
+      // Dropdown.astro emits the `change` event after the user picks
+      // an option in the custom listbox; native <select fallback> also
+      // fires `change`. Both are covered here.
+    };
+    const hydrateDetailCovers = () => {
+      const bookCover = document.querySelector("[data-pv-book-cover]");
+      if (bookCover) {
+        const url = LATEST_BOOK?.cover_image_url?.trim();
+        if (url) {
+          bookCover.style.backgroundImage = `url('${url.replace(/'/g, "%27")}')`;
+          bookCover.dataset.empty = "0";
+        } else {
+          bookCover.dataset.empty = "1";
+        }
+      }
+      const articleCover = document.querySelector("[data-pv-article-cover]");
+      if (articleCover) {
+        const url = LATEST_POST?.cover_image_url?.trim();
+        if (url) {
+          articleCover.style.backgroundImage = `url('${url.replace(/'/g, "%27")}')`;
+          articleCover.dataset.empty = "0";
+        } else {
+          articleCover.dataset.empty = "1";
+        }
+      }
+    };
+    const initAllDetailPreviews = () => {
+      initDetailPreview(document.querySelector("[data-book-detail-preview]"), "book_detail");
+      initDetailPreview(document.querySelector("[data-article-detail-preview]"), "article_detail");
+      hydrateDetailCovers();
+    };
+
     // ----- Hydration of all site_configuration -----
     const apply = (cfg) => {
       const form = $("[data-site-form]");
@@ -3892,6 +4183,10 @@ const DEFAULT_HERO_CARD = {
       wireTabs();
       wireForm();
       hydrate();
+      // The catalogo + articulos panels live outside the main home
+      // <form data-site-form>, so wireForm() doesn't touch them. Wire
+      // their previews here on every boot so view transitions re-bind.
+      initAllDetailPreviews();
     };
 
     document.addEventListener("astro:page-load", () => {
