@@ -1,23 +1,24 @@
 ---
-// Role picker for /staff: a <select> populated server-side from
-// staff_roles plus a small "+ Agregar cargo" inline button that lets
-// the editor add a new role without leaving the form. The new role is
-// persisted via POST /api/staff-roles and then selected in the dropdown.
+// Role picker for /staff: usa el componente Dropdown custom (mismo
+// look-and-feel que el resto del CMS) y agrega un botón "+ Cargo"
+// que abre un mini-form inline para crear un cargo nuevo sin salir
+// de la página. La nueva opción se inserta en el dropdown vía DOM y
+// queda seleccionada al instante.
 //
-// Submitting the form sends the role NAME (not id) in the named input,
-// because `staff.role` is a free-text column — the lookup table is just
-// a UX convenience.
+// `staff.role` es free-text — staff_roles es solo el catálogo de
+// sugerencias. Por eso enviamos el NOMBRE (no el id) al backend.
 
 import { getSupabaseServerClient } from "~/lib/supabase-server";
+import Dropdown from "~/components/Dropdown.astro";
+import type { DropdownOption } from "~/components/Dropdown.astro";
+import { roleLabel } from "~/lib/staff-roles";
 
 interface Props {
-  /** Name of the form field that will carry the role value to the server. */
+  /** Name of the form field that carries the role value. */
   name: string;
   /** Current value (the role name). Selected if it matches a row. */
   value?: string | null;
-  /** Label rendered above the select. */
   label?: string;
-  /** Description shown under the label. */
   description?: string;
   required?: boolean;
 }
@@ -29,47 +30,48 @@ const {
   required = false,
 } = Astro.props as Props;
 
-// Server-side fetch so the dropdown is fully hydrated even with JS
-// disabled. The Add-Role button gracefully degrades to a no-op when
-// JS isn't running.
+// Server-side fetch so the dropdown is fully hydrated on first paint.
 const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
 const { data: roles } = await sb
   .from("staff_roles")
   .select("id, name, sort_order")
   .order("sort_order", { ascending: true })
   .order("name", { ascending: true });
-const opts = roles ?? [];
 
-// If the row's saved role isn't in the lookup table (someone wrote a
-// custom value directly, or a role was removed from staff_roles), we
-// still want it shown as the selected option — append it as an extra
-// item so the value round-trips on save.
 const selected = (value ?? "").trim();
-const includesSelected = selected && opts.some((r) => r.name === selected);
-const allOpts = selected && !includesSelected
-  ? [...opts, { id: "__custom__", name: selected, sort_order: 9999 }]
-  : opts;
+// El label puede expandirse cosméticamente ("CEO — Chief Executive
+// Officer"), pero el value queda como está en el DB ("CEO") para que
+// staff.role siga apuntando al string canónico.
+const baseOptions: DropdownOption[] = (roles ?? []).map((r) => ({
+  value: r.name,
+  label: roleLabel(r.name),
+  icon: "lucide:briefcase",
+}));
+// Si el valor guardado no está en la lookup table (alguien escribió un
+// cargo custom desde otro flujo, o se borró del catálogo), lo añadimos
+// como opción extra para que se preserve.
+const hasSelected = selected && baseOptions.some((o) => o.value === selected);
+const options: DropdownOption[] = selected && !hasSelected
+  ? [...baseOptions, { value: selected, label: roleLabel(selected), icon: "lucide:briefcase" }]
+  : baseOptions;
 ---
 
 <div class="role-picker" data-role-picker>
   {label && (
-    <label for={`rp-${name}`} class="label block mb-1.5">
+    <label class="label block mb-1.5">
       {label}{required && <span class="text-red-600">*</span>}
     </label>
   )}
   <div class="flex items-stretch gap-2">
-    <select
-      id={`rp-${name}`}
-      name={name}
-      required={required}
-      data-role-select
-      class="form-input flex-1 min-w-0 cursor-pointer"
-    >
-      {!required && <option value="" disabled={!!selected}>Selecciona un cargo…</option>}
-      {allOpts.map((r) => (
-        <option value={r.name} selected={r.name === selected}>{r.name}</option>
-      ))}
-    </select>
+    <div class="flex-1 min-w-0" data-role-dd>
+      <Dropdown
+        name={name}
+        value={selected || undefined}
+        options={options}
+        placeholder="Selecciona un cargo…"
+        searchable={false}
+      />
+    </div>
     <button
       type="button"
       class="btn-outline shrink-0 px-3 text-xs"
@@ -85,7 +87,7 @@ const allOpts = selected && !includesSelected
   )}
 
   {/* Hidden mini-form revealed when the user clicks "+ Cargo". */}
-  <div class="hidden mt-2 flex items-stretch gap-2" data-role-add-form>
+  <div class="hidden mt-2 items-stretch gap-2" data-role-add-form>
     <input
       type="text"
       placeholder="Nuevo cargo (ej. Distribución)"
@@ -104,16 +106,97 @@ const allOpts = selected && !includesSelected
     if (window.__casRolePickerInit) return;
     window.__casRolePickerInit = true;
 
+    const escapeHtml = (s) =>
+      String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    // Mirror of lib/staff-roles.ts roleLabel() — keep both in sync. The
+    // server renders the initial labels via that module; this lookup
+    // handles options inserted at runtime via "+ Cargo".
+    const ROLE_EXPANSIONS = {
+      CEO: "Chief Executive Officer",
+      CTO: "Chief Technology Officer",
+      COO: "Chief Operating Officer",
+      CFO: "Chief Financial Officer",
+      CMO: "Chief Marketing Officer",
+    };
+    const roleLabel = (name) => {
+      const trimmed = String(name ?? "").trim();
+      const exp = ROLE_EXPANSIONS[trimmed.toUpperCase()];
+      return exp ? `${trimmed} — ${exp}` : trimmed;
+    };
+
+    // Replicate Dropdown.setValue() externally: append/select an option
+    // by name in a given dropdown root. The role catalogue is text-only,
+    // so we don't need image/iconStyle/fontFamily.
+    const selectRoleInDropdown = (ddRoot, roleName) => {
+      const input = ddRoot.querySelector("[data-dd-input]");
+      const display = ddRoot.querySelector("[data-dd-display]");
+      const optionsList = ddRoot.querySelector("[data-dd-options]");
+      if (!input || !display || !optionsList) return;
+
+      const labelText = roleLabel(roleName);
+
+      // 1. Append the option if it doesn't exist yet.
+      const escapedValue = roleName.replace(/"/g, '\\"');
+      let optionBtn = ddRoot.querySelector(`[data-dd-option][data-value="${escapedValue}"]`);
+      if (!optionBtn) {
+        const li = document.createElement("li");
+        li.setAttribute("data-dd-search-text", labelText.toLowerCase());
+        const refIcon = ddRoot.querySelector("[data-dd-option] .cas-dd-option-glyph");
+        const iconHtml = refIcon ? refIcon.outerHTML : "";
+        li.innerHTML = `<button
+            type="button"
+            role="option"
+            aria-selected="false"
+            data-dd-option
+            data-value="${escapeHtml(roleName)}"
+            data-label="${escapeHtml(labelText)}"
+            data-image=""
+            data-icon-style="none"
+            data-font-family=""
+            class="cas-dd-option">
+            ${iconHtml}
+            <span class="cas-dd-option-text"><span class="cas-dd-option-label">${escapeHtml(labelText)}</span></span>
+          </button>`;
+        optionsList.appendChild(li);
+        optionBtn = li.querySelector("[data-dd-option]");
+      }
+
+      // 2. Update hidden input + display. The submitted value is the
+      // short name (preserves the DB string); the display label is the
+      // expanded version.
+      input.value = roleName;
+      const srcGlyph = optionBtn.querySelector(".cas-dd-option-glyph svg");
+      const glyphHtml = srcGlyph
+        ? `<span class="cas-dd-display-glyph shrink-0">${srcGlyph.outerHTML}</span>`
+        : "";
+      display.innerHTML = glyphHtml + `<span class="truncate">${escapeHtml(labelText)}</span>`;
+
+      // 3. Mark aria-selected on the right option.
+      ddRoot.querySelectorAll("[data-dd-option]").forEach((o) => {
+        const isSel = o.dataset.value === roleName;
+        o.setAttribute("aria-selected", isSel ? "true" : "false");
+        o.classList.toggle("cas-dd-option-selected", isSel);
+      });
+
+      // 4. Fire `change` so dirty-trackers / form-state listeners pick up
+      // the new value — mirrors what Dropdown.setValue does internally.
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
     const wire = (root) => {
       if (root.dataset.wired === "1") return;
       root.dataset.wired = "1";
-      const select = root.querySelector("[data-role-select]");
+
+      const ddWrap = root.querySelector("[data-role-dd]");
+      const ddRoot = ddWrap?.querySelector("[data-dropdown]");
       const addBtn = root.querySelector("[data-role-add-btn]");
       const form = root.querySelector("[data-role-add-form]");
       const input = root.querySelector("[data-role-add-input]");
       const save = root.querySelector("[data-role-add-save]");
       const cancel = root.querySelector("[data-role-add-cancel]");
       const err = root.querySelector("[data-role-add-error]");
+      if (!ddRoot) return;
 
       const reveal = () => {
         form.classList.remove("hidden");
@@ -148,19 +231,7 @@ const allOpts = selected && !includesSelected
             return;
           }
           const body = await res.json();
-          const role = body.role;
-          // Insert option (if new) and select it. Sort isn't critical
-          // here since the next page load will re-render in order.
-          const existing = Array.from(select.options).find((o) => o.value === role.name);
-          if (!existing) {
-            const opt = document.createElement("option");
-            opt.value = role.name;
-            opt.textContent = role.name;
-            select.appendChild(opt);
-          }
-          select.value = role.name;
-          // Notify any dirty trackers that the form changed.
-          select.dispatchEvent(new Event("change", { bubbles: true }));
+          selectRoleInDropdown(ddRoot, body.role.name);
           hide();
         } catch (e) {
           showError("Error de red. Reintenta.");
