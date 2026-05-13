@@ -128,5 +128,16 @@ const {
     });
   }
 
-  document.querySelectorAll<HTMLElement>("[data-cas-form-bar]").forEach(bindBar);
+  function bindAll() {
+    document.querySelectorAll<HTMLElement>("[data-cas-form-bar]").forEach(bindBar);
+  }
+  // Initial run on first page load.
+  bindAll();
+  // The CMS uses <ClientRouter />, so navigation between pages (and the
+  // POST → redirect flow that follows every "Guardar") swaps the DOM
+  // without a full reload. Without this listener the new [data-cas-form-bar]
+  // nodes never get bound and the save button stays disabled even after
+  // the user edits, which manifests as "the first time the button enables,
+  // the second time it doesn't". bindBar() is idempotent via dataset.casBound.
+  document.addEventListener("astro:page-load", bindAll);
 </script>
