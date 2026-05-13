@@ -1,0 +1,185 @@
+---
+// Role picker for /staff: a <select> populated server-side from
+// staff_roles plus a small "+ Agregar cargo" inline button that lets
+// the editor add a new role without leaving the form. The new role is
+// persisted via POST /api/staff-roles and then selected in the dropdown.
+//
+// Submitting the form sends the role NAME (not id) in the named input,
+// because `staff.role` is a free-text column — the lookup table is just
+// a UX convenience.
+
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+
+interface Props {
+  /** Name of the form field that will carry the role value to the server. */
+  name: string;
+  /** Current value (the role name). Selected if it matches a row. */
+  value?: string | null;
+  /** Label rendered above the select. */
+  label?: string;
+  /** Description shown under the label. */
+  description?: string;
+  required?: boolean;
+}
+const {
+  name,
+  value = "",
+  label = "Cargo",
+  description = "Selecciona un cargo o agrega uno nuevo.",
+  required = false,
+} = Astro.props as Props;
+
+// Server-side fetch so the dropdown is fully hydrated even with JS
+// disabled. The Add-Role button gracefully degrades to a no-op when
+// JS isn't running.
+const sb = getSupabaseServerClient(Astro.request, Astro.cookies);
+const { data: roles } = await sb
+  .from("staff_roles")
+  .select("id, name, sort_order")
+  .order("sort_order", { ascending: true })
+  .order("name", { ascending: true });
+const opts = roles ?? [];
+
+// If the row's saved role isn't in the lookup table (someone wrote a
+// custom value directly, or a role was removed from staff_roles), we
+// still want it shown as the selected option — append it as an extra
+// item so the value round-trips on save.
+const selected = (value ?? "").trim();
+const includesSelected = selected && opts.some((r) => r.name === selected);
+const allOpts = selected && !includesSelected
+  ? [...opts, { id: "__custom__", name: selected, sort_order: 9999 }]
+  : opts;
+---
+
+<div class="role-picker" data-role-picker>
+  {label && (
+    <label for={`rp-${name}`} class="label block mb-1.5">
+      {label}{required && <span class="text-red-600">*</span>}
+    </label>
+  )}
+  <div class="flex items-stretch gap-2">
+    <select
+      id={`rp-${name}`}
+      name={name}
+      required={required}
+      data-role-select
+      class="form-input flex-1 min-w-0 cursor-pointer"
+    >
+      {!required && <option value="" disabled={!!selected}>Selecciona un cargo…</option>}
+      {allOpts.map((r) => (
+        <option value={r.name} selected={r.name === selected}>{r.name}</option>
+      ))}
+    </select>
+    <button
+      type="button"
+      class="btn-outline shrink-0 px-3 text-xs"
+      data-role-add-btn
+      aria-label="Agregar nuevo cargo"
+      title="Agregar nuevo cargo"
+    >
+      + Cargo
+    </button>
+  </div>
+  {description && (
+    <p class="text-stone-500 text-xs mt-1.5">{description}</p>
+  )}
+
+  {/* Hidden mini-form revealed when the user clicks "+ Cargo". */}
+  <div class="hidden mt-2 flex items-stretch gap-2" data-role-add-form>
+    <input
+      type="text"
+      placeholder="Nuevo cargo (ej. Distribución)"
+      class="form-input flex-1 min-w-0"
+      data-role-add-input
+      autocomplete="off"
+    />
+    <button type="button" class="btn-primary shrink-0 text-xs" data-role-add-save>Agregar</button>
+    <button type="button" class="btn-outline shrink-0 text-xs" data-role-add-cancel>Cancelar</button>
+  </div>
+  <p class="hidden text-red-700 text-xs mt-1.5" data-role-add-error></p>
+</div>
+
+<script is:inline>
+  (() => {
+    if (window.__casRolePickerInit) return;
+    window.__casRolePickerInit = true;
+
+    const wire = (root) => {
+      if (root.dataset.wired === "1") return;
+      root.dataset.wired = "1";
+      const select = root.querySelector("[data-role-select]");
+      const addBtn = root.querySelector("[data-role-add-btn]");
+      const form = root.querySelector("[data-role-add-form]");
+      const input = root.querySelector("[data-role-add-input]");
+      const save = root.querySelector("[data-role-add-save]");
+      const cancel = root.querySelector("[data-role-add-cancel]");
+      const err = root.querySelector("[data-role-add-error]");
+
+      const reveal = () => {
+        form.classList.remove("hidden");
+        form.classList.add("flex");
+        err.classList.add("hidden");
+        input.value = "";
+        setTimeout(() => input.focus(), 0);
+      };
+      const hide = () => {
+        form.classList.add("hidden");
+        form.classList.remove("flex");
+        err.classList.add("hidden");
+      };
+      const showError = (msg) => {
+        err.textContent = msg;
+        err.classList.remove("hidden");
+      };
+
+      const submit = async () => {
+        const name = input.value.trim();
+        if (!name) { showError("Escribe el nombre del cargo."); return; }
+        save.disabled = true;
+        try {
+          const res = await fetch("/api/staff-roles", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            showError(body.error || "No se pudo crear el cargo.");
+            return;
+          }
+          const body = await res.json();
+          const role = body.role;
+          // Insert option (if new) and select it. Sort isn't critical
+          // here since the next page load will re-render in order.
+          const existing = Array.from(select.options).find((o) => o.value === role.name);
+          if (!existing) {
+            const opt = document.createElement("option");
+            opt.value = role.name;
+            opt.textContent = role.name;
+            select.appendChild(opt);
+          }
+          select.value = role.name;
+          // Notify any dirty trackers that the form changed.
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          hide();
+        } catch (e) {
+          showError("Error de red. Reintenta.");
+        } finally {
+          save.disabled = false;
+        }
+      };
+
+      addBtn.addEventListener("click", reveal);
+      cancel.addEventListener("click", hide);
+      save.addEventListener("click", submit);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); submit(); }
+        if (e.key === "Escape") { e.preventDefault(); hide(); }
+      });
+    };
+
+    const wireAll = () => document.querySelectorAll("[data-role-picker]").forEach(wire);
+    wireAll();
+    document.addEventListener("astro:page-load", wireAll);
+  })();
+</script>

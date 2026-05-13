@@ -1,0 +1,137 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
+import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
+import FormActions from "~/components/FormActions.astro";
+import RolePicker from "~/components/RolePicker.astro";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq, slugify } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requirePermission(Astro, "staff", "edit");
+if (guard instanceof Response) return guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const name = strReq(fd, "name");
+    const slug = str(fd, "slug") || slugify(name);
+    const role = strReq(fd, "role");
+
+    // Place new member at the end by default.
+    const { data: last } = await supabase
+      .from("staff")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextOrder = (last?.sort_order ?? 0) + 10;
+
+    const { data, error } = await supabase
+      .from("staff")
+      .insert({
+        name,
+        slug,
+        role,
+        bio_md: str(fd, "bio_md") ?? null,
+        photo_url: str(fd, "photo_url") ?? null,
+        email: str(fd, "email") ?? null,
+        links: {
+          web: str(fd, "link_web") ?? "",
+          twitter: str(fd, "link_twitter") ?? "",
+          instagram: str(fd, "link_instagram") ?? "",
+          linkedin: str(fd, "link_linkedin") ?? "",
+        },
+        sort_order: nextOrder,
+        status: str(fd, "status") === "draft" ? "draft" : "published",
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return Astro.redirect(`/staff/${data.id}?saved=1&action=created&entity=author&publish=1`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+---
+
+<AppLayout title="Nuevo miembro del personal" resource="staff">
+  <BackToList href="/staff" label="Personal" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nuevo miembro</h1>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se presenta esta persona en /nosotros.</p>
+      </div>
+      <Field label="Nombre" name="name" required description="Nombre completo." />
+      <Field label="Slug" name="slug" description="Se autogenera del nombre si lo dejas vacío." />
+      <RolePicker name="role" label="Cargo" required description="Selecciona uno o agrega un cargo nuevo." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Foto</h2>
+        <p class="card-section-desc">Retrato vertical. Se convierte a WebP automáticamente.</p>
+      </div>
+      <ImageUpload name="photo_url" label="Foto" bucket="authors" />
+    </section>
+
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Biografía</h2>
+        <p class="card-section-desc">Texto introductorio. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="bio_md" label="" />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Contacto y enlaces</h2>
+        <p class="card-section-desc">Aparece como ícono de contacto en /nosotros (opcional).</p>
+      </div>
+      <Field label="Email" name="email" type="email" description="Email profesional. Se muestra como link en la ficha." />
+      <div class="grid sm:grid-cols-2 gap-4">
+        <Field label="Web" name="link_web" type="url" description="Sitio personal o académico." />
+        <Field label="LinkedIn" name="link_linkedin" type="url" description="URL del perfil." />
+        <Field label="Twitter" name="link_twitter" type="url" description="URL del perfil." />
+        <Field label="Instagram" name="link_instagram" type="url" description="URL del perfil." />
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Publicación</h2>
+        <p class="card-section-desc">Determina si esta persona aparece ya en /nosotros.</p>
+      </div>
+      <label class="flex items-start gap-3 text-sm">
+        <input type="radio" name="status" value="published" checked class="mt-1" />
+        <span>
+          <span class="font-medium">Publicado</span>
+          <span class="block text-stone-500">Visible en el sitio público apenas se guarde.</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 text-sm">
+        <input type="radio" name="status" value="draft" class="mt-1" />
+        <span>
+          <span class="font-medium">Borrador</span>
+          <span class="block text-stone-500">Solo visible en el CMS — no aparece todavía en /nosotros.</span>
+        </span>
+      </label>
+    </section>
+
+    <FormActions cancelHref="/staff" saveLabel="Crear miembro" />
+  </form>
+</AppLayout>

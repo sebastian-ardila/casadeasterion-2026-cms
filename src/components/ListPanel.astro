@@ -5,7 +5,7 @@ import type { Resource, Level } from "~/lib/auth";
 // "admins" and "orders" are special panels with their own auth gates
 // (owner-only and owner+admin respectively) and aren't part of the
 // per-user permissions matrix.
-type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "categories"> | "admins" | "orders";
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "staff" | "categories"> | "admins" | "orders";
 
 interface Props {
   resource: PanelResource;
@@ -23,6 +23,7 @@ const headerByResource: Record<PanelResource, { title: string; icon: string; new
   books: { title: "Libros", icon: "lucide:book-open", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", icon: "lucide:users", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
   collaborators: { title: "Colaboradores", icon: "lucide:user-plus", newHref: "/collaborators/new", newLabel: "+ Nuevo colaborador" },
+  staff: { title: "Personal", icon: "lucide:building", newHref: "/staff/new", newLabel: "+ Nuevo miembro" },
   categories: { title: "Categorías", icon: "lucide:folder-tree", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
   admins: { title: "Usuarios", icon: "lucide:users-round", newHref: "/admins/new", newLabel: "+ Nuevo usuario" },
   // Orders: leads always originate from the public site, never the

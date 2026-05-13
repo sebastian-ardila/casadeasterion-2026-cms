@@ -1,0 +1,18 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import { requirePermission } from "~/lib/auth";
+
+const guard = await requirePermission(Astro, "staff", "view");
+if (guard instanceof Response) return guard;
+const canEdit = guard.permission === "edit";
+---
+
+<AppLayout title="Personal" resource="staff">
+  <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
+    <p class="font-serif text-xl mb-2">Personal</p>
+    <p class="text-sm mb-6">Selecciona un miembro de la lista{canEdit && " o crea uno nuevo"}.</p>
+    {canEdit && (
+      <a href="/staff/new" class="btn-primary">+ Nuevo miembro</a>
+    )}
+  </div>
+</AppLayout>

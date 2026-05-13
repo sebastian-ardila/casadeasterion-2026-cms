@@ -57,6 +57,7 @@ const ALLOWED = new Set<ListResource>([
   "books",
   "authors",
   "collaborators",
+  "staff",
   "categories",
   "admins",
   "orders",
@@ -176,6 +177,26 @@ export const GET: APIRoute = async (ctx) => {
       editorId: a.editor?.id ?? null,
       href: `/collaborators/${a.id}`,
       imageUrl: a.photo_url ?? null,
+      imageStyle: "photo",
+    }));
+  } else if (resource === "staff") {
+    // Organizational profiles — team members of Casa de Asterión.
+    // Subtitle shows the role (cargo) so the editor can scan the
+    // sidebar list and know who does what at a glance.
+    const { data } = await supabase
+      .from("staff")
+      .select("id, name, slug, role, photo_url, sort_order, status, updated_at, editor:profiles!staff_updated_by_fkey(id, full_name, email)")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    items = (data ?? []).map((s: any) => ({
+      id: s.id,
+      title: s.name,
+      subtitle: s.role || `/${s.slug}`,
+      meta: editorMeta(s.updated_at, s.editor),
+      editorId: s.editor?.id ?? null,
+      status: s.status,
+      href: `/staff/${s.id}`,
+      imageUrl: s.photo_url ?? null,
       imageStyle: "photo",
     }));
   } else if (resource === "categories") {

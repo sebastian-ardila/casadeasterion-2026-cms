@@ -9,6 +9,7 @@ export type Resource =
   | "books"
   | "authors"
   | "collaborators"
+  | "staff"
   | "categories"
   | "site"
   | "orders"
@@ -25,6 +26,7 @@ export const RESOURCES: Resource[] = [
   "books",
   "authors",
   "collaborators",
+  "staff",
   "categories",
   "site",
   "orders",
@@ -41,6 +43,7 @@ export const CONFIGURABLE_RESOURCES: Resource[] = [
   "books",
   "authors",
   "collaborators",
+  "staff",
   "categories",
   "site",
   "orders",
@@ -52,6 +55,7 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   books: "Libros",
   authors: "Autores",
   collaborators: "Colaboradores",
+  staff: "Personal",
   categories: "Categorías",
   site: "Webpage",
   orders: "Pedidos",
@@ -65,6 +69,7 @@ export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   books: "edit",
   authors: "edit",
   collaborators: "edit",
+  staff: "edit",
   categories: "view",
   site: "none",
   orders: "none",
@@ -78,6 +83,7 @@ export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   books: "edit",
   authors: "edit",
   collaborators: "edit",
+  staff: "edit",
   categories: "edit",
   site: "edit",
   orders: "edit",

@@ -29,6 +29,7 @@ export const GET: APIRoute = async (ctx) => {
   if (perms.posts         !== "none") tasks.push(countOf("posts",         "posts"));
   if (perms.authors       !== "none") tasks.push(countOf("authors",       "authors"));
   if (perms.collaborators !== "none") tasks.push(countOf("collaborators", "collaborators"));
+  if (perms.staff         !== "none") tasks.push(countOf("staff",         "staff"));
   if (perms.categories    !== "none") tasks.push(countOf("categories",    "categories"));
   if (perms.subscribers   !== "none") tasks.push(countOf("subscribers",   "subscribers"));
   if (perms.orders        !== "none") tasks.push(countOf("purchase_intents", "orders"));
