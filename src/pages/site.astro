@@ -2772,6 +2772,11 @@ const DEFAULT_HERO_CARD = {
       const ol = document.querySelector(".cas-breadcrumb ol");
       if (!ol) return;
       const pagetabLi = ol.querySelector("[data-breadcrumb-pagetab]");
+      // Si no estamos en /site, no hay pagetab crumb — abort para
+      // no inyectar un "› Hero" colgante en el breadcrumb de otra
+      // sección (defensa contra listeners de astro:page-load que
+      // se disparan después de navegar fuera de /site).
+      if (!pagetabLi) return;
       let tabLi = ol.querySelector("[data-breadcrumb-tab]");
       const isHome = pageKey === "home";
       const pageLabel = PAGE_LABELS[pageKey] || "Home";
@@ -4534,7 +4539,18 @@ const DEFAULT_HERO_CARD = {
       updateStuck();
     };
 
+    // Guard contra el bug donde el script de /site sigue corriendo
+    // después de navegar a otra sección. Astro registra los listeners
+    // en `document` así que sobreviven view-transitions; sin este
+    // chequeo, wireTabs() → switchTab("hero") agregaba el crumb
+    // "› Hero" al breadcrumb de /authors, /books, etc.
+    const isSitePage = () => {
+      const p = window.location.pathname.replace(/\/$/, "");
+      return p === "/site" || p.startsWith("/site/");
+    };
+
     const boot = () => {
+      if (!isSitePage()) return;
       wirePageTabs();
       wireTabs();
       wireForm();
