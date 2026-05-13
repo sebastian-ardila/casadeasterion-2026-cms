@@ -26,13 +26,24 @@ const resolveFontFamily = (key: string) =>
   FONT_FAMILY_MAP[key] ?? FONT_FAMILY_MAP.serif;
 
 // Strip the most common markdown noise so the preview shows clean text.
-// Splits on paragraph breaks and returns the first ~N chars of the
-// first paragraph (and second, for the article preview).
+// Returns blocks split by **double** newline (paragraphs in prose).
 function stripMd(raw: string | null | undefined): string[] {
   if (!raw) return [];
   return raw
     .replace(/[#*_`>\[\]()]/g, "")
     .split(/\n\s*\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+// Like stripMd but splits on EVERY newline. For poetry the public
+// renderer keeps each line as its own paragraph (the markdown lib
+// wraps single newlines as <br /> or treats them as block breaks),
+// so the preview matches by doing the same.
+function stripMdLines(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .replace(/[#*_`>\[\]()]/g, "")
+    .split(/\n/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -222,7 +233,11 @@ const BOOK_PV = LATEST_BOOK
   ? {
       title: LATEST_BOOK.title,
       subtitle: LATEST_BOOK.subtitle ?? "",
-      description: clip(stripMd(LATEST_BOOK.description_md)[0], 320),
+      // Para el libro mostramos hasta 3 párrafos de la descripción
+      // editorial (en lugar de uno solo clipeado a 320). Así el
+      // editor ve cómo se ve un cuerpo de texto real con la
+      // tipografía elegida — no solo dos renglones de muestra.
+      descriptionParagraphs: stripMd(LATEST_BOOK.description_md).slice(0, 3),
       cover: LATEST_BOOK.cover_image_url ?? "",
       authors: pickAuthors(LATEST_BOOK.book_authors, 2),
       isbn: LATEST_BOOK.isbn ?? "",
@@ -231,17 +246,26 @@ const BOOK_PV = LATEST_BOOK
       price: formatPriceCOP(LATEST_BOOK.price_amount, LATEST_BOOK.price_currency),
     }
   : null;
+// Para la publicación elegimos un splitter por línea simple — así
+// los poemas (verso por línea) preservan la estructura visual que
+// muestra la página pública. En prosa con párrafos dobles cada
+// línea queda como un párrafo aparte, lo que también sirve para la
+// muestra. Tomamos hasta 12 líneas.
+const POST_BODY_LINES = (() => {
+  const lines = stripMdLines(LATEST_POST?.content_md).slice(0, 12);
+  if (lines.length > 0) return lines;
+  return stripMd(LATEST_POST?.content_md).slice(0, 4);
+})();
 const PUBLICATION_PV = LATEST_POST
   ? {
       title: LATEST_POST.title,
       subtitle: LATEST_POST.subtitle ?? "",
-      body: [
-        clip(stripMd(LATEST_POST.content_md)[0] ?? LATEST_POST.excerpt ?? "", 220),
-        clip(stripMd(LATEST_POST.content_md)[1] ?? "", 180),
-      ].filter(Boolean),
+      body: POST_BODY_LINES.length > 0
+        ? POST_BODY_LINES
+        : [LATEST_POST.excerpt ?? "Aquí aparecerá el cuerpo de la publicación con la tipografía que elijas."],
       cover: LATEST_POST.cover_image_url ?? "",
       author: pickAuthors(LATEST_POST.post_authors, 1)[0] ?? null,
-      authorBio: clip(stripMd(pickAuthors(LATEST_POST.post_authors, 1)[0]?.bio_md)[0], 130),
+      authorBio: clip(stripMd(pickAuthors(LATEST_POST.post_authors, 1)[0]?.bio_md)[0], 180),
       category: LATEST_POST.category ?? null,
       publishedAt: formatDateLong(LATEST_POST.published_at),
       readingMin: LATEST_POST.reading_time_minutes ?? null,
@@ -963,7 +987,12 @@ const DEFAULT_HERO_CARD = {
                 <p class="cas-detail-pv-subtitle" data-pv-book-subtitle>{BOOK_PV.subtitle}</p>
               )}
               <div class="cas-detail-pv-content" data-pv-book-body>
-                <p>{BOOK_PV?.description || "Aquí aparecerá la descripción editorial del libro tal como la lees en el sitio público. Cada párrafo respeta la tipografía que elijas para el cuerpo."}</p>
+                {(BOOK_PV?.descriptionParagraphs && BOOK_PV.descriptionParagraphs.length > 0
+                  ? BOOK_PV.descriptionParagraphs
+                  : ["Aquí aparecerá la descripción editorial del libro tal como la lees en el sitio público.",
+                     "Cada párrafo respeta la tipografía que elijas para el cuerpo y mantiene el line-height del sitio real.",
+                     "Subtítulos, citas y listas heredan también la fuente del body — así se conserva una voz tipográfica coherente."]
+                ).map((para) => (<p>{para}</p>))}
               </div>
               <button type="button" class="cas-detail-pv-cart" tabindex="-1" aria-disabled="true">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
