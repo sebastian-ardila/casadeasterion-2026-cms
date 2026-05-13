@@ -34,6 +34,11 @@
       <line x1="18" y1="6" x2="6" y2="18"></line>
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
+    <svg data-icon="unavailable" class="w-4 h-4 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+      <line x1="12" y1="9" x2="12" y2="13"></line>
+      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+    </svg>
   </span>
   <span class="cas-build-text text-[12px] font-medium text-stone-800" data-text>Publicando sitio…</span>
   <button
@@ -96,6 +101,11 @@
   }
   .cas-build-bar[data-state="failed"] .cas-build-icon { color: #dc2626; }
 
+  .cas-build-bar[data-state="unavailable"] {
+    border-left-color: #d97706;
+  }
+  .cas-build-bar[data-state="unavailable"] .cas-build-icon { color: #d97706; }
+
   .cas-build-spin {
     animation: cas-build-spin 1.1s linear infinite;
   }
@@ -130,9 +140,10 @@
     let succeedDismissTimer = null;
 
     const TEXT = {
-      publishing: "Publicando sitio…",
-      succeeded:  "Sitio publicado",
-      failed:     "Falló la publicación",
+      publishing:  "Publicando sitio…",
+      succeeded:   "Sitio publicado",
+      failed:      "Falló la publicación",
+      unavailable: "No se puede verificar el deploy",
     };
 
     // ── State ──
@@ -182,8 +193,11 @@
       bar.dataset.state = state.state;
       text.textContent = TEXT[state.state] || "";
       showIcon(state.state);
-      // Show close button only for terminal states.
+      // Show close button only for terminal states (everything but
+      // the actively-polling "publishing").
       close.classList.toggle("hidden", state.state === "publishing");
+      // Stop the spinner-driven polling stat for terminal states.
+      if (state.state !== "publishing") stopPoll();
       document.body.classList.add("has-build-bar");
     };
 
@@ -233,10 +247,19 @@
         if (!res.ok) throw new Error("http_" + res.status);
         const data = await res.json();
         if (data.phase === "unavailable") {
-          // Endpoint can't talk to Amplify (dev env, missing creds, transient
-          // AWS error). Hide the bar and stop polling — the user clearly
-          // saved something but we have no way to follow up.
-          dismiss();
+          // Endpoint can't talk to Amplify (missing creds, IAM perms,
+          // bad app id, transient AWS error). Show this as a visible
+          // terminal state with a close button instead of hiding the
+          // bar — otherwise the user just sees the bar flash and
+          // disappear with no idea why. Reason + message are logged
+          // to the console so devs can diagnose without DB access.
+          console.warn(
+            "[BuildStatusBar] /api/build-status returned unavailable:",
+            data.reason || "(no reason)",
+            data.message || "",
+          );
+          setState({ state: "unavailable", terminalAt: Date.now() });
+          stopPoll();
           return;
         }
         if (data.phase === "succeed") {
