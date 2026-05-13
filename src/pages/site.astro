@@ -311,7 +311,7 @@ const DEFAULT_HERO_CARD = {
     </button>
     <button type="button" data-page-tab="articulos" class="cas-pagechip">
       <Icon name="lucide:newspaper" class="w-4 h-4" aria-hidden="true" />
-      <span>Artículos</span>
+      <span>Publicaciones</span>
     </button>
     <button type="button" data-page-tab="autores" class="cas-pagechip">
       <Icon name="lucide:users" class="w-4 h-4" aria-hidden="true" />
@@ -491,6 +491,82 @@ const DEFAULT_HERO_CARD = {
                 required
                 description="Ruta interna o URL completa."
               />
+            </div>
+          </div>
+        </section>
+
+        {/* Vista previa — replica fiel del hero público en formato web
+            y mobile. La imagen del hero a la derecha (web) o debajo
+            (mobile) viene del mismo input que el sitio público lee, así
+            el editor ve exactamente lo que el visitante verá. */}
+        <section class="card space-y-4" data-hero-preview>
+          <CardHeader icon="lucide:eye" title="Vista previa" desc="Cómo se verá el hero en el sitio público mientras editas." />
+
+          {/* Web (md+ del sitio público) */}
+          <div>
+            <p class="label flex items-center gap-1.5 mb-2">
+              <Icon name="lucide:monitor" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+              Web
+            </p>
+            <div class="cas-hero-pv-web" data-pv-bg>
+              <div class="cas-hero-pv-web-content">
+                <h1 class="cas-hero-pv-title" data-pv-web-title></h1>
+                <div class="cas-hero-pv-tagline-row">
+                  <span class="cas-hero-pv-rule"></span>
+                  <p class="cas-hero-pv-tagline" data-pv-web-tagline></p>
+                </div>
+                <div class="cas-hero-pv-ctas">
+                  <a class="cas-hero-pv-cta-primary" data-pv-web-primary tabindex="-1" aria-disabled="true">
+                    <span data-pv-web-primary-label></span>
+                    <span class="cas-hero-pv-arrow-box">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 12h14" />
+                        <path d="m13 5 7 7-7 7" />
+                      </svg>
+                    </span>
+                  </a>
+                  <a class="cas-hero-pv-cta-secondary" data-pv-web-secondary tabindex="-1" aria-disabled="true">
+                    <span data-pv-web-secondary-label></span>
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M5 12h14" />
+                      <path d="m13 5 7 7-7 7" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+              <div class="cas-hero-pv-web-image" data-pv-image-web></div>
+            </div>
+          </div>
+
+          {/* Mobile */}
+          <div>
+            <p class="label flex items-center gap-1.5 mb-2 mt-4">
+              <Icon name="lucide:smartphone" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+              Mobile
+            </p>
+            <div class="cas-hero-pv-mobile-wrap">
+              <div class="cas-hero-pv-mobile" data-pv-bg-mobile>
+                <div class="cas-hero-pv-mobile-content">
+                  <h1 class="cas-hero-pv-mobile-title" data-pv-mobile-title></h1>
+                  <p class="cas-hero-pv-mobile-tagline" data-pv-mobile-tagline></p>
+                  <span class="cas-hero-pv-mobile-closer"></span>
+                  <a class="cas-hero-pv-mobile-cta-primary" data-pv-mobile-primary tabindex="-1" aria-disabled="true">
+                    <span data-pv-mobile-primary-label></span>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M5 12h14" />
+                      <path d="m13 5 7 7-7 7" />
+                    </svg>
+                  </a>
+                  <a class="cas-hero-pv-mobile-cta-secondary" data-pv-mobile-secondary tabindex="-1" aria-disabled="true">
+                    <span data-pv-mobile-secondary-label></span>
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M5 12h14" />
+                      <path d="m13 5 7 7-7 7" />
+                    </svg>
+                  </a>
+                </div>
+                <div class="cas-hero-pv-mobile-image" data-pv-image-mobile></div>
+              </div>
             </div>
           </div>
         </section>
@@ -713,14 +789,14 @@ const DEFAULT_HERO_CARD = {
       <fieldset disabled={!canEdit} class="m-0 p-0 border-0 min-w-0">
         <DetailTypographyPanel
           icon="lucide:newspaper"
-          title="Artículo"
-          description="Tipografía de la página individual de cada artículo en /articulos/[slug]. Aplica al título y al contenido de TODOS los artículos."
+          title="Publicación"
+          description="Tipografía de la página individual de cada publicación en /articulos/[slug]. Aplica al título y al contenido de TODAS las publicaciones."
           namePrefix="article_detail"
           titleLabel="Tipo de letra del título"
           bodyLabel="Tipo de letra del contenido"
           titleFont={ARTICLE_DETAIL_TYPO.title_font}
           bodyFont={ARTICLE_DETAIL_TYPO.body_font}
-          scopeNote="Estos ajustes son globales: cambian la tipografía de todos los artículos a la vez, no de uno en particular."
+          scopeNote="Estos ajustes son globales: cambian la tipografía de todas las publicaciones a la vez, no de una en particular."
         />
       </fieldset>
 
@@ -1589,6 +1665,214 @@ const DEFAULT_HERO_CARD = {
     text-align: center;
   }
 
+  /* === Vista previa del hero ===
+     Replica fiel del hero del sitio público: dos frames (web + mobile),
+     cada uno con la imagen lateral/inferior. Las proporciones imitan
+     viewports reales (web ~ 16:9, mobile ~ 9:18) y los estilos
+     reproducen el wordmark serif, la regla decorativa, el split-button
+     desktop y el solid pill mobile que vive en apps/web/src/components/Hero.astro. */
+  .cas-hero-pv-web {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: rgb(245 241 234);
+    border: 1px solid rgb(231 229 228);
+    overflow: hidden;
+    transition: background-color 200ms ease;
+  }
+  .cas-hero-pv-web-content {
+    padding: 6% 6% 6% 8%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+  }
+  .cas-hero-pv-web-image {
+    background-color: rgb(41 37 36);
+    background-size: cover;
+    background-position: center;
+  }
+  .cas-hero-pv-title {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(1.4rem, 4.2cqi, 3rem);
+    line-height: 0.95;
+    color: rgb(28 25 23);
+    margin: 0 0 6%;
+    white-space: pre-line;
+    word-break: break-word;
+    container-type: inline-size;
+  }
+  .cas-hero-pv-web .cas-hero-pv-title {
+    font-size: clamp(1.4rem, 4.5cqi, 3.5rem);
+  }
+  .cas-hero-pv-web-content { container-type: inline-size; }
+  .cas-hero-pv-tagline-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.875rem;
+    margin-bottom: 8%;
+  }
+  .cas-hero-pv-rule {
+    flex: 0 0 auto;
+    display: block;
+    width: clamp(1rem, 3cqi, 2rem);
+    height: 1px;
+    background: rgb(28 25 23);
+    transform: translateY(-0.6em);
+  }
+  .cas-hero-pv-tagline {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-style: italic;
+    font-size: clamp(0.75rem, 2cqi, 1.4rem);
+    line-height: 1.2;
+    color: rgb(87 83 78);
+    margin: 0;
+  }
+  .cas-hero-pv-ctas {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .cas-hero-pv-cta-primary {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid rgb(28 25 23);
+    color: rgb(28 25 23);
+    text-decoration: none;
+    cursor: default;
+    user-select: none;
+    pointer-events: none;
+  }
+  .cas-hero-pv-cta-primary > span:first-child {
+    padding: 0 1rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    font-size: clamp(0.55rem, 1.2cqi, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    white-space: nowrap;
+  }
+  .cas-hero-pv-arrow-box {
+    width: 2rem;
+    height: 2rem;
+    border-left: 1px solid rgba(28, 25, 23, 0.4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cas-hero-pv-cta-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    text-decoration: none;
+    cursor: default;
+    user-select: none;
+    pointer-events: none;
+    font-size: clamp(0.55rem, 1.2cqi, 0.7rem);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: rgb(120 113 108);
+  }
+  /* Empty states */
+  .cas-hero-pv-cta-primary[data-empty="1"],
+  .cas-hero-pv-cta-secondary[data-empty="1"] { opacity: 0.35; }
+  .cas-hero-pv-cta-primary[data-empty="1"] > span:first-child::before { content: "—"; }
+  .cas-hero-pv-cta-secondary[data-empty="1"] > span:first-child::before { content: "—"; }
+
+  /* Mobile preview — phone-shaped frame, content stacked above the
+     image. Aspect ratio matches a real device shell so the editor can
+     judge the composition at glance. */
+  .cas-hero-pv-mobile-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 1rem 0 0.5rem;
+  }
+  .cas-hero-pv-mobile {
+    width: 280px;
+    border: 1px solid rgb(231 229 228);
+    border-radius: 18px;
+    overflow: hidden;
+    background: rgb(245 241 234);
+    box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
+    container-type: inline-size;
+    transition: background-color 200ms ease;
+  }
+  .cas-hero-pv-mobile-content {
+    padding: 22px 18px 20px;
+  }
+  .cas-hero-pv-mobile-title {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-weight: 600;
+    font-size: 1.7rem;
+    line-height: 0.98;
+    color: rgb(28 25 23);
+    margin: 0 0 14px;
+    white-space: pre-line;
+    word-break: break-word;
+  }
+  .cas-hero-pv-mobile-tagline {
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-style: italic;
+    font-size: 1rem;
+    line-height: 1.2;
+    color: rgb(87 83 78);
+    margin: 0 0 10px;
+  }
+  .cas-hero-pv-mobile-closer {
+    display: block;
+    width: 52px;
+    height: 1px;
+    background: rgba(28, 25, 23, 0.4);
+    margin: 0 0 18px;
+  }
+  .cas-hero-pv-mobile-cta-primary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 38px;
+    padding: 0 14px;
+    background: rgb(28 25 23);
+    color: rgb(245 241 234);
+    text-decoration: none;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    cursor: default;
+    user-select: none;
+    pointer-events: none;
+    margin-bottom: 12px;
+  }
+  .cas-hero-pv-mobile-cta-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: rgb(120 113 108);
+    text-decoration: none;
+    cursor: default;
+    user-select: none;
+    pointer-events: none;
+  }
+  .cas-hero-pv-mobile-cta-primary[data-empty="1"],
+  .cas-hero-pv-mobile-cta-secondary[data-empty="1"] { opacity: 0.35; }
+  .cas-hero-pv-mobile-cta-primary[data-empty="1"] > span:first-child::before { content: "—"; }
+  .cas-hero-pv-mobile-cta-secondary[data-empty="1"] > span:first-child::before { content: "—"; }
+  .cas-hero-pv-mobile-image {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background-color: rgb(41 37 36);
+    background-size: cover;
+    background-position: center;
+  }
+
   /* === Mini content preview (lives inside "Contenido de la card") ===
      The card itself is rendered at the configured desktop dimensions
      and then transform: scale()-ed to fit the form column — same
@@ -1859,7 +2143,7 @@ const DEFAULT_HERO_CARD = {
     // ----- Tab switching -----
     const TAB_LABELS = { hero: "Hero", editorial: "Editorial", contacto: "Contacto", seo: "SEO" };
     const PAGE_LABELS = {
-      home: "Home", catalogo: "Catálogo", articulos: "Artículos",
+      home: "Home", catalogo: "Catálogo", articulos: "Publicaciones",
       autores: "Autores",
     };
     // Rewrite the trailing crumbs of the breadcrumb (Webpage / Home / Hero
@@ -2634,6 +2918,57 @@ const DEFAULT_HERO_CARD = {
       $$("[data-color-editor]").forEach(renderColorEditor);
     };
 
+    // ----- Hero preview (web + mobile, lives inline in the Hero tab) -----
+    // Mirrors the wordmark + tagline + CTAs + image + bg color into the
+    // two preview frames (web with side image, mobile with stacked image).
+    // Cheap enough to run on every input/change without throttling.
+    const renderHeroTextPreview = () => {
+      const form = $("[data-site-form]");
+      const preview = $("[data-hero-preview]");
+      if (!form || !preview) return;
+      const getVal = (name) => {
+        const el = form.querySelector(`[name="${name}"]`);
+        return el && typeof el.value === "string" ? el.value : "";
+      };
+      const title = getVal("hero_title") || "—";
+      const tagline = getVal("hero_tagline");
+      const ctaPrimary = getVal("hero_cta_primary_label");
+      const ctaSecondary = getVal("hero_cta_secondary_label");
+      const heroImage = getVal("hero_image_url").trim() || HERO_FALLBACK_URL;
+      const bg = getVal("hero_bg_color").trim();
+
+      // Helpers to set text + empty-state in pairs (web / mobile).
+      const setPair = (sel, value) => {
+        document.querySelectorAll(sel).forEach((el) => { el.textContent = value; });
+      };
+      const setEmpty = (sel, value) => {
+        document.querySelectorAll(sel).forEach((el) => {
+          el.dataset.empty = value ? "0" : "1";
+        });
+      };
+
+      setPair("[data-pv-web-title], [data-pv-mobile-title]", title);
+      setPair("[data-pv-web-tagline], [data-pv-mobile-tagline]", tagline || "—");
+      setPair("[data-pv-web-primary-label], [data-pv-mobile-primary-label]", ctaPrimary);
+      setPair("[data-pv-web-secondary-label], [data-pv-mobile-secondary-label]", ctaSecondary);
+      setEmpty("[data-pv-web-primary], [data-pv-mobile-primary]", ctaPrimary);
+      setEmpty("[data-pv-web-secondary], [data-pv-mobile-secondary]", ctaSecondary);
+
+      // Hero image — same fallback the public site uses.
+      const imageUrl = `url('${heroImage.replace(/'/g, "%27")}')`;
+      const webImg = $("[data-pv-image-web]");
+      const mobImg = $("[data-pv-image-mobile]");
+      if (webImg) webImg.style.backgroundImage = imageUrl;
+      if (mobImg) mobImg.style.backgroundImage = imageUrl;
+
+      // Bg color shared across both frames.
+      const webBg = $("[data-pv-bg]");
+      const mobBg = $("[data-pv-bg-mobile]");
+      const bgValue = bg || "rgb(245 241 234)";
+      if (webBg) webBg.style.backgroundColor = bgValue;
+      if (mobBg) mobBg.style.backgroundColor = bgValue;
+    };
+
     // ----- Hydration of all site_configuration -----
     const apply = (cfg) => {
       const form = $("[data-site-form]");
@@ -2694,6 +3029,10 @@ const DEFAULT_HERO_CARD = {
       set("hero_cta_primary_href", cfg.hero_cta_primary_href ?? "/catalogo");
       set("hero_cta_secondary_label", cfg.hero_cta_secondary_label ?? "Leer publicaciones");
       set("hero_cta_secondary_href", cfg.hero_cta_secondary_href ?? "/articulos");
+      // Live preview of the hero is part of the same panel; refresh
+      // every time apply() runs so the bg color, image color and
+      // texts stay in sync with whatever the inputs currently hold.
+      renderHeroTextPreview();
 
       // The form has just been populated with the server values; tell
       // the FormActions dirty-tracker to take this as the new baseline.
@@ -2915,6 +3254,38 @@ const DEFAULT_HERO_CARD = {
       });
       if (wireFormRoot?.dataset.wired === "1") return;
       if (wireFormRoot) wireFormRoot.dataset.wired = "1";
+
+      // Live-refresh the hero text preview while the user edits the
+      // inline inputs. Delegated to the form root so it covers all six
+      // fields (title, tagline, primary label/href, secondary label/href)
+      // plus the bg color picker. cas:dirty also fires on programmatic
+      // mutations (e.g. ColorEditor's hidden input change).
+      if (wireFormRoot) {
+        const fields = [
+          "hero_title",
+          "hero_tagline",
+          "hero_cta_primary_label",
+          "hero_cta_primary_href",
+          "hero_cta_secondary_label",
+          "hero_cta_secondary_href",
+          "hero_bg_color",
+        ];
+        const onMaybeHeroChange = (ev) => {
+          const t = ev.target;
+          if (t && t.name && fields.includes(t.name)) renderHeroTextPreview();
+        };
+        wireFormRoot.addEventListener("input", onMaybeHeroChange);
+        wireFormRoot.addEventListener("change", onMaybeHeroChange);
+        // hero_bg_color comes from ColorEditor which fires cas:dirty
+        // bubbling — refresh unconditionally on that event since it's
+        // only emitted by the few widgets we care about.
+        wireFormRoot.addEventListener("cas:dirty", renderHeroTextPreview);
+        // ImageUpload fires cas:imageupload:change when the user picks
+        // or clears an image; refresh so the new image shows up in the
+        // preview without waiting for input/change to bubble.
+        wireFormRoot.addEventListener("cas:imageupload:change", renderHeroTextPreview);
+      }
+
       $$("[data-bind]").forEach(el => {
         el.addEventListener("input", renderHeroPreview);
         el.addEventListener("change", renderHeroPreview);
