@@ -2,14 +2,25 @@ import type { APIRoute } from "astro";
 import { AmplifyClient, ListJobsCommand } from "@aws-sdk/client-amplify";
 import { requireAdmin } from "~/lib/auth";
 
+// Read an env var from both runtime (process.env, populated by Amplify
+// Hosting Lambda at request time) and build-time (import.meta.env, which
+// Astro only inlines for PUBLIC_* by default). Non-PUBLIC variables are
+// generally only visible via process.env in SSR contexts.
+function readEnv(name: string): string | undefined {
+  const v =
+    (typeof process !== "undefined" ? process.env?.[name] : undefined) ??
+    (import.meta.env as Record<string, string | undefined>)[name];
+  return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
 let client: AmplifyClient | null = null;
-function getClient() {
+function getClient(accessKeyId: string, secretKey: string) {
   if (client) return client;
   client = new AmplifyClient({
-    region: "us-east-1",
+    region: readEnv("AMPLIFY_REGION") ?? "us-east-1",
     credentials: {
-      accessKeyId: import.meta.env.AMPLIFY_READER_ACCESS_KEY_ID,
-      secretAccessKey: import.meta.env.AMPLIFY_READER_SECRET_ACCESS_KEY,
+      accessKeyId,
+      secretAccessKey: secretKey,
     },
   });
   return client;
@@ -25,20 +36,30 @@ export const GET: APIRoute = async (ctx) => {
   }
 
   const since = Number(ctx.url.searchParams.get("since") ?? "0");
-  const appId = import.meta.env.PUBLIC_SITE_AMPLIFY_APP_ID;
-  const accessKeyId = import.meta.env.AMPLIFY_READER_ACCESS_KEY_ID;
-  const secretKey = import.meta.env.AMPLIFY_READER_SECRET_ACCESS_KEY;
+  const appId = readEnv("PUBLIC_SITE_AMPLIFY_APP_ID");
+  const accessKeyId = readEnv("AMPLIFY_READER_ACCESS_KEY_ID");
+  const secretKey = readEnv("AMPLIFY_READER_SECRET_ACCESS_KEY");
 
-  // No Amplify wiring (typical in local dev). Tell the client to stop
-  // polling instead of returning 500 forever.
+  // Surface which specific var is missing so the client toast tells the
+  // operator exactly what to set in Amplify env config — instead of just
+  // "no_amplify_configured" with no signal of which one.
   if (!appId || !accessKeyId || !secretKey) {
-    return Response.json({ phase: "unavailable", reason: "no_amplify_configured" });
+    const missing = [
+      !appId && "PUBLIC_SITE_AMPLIFY_APP_ID",
+      !accessKeyId && "AMPLIFY_READER_ACCESS_KEY_ID",
+      !secretKey && "AMPLIFY_READER_SECRET_ACCESS_KEY",
+    ].filter(Boolean);
+    return Response.json({
+      phase: "unavailable",
+      reason: "no_amplify_configured",
+      message: `Missing env: ${missing.join(", ")}`,
+    });
   }
 
   try {
-    const result = await getClient().send(new ListJobsCommand({
+    const result = await getClient(accessKeyId, secretKey).send(new ListJobsCommand({
       appId,
-      branchName: "main",
+      branchName: readEnv("AMPLIFY_BRANCH") ?? "main",
       maxResults: 5,
     }));
 
