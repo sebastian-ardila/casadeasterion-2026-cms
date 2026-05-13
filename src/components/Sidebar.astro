@@ -29,12 +29,8 @@ const allItems: Array<{ href: string; label: string; icon: string; resource?: Re
     label: "Webpage",
     icon: "lucide:layout-template",
     resource: "site",
-    subItems: [
-      { href: "/site",                  label: "Home",          icon: "lucide:home",         pageKey: "home"      },
-      { href: "/site?page=catalogo",    label: "Catálogo",      icon: "lucide:book-open",    pageKey: "catalogo"  },
-      { href: "/site?page=articulos",   label: "Publicaciones", icon: "lucide:newspaper",    pageKey: "articulos" },
-      { href: "/site?page=autores",     label: "Autores",       icon: "lucide:users",        pageKey: "autores"   },
-    ],
+    // Sin subItems: /site ya muestra las sub-páginas en su middle
+    // list panel — el dropdown del sidebar era redundante.
   },
   { href: "/orders",      label: "Pedidos",      icon: "lucide:shopping-bag",    resource: "orders",       countKey: "orders" },
   { href: "/subscribers", label: "Suscriptores", icon: "lucide:mail",            resource: "subscribers",  countKey: "subscribers" },

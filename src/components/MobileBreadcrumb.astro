@@ -104,12 +104,18 @@ const crumbs: Crumb[] = showCrumbs
         const href = isLast && !isSite
           ? null
           : "/" + segments.slice(0, idx + 1).join("/");
+        const knownLabel = labels[seg];
         const label = isLast && currentLabel
           ? currentLabel
-          : labels[seg] ?? decodeURIComponent(seg).replace(/-/g, " ");
+          : knownLabel ?? decodeURIComponent(seg).replace(/-/g, " ");
         // Dynamic leaf segments (slugs, IDs) don't get an icon — they
-        // represent unique content rather than a section.
-        const icon = isLast && currentLabel ? null : (icons[seg] ?? null);
+        // represent unique content rather than a section. Detectar
+        // un slug dinámico: el currentLabel difiere del label
+        // estático conocido del segmento. Si coinciden (caso de
+        // /orders/index que pasa breadcrumbLabel="Pedidos"), seguimos
+        // mostrando el icono de la sección.
+        const isDynamicLeaf = isLast && currentLabel && knownLabel !== currentLabel;
+        const icon = isDynamicLeaf ? null : (icons[seg] ?? null);
         return { label, href, icon };
       }),
       ...(isSite && sitePageLabel && sitePageKey
