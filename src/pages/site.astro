@@ -293,38 +293,52 @@ const DEFAULT_HERO_CARD = {
 ---
 
 <AppLayout title="Webpage" wide>
-  {/* Sticky wrapper that holds BOTH the page-nav (Home/Catálogo/…)
-      and the inner tab nav (Hero/Editorial/…) together. The wrapper
-      is the single sticky element, so the two bars travel as one
-      unit — no per-element sticky math, no gaps. Negative margins
-      cancel the surrounding wrapper's padding so the stack pins
-      flush to the breadcrumb at all scroll positions. */}
-  <div class="cas-stickystack" data-stickystack>
-  <nav class="cas-pagenav" data-pagenav aria-label="Páginas del sitio">
-    <button type="button" data-page-tab="home" class="cas-pagechip">
-      <Icon name="lucide:home" class="w-4 h-4" aria-hidden="true" />
-      <span>Home</span>
-    </button>
-    <button type="button" data-page-tab="catalogo" class="cas-pagechip">
-      <Icon name="lucide:book-open" class="w-4 h-4" aria-hidden="true" />
-      <span>Catálogo</span>
-    </button>
-    <button type="button" data-page-tab="articulos" class="cas-pagechip">
-      <Icon name="lucide:newspaper" class="w-4 h-4" aria-hidden="true" />
-      <span>Publicaciones</span>
-    </button>
-    <button type="button" data-page-tab="autores" class="cas-pagechip">
-      <Icon name="lucide:users" class="w-4 h-4" aria-hidden="true" />
-      <span>Autores</span>
-    </button>
-  </nav>
+  {/* Layout 3-pane similar al de Categorías: sidebar (del AppLayout) +
+      middle list panel con las sub-páginas + main con el contenido de
+      la sub-página seleccionada. Negative margins anulan el padding del
+      <main> del AppLayout para que el middle panel quede pegado al
+      borde izquierdo y ocupe toda la altura. */}
+  <div class="cas-site-shell md:flex -mx-5 md:-mx-8 lg:-mx-10 -my-6 md:-my-10 md:min-h-[calc(100vh-3.5rem)]">
 
-  {/* Inner tab nav (Hero / Editorial / Contacto / SEO). Sits right
-      after the page-nav so the two stickies stack flush — putting
-      the h1 between them broke that contact: the cas-tabs natural
-      flow position was below the h1 and never reached the sticky
-      pin on its own. JS hides this nav when the user switches to a
-      sub-page that's not Home (it only applies to Home). */}
+  {/* Middle panel — list-panel style con las sub-páginas como filas. */}
+  <aside class="cas-site-listpanel md:w-72 md:shrink-0 md:border-r border-stone-200 bg-white md:overflow-y-auto md:h-[calc(100vh-3.5rem)]">
+    <div class="px-5 pt-6 pb-4 md:px-6 md:pt-7 md:pb-4 border-b border-stone-200">
+      <h2 class="font-serif text-2xl mb-1">Webpage</h2>
+      <p class="text-xs text-stone-500">
+        Selecciona una sub-página para editar su contenido.
+      </p>
+    </div>
+    <nav class="cas-pagenav-list" data-pagenav aria-label="Páginas del sitio">
+      <button type="button" data-page-tab="home" class="cas-pagerow">
+        <Icon name="lucide:home" class="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span class="flex-1 text-left">Home</span>
+        <Icon name="lucide:chevron-right" class="w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
+      </button>
+      <button type="button" data-page-tab="catalogo" class="cas-pagerow">
+        <Icon name="lucide:book-open" class="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span class="flex-1 text-left">Catálogo</span>
+        <Icon name="lucide:chevron-right" class="w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
+      </button>
+      <button type="button" data-page-tab="articulos" class="cas-pagerow">
+        <Icon name="lucide:newspaper" class="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span class="flex-1 text-left">Publicaciones</span>
+        <Icon name="lucide:chevron-right" class="w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
+      </button>
+      <button type="button" data-page-tab="autores" class="cas-pagerow">
+        <Icon name="lucide:users" class="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span class="flex-1 text-left">Autores</span>
+        <Icon name="lucide:chevron-right" class="w-4 h-4 text-stone-400 shrink-0" aria-hidden="true" />
+      </button>
+    </nav>
+  </aside>
+
+  {/* Right column: contenido de la sub-página activa. */}
+  <div class="cas-site-main md:flex-1 md:min-w-0 md:overflow-y-auto md:h-[calc(100vh-3.5rem)]">
+    <div class="px-5 py-6 md:px-8 md:py-8 lg:px-10">
+
+  {/* Sticky inner tab nav (Hero / Editorial / Contacto / SEO) — only
+      visible when the active sub-page is Home. */}
+  <div class="cas-stickystack" data-stickystack>
   <nav class="cas-tabs flex items-stretch gap-1 border-b border-stone-200 overflow-x-auto bg-white" data-tab-nav data-page-only="home">
     <button type="button" data-tab="hero" class="cas-tab cas-tab-active">
       <Icon name="lucide:layout-panel-top" class="w-4 h-4" aria-hidden="true" />
@@ -354,14 +368,6 @@ const DEFAULT_HERO_CARD = {
     </div>
   </nav>
   </div>{/* /.cas-stickystack */}
-
-  <div class="mb-6">
-    <h1 class="font-serif text-3xl md:text-4xl mb-2">Webpage</h1>
-    <p class="text-stone-500 max-w-2xl">
-      Todo el contenido editable de cada página del sitio público.
-      Elige una sub-página arriba o desde el panel lateral.
-    </p>
-  </div>
 
   {!canEdit && (
     <p class="bg-amber-50 border border-amber-200 text-amber-900 text-sm p-3 mb-6 flex items-center gap-2">
@@ -809,6 +815,10 @@ const DEFAULT_HERO_CARD = {
   <div data-page-tab-panel="autores" hidden>
     <PageStub icon="lucide:users" title="Autores" />
   </div>
+
+    </div>{/* /.px-5 py-6 ... inner content padding */}
+  </div>{/* /.cas-site-main */}
+  </div>{/* /.cas-site-shell */}
 </AppLayout>
 
 <style is:global>
@@ -845,66 +855,71 @@ const DEFAULT_HERO_CARD = {
     }
   }
 
-  .cas-pagenav {
-    /* No own sticky — the wrapper is sticky. Padding-top creates
-       the visible breathing room above the chips that compensates
-       for the wrapper's negative margin-top. */
+  /* Page-nav list (vertical, lives in the middle list panel).
+     Replaces the old horizontal cas-pagechip pills. Looks and behaves
+     like a row in ListPanel (Categorías). The active state styling
+     keeps the same .cas-pagechip-active class so the existing JS
+     toggler doesn't need to change. */
+  .cas-pagenav-list {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 1.5rem 1.25rem 1.5rem;
-    background: white;
-    transition: padding 0.15s ease;
+    flex-direction: column;
+    padding: 0.5rem 0;
   }
-  @media (min-width: 768px) {
-    .cas-pagenav { padding: 2.5rem 2rem 1.5rem; }
-  }
-  @media (min-width: 1024px) {
-    .cas-pagenav { padding-left: 2.5rem; padding-right: 2.5rem; }
-  }
-  .cas-pagenav[data-stuck="1"] {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    scrollbar-width: thin;
-  }
-  .cas-pagenav[data-stuck="1"]::-webkit-scrollbar { height: 4px; }
-  .cas-pagenav[data-stuck="1"]::-webkit-scrollbar-thumb {
-    background: rgb(214 211 209);
-    border-radius: 2px;
-  }
-
-  .cas-pagechip {
-    display: inline-flex;
+  .cas-pagerow {
+    display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.875rem;
-    font-size: 0.8125rem;
+    gap: 0.75rem;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9375rem;
     font-weight: 500;
-    color: rgb(68 64 60);                  /* stone-700 */
-    background: white;
-    border: 1px solid rgb(214 211 209);    /* stone-300 */
-    border-radius: 9999px;
+    color: rgb(68 64 60);
+    background: transparent;
+    border: 0;
+    border-left: 3px solid transparent;
     cursor: pointer;
-    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
-    white-space: nowrap;
-    flex: 0 0 auto;
+    text-align: left;
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
   }
-  .cas-pagechip:hover {
-    background: rgb(245 245 244);          /* stone-100 */
+  .cas-pagerow:hover {
+    background: rgb(250 250 249);
     color: rgb(28 25 23);
-    border-color: rgb(168 162 158);
   }
-  .cas-pagechip-active,
-  .cas-pagechip-active:hover {
-    background: rgb(28 25 23);             /* stone-900 */
+  .cas-pagerow > svg { color: rgb(120 113 108); }
+  .cas-pagerow.cas-pagechip-active,
+  .cas-pagerow.cas-pagechip-active:hover {
+    background: rgb(28 25 23);
     color: white;
-    border-color: rgb(28 25 23);
+    border-left-color: rgb(28 25 23);
   }
-  .cas-pagechip > svg { color: currentColor; flex: 0 0 auto; }
-  @media (max-width: 640px) {
-    .cas-pagechip { padding: 0.375rem 0.625rem; font-size: 0.75rem; gap: 0.375rem; }
+  .cas-pagerow.cas-pagechip-active > svg { color: white; }
+
+  /* Mobile: stacking — the aside collapses to a thin horizontal scroller
+     above the content so phones still get to switch pages quickly. */
+  @media (max-width: 767px) {
+    .cas-site-shell { display: block; }
+    .cas-site-listpanel {
+      border-bottom: 1px solid rgb(231 229 228);
+    }
+    .cas-pagenav-list {
+      flex-direction: row;
+      overflow-x: auto;
+      padding: 0.5rem;
+      gap: 0.25rem;
+    }
+    .cas-pagerow {
+      flex: 0 0 auto;
+      border-left: 0;
+      border-bottom: 3px solid transparent;
+      padding: 0.5rem 0.875rem;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      background: rgb(245 245 244);
+    }
+    .cas-pagerow > svg:last-child { display: none; }
+    .cas-pagerow.cas-pagechip-active,
+    .cas-pagerow.cas-pagechip-active:hover {
+      border-bottom-color: transparent;
+    }
   }
 
   /* === Tab nav (Hero / Editorial / Contacto / SEO) ===
@@ -1670,14 +1685,22 @@ const DEFAULT_HERO_CARD = {
      cada uno con la imagen lateral/inferior. Las proporciones imitan
      viewports reales (web ~ 16:9, mobile ~ 9:18) y los estilos
      reproducen el wordmark serif, la regla decorativa, el split-button
-     desktop y el solid pill mobile que vive en apps/web/src/components/Hero.astro. */
+     desktop y el solid pill mobile que vive en apps/web/src/components/Hero.astro.
+     Tokens de color exactos del sitio público (apps/web/src/styles/global.css). */
+  .cas-hero-pv-web,
+  .cas-hero-pv-mobile {
+    --pv-bg-alt: oklch(99% 0.003 70);
+    --pv-fg: oklch(20% 0.01 70);
+    --pv-fg-muted: oklch(45% 0.01 70);
+    --pv-border: oklch(85% 0.005 70);
+  }
   .cas-hero-pv-web {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    background: rgb(245 241 234);
+    background: var(--pv-bg-alt);
     border: 1px solid rgb(231 229 228);
     overflow: hidden;
     transition: background-color 200ms ease;
@@ -1699,7 +1722,7 @@ const DEFAULT_HERO_CARD = {
     font-weight: 600;
     font-size: clamp(1.4rem, 4.2cqi, 3rem);
     line-height: 0.95;
-    color: rgb(28 25 23);
+    color: var(--pv-fg);
     margin: 0 0 6%;
     white-space: pre-line;
     word-break: break-word;
@@ -1720,7 +1743,7 @@ const DEFAULT_HERO_CARD = {
     display: block;
     width: clamp(1rem, 3cqi, 2rem);
     height: 1px;
-    background: rgb(28 25 23);
+    background: var(--pv-fg);
     transform: translateY(-0.6em);
   }
   .cas-hero-pv-tagline {
@@ -1728,7 +1751,7 @@ const DEFAULT_HERO_CARD = {
     font-style: italic;
     font-size: clamp(0.75rem, 2cqi, 1.4rem);
     line-height: 1.2;
-    color: rgb(87 83 78);
+    color: var(--pv-fg-muted);
     margin: 0;
   }
   .cas-hero-pv-ctas {
@@ -1740,8 +1763,8 @@ const DEFAULT_HERO_CARD = {
   .cas-hero-pv-cta-primary {
     display: inline-flex;
     align-items: stretch;
-    border: 1px solid rgb(28 25 23);
-    color: rgb(28 25 23);
+    border: 1px solid var(--pv-fg);
+    color: var(--pv-fg);
     text-decoration: none;
     cursor: default;
     user-select: none;
@@ -1760,7 +1783,7 @@ const DEFAULT_HERO_CARD = {
   .cas-hero-pv-arrow-box {
     width: 2rem;
     height: 2rem;
-    border-left: 1px solid rgba(28, 25, 23, 0.4);
+    border-left: 1px solid color-mix(in oklch, var(--pv-fg) 40%, transparent);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1776,7 +1799,7 @@ const DEFAULT_HERO_CARD = {
     font-size: clamp(0.55rem, 1.2cqi, 0.7rem);
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    color: rgb(120 113 108);
+    color: var(--pv-fg-muted);
   }
   /* Empty states */
   .cas-hero-pv-cta-primary[data-empty="1"],
@@ -1797,7 +1820,7 @@ const DEFAULT_HERO_CARD = {
     border: 1px solid rgb(231 229 228);
     border-radius: 18px;
     overflow: hidden;
-    background: rgb(245 241 234);
+    background: var(--pv-bg-alt);
     box-shadow: 0 4px 12px -4px rgba(28, 25, 23, 0.08);
     container-type: inline-size;
     transition: background-color 200ms ease;
@@ -1810,7 +1833,7 @@ const DEFAULT_HERO_CARD = {
     font-weight: 600;
     font-size: 1.7rem;
     line-height: 0.98;
-    color: rgb(28 25 23);
+    color: var(--pv-fg);
     margin: 0 0 14px;
     white-space: pre-line;
     word-break: break-word;
@@ -1820,14 +1843,14 @@ const DEFAULT_HERO_CARD = {
     font-style: italic;
     font-size: 1rem;
     line-height: 1.2;
-    color: rgb(87 83 78);
+    color: var(--pv-fg-muted);
     margin: 0 0 10px;
   }
   .cas-hero-pv-mobile-closer {
     display: block;
     width: 52px;
     height: 1px;
-    background: rgba(28, 25, 23, 0.4);
+    background: color-mix(in oklch, var(--pv-fg) 40%, transparent);
     margin: 0 0 18px;
   }
   .cas-hero-pv-mobile-cta-primary {
@@ -1837,8 +1860,8 @@ const DEFAULT_HERO_CARD = {
     width: 100%;
     height: 38px;
     padding: 0 14px;
-    background: rgb(28 25 23);
-    color: rgb(245 241 234);
+    background: var(--pv-fg);
+    color: var(--pv-bg-alt);
     text-decoration: none;
     font-size: 0.6rem;
     text-transform: uppercase;
@@ -1855,7 +1878,7 @@ const DEFAULT_HERO_CARD = {
     font-size: 0.55rem;
     text-transform: uppercase;
     letter-spacing: 0.2em;
-    color: rgb(120 113 108);
+    color: var(--pv-fg-muted);
     text-decoration: none;
     cursor: default;
     user-select: none;
@@ -2961,10 +2984,11 @@ const DEFAULT_HERO_CARD = {
       if (webImg) webImg.style.backgroundImage = imageUrl;
       if (mobImg) mobImg.style.backgroundImage = imageUrl;
 
-      // Bg color shared across both frames.
+      // Bg color shared across both frames. Falls back to the same
+      // --bg-alt token the public site uses when nothing's been set.
       const webBg = $("[data-pv-bg]");
       const mobBg = $("[data-pv-bg-mobile]");
-      const bgValue = bg || "rgb(245 241 234)";
+      const bgValue = bg || "oklch(99% 0.003 70)";
       if (webBg) webBg.style.backgroundColor = bgValue;
       if (mobBg) mobBg.style.backgroundColor = bgValue;
     };
