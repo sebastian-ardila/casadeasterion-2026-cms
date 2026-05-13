@@ -263,7 +263,7 @@ export async function getAllPermissions(
 
   const out: Record<Resource, Level> = {
     posts: "none", books: "none", authors: "none", collaborators: "none",
-    categories: "none", site: "none", orders: "none", subscribers: "none",
+    staff: "none", categories: "none", site: "none", orders: "none", subscribers: "none",
     admins: "none",
   };
   if (user.role === "owner") {

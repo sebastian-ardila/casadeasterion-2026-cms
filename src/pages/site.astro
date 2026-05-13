@@ -2762,6 +2762,12 @@ const DEFAULT_HERO_CARD = {
     // chain) to match the current page-tab and inner tab. Mirrors the
     // server-side logic in MobileBreadcrumb.astro so refresh and click
     // produce the same trail.
+    //
+    // NOTA: el icono del crumb NO se actualiza en client-side. Mantenemos
+    // el icono que el SSR puso al cargar la página (lucide glyphs via
+    // astro-icon usan <symbol id>/<use> y duplicarlos en client-side
+    // rompía los symbols del sidebar persistido). Solo el texto cambia
+    // en vivo; en hard nav o reload el icono se actualiza al instante.
     const updateBreadcrumbCrumbs = (pageKey, tabKey) => {
       const ol = document.querySelector(".cas-breadcrumb ol");
       if (!ol) return;
@@ -2784,8 +2790,13 @@ const DEFAULT_HERO_CARD = {
           if (wantLink && !isAnchor) {
             const a = document.createElement("a");
             a.href = "/site";
-            a.className = "text-stone-500 hover:text-stone-900 transition";
+            a.className = "inline-flex items-center gap-1.5 text-stone-500 hover:text-stone-900 transition";
             a.setAttribute("data-astro-prefetch", "");
+            // Preserve any pre-rendered icon by moving the existing
+            // svg over into the new anchor — that way the symbols
+            // already inserted by SSR keep working.
+            const existingSvg = inner.querySelector("svg");
+            if (existingSvg) a.appendChild(existingSvg);
             const lbl = document.createElement("span");
             lbl.setAttribute("data-breadcrumb-label", "");
             lbl.textContent = pageLabel;
@@ -2793,13 +2804,16 @@ const DEFAULT_HERO_CARD = {
             inner.replaceWith(a);
           } else if (!wantLink && isAnchor) {
             const sp = document.createElement("span");
-            sp.className = "text-stone-900 font-medium first-letter:capitalize";
+            sp.className = "inline-flex items-center gap-1.5 text-stone-900 font-medium first-letter:capitalize";
+            const existingSvg = inner.querySelector("svg");
+            if (existingSvg) sp.appendChild(existingSvg);
             const lbl = document.createElement("span");
             lbl.setAttribute("data-breadcrumb-label", "");
             lbl.textContent = pageLabel;
             sp.appendChild(lbl);
             inner.replaceWith(sp);
           }
+          // Same element type → label-only update (icon stays).
         }
       }
 
@@ -2811,7 +2825,7 @@ const DEFAULT_HERO_CARD = {
           tabLi.className = "flex items-center gap-1.5 shrink-0";
           tabLi.innerHTML =
             '<span aria-hidden="true" class="text-stone-300">›</span>' +
-            '<span class="text-stone-900 font-medium first-letter:capitalize">' +
+            '<span class="inline-flex items-center gap-1.5 text-stone-900 font-medium first-letter:capitalize">' +
               '<span data-breadcrumb-label></span>' +
             '</span>';
           ol.appendChild(tabLi);

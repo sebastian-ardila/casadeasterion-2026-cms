@@ -1056,7 +1056,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
       if (!url.searchParams.has("saved")) return;
-      ["posts", "books", "authors", "categories", "orders"].forEach((r) => {
+      ["posts", "books", "authors", "collaborators", "staff", "categories", "orders"].forEach((r) => {
         try {
           sessionStorage.removeItem(cacheKey(r));
         } catch {}
