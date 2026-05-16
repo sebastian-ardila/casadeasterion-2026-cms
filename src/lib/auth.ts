@@ -55,10 +55,10 @@ export const CONFIGURABLE_RESOURCES: Resource[] = [
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
   posts: "Publicaciones",
-  books: "Libros",
+  books: "Catálogo",
   authors: "Autores",
   collaborators: "Colaboradores",
-  staff: "Personal",
+  staff: "Nosotros",
   collections: "Colecciones",
   categories: "Categorías",
   site: "Webpage",

@@ -20,10 +20,10 @@ const canEdit = permission === "edit";
 
 const headerByResource: Record<PanelResource, { title: string; icon: string; newHref: string; newLabel: string; showNew?: boolean }> = {
   posts: { title: "Publicaciones", icon: "lucide:newspaper", newHref: "/posts/new", newLabel: "+ Nueva publicación" },
-  books: { title: "Libros", icon: "lucide:book-open", newHref: "/books/new", newLabel: "+ Nuevo libro" },
+  books: { title: "Catálogo", icon: "lucide:book-open", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", icon: "lucide:users", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
   collaborators: { title: "Colaboradores", icon: "lucide:user-plus", newHref: "/collaborators/new", newLabel: "+ Nuevo colaborador" },
-  staff: { title: "Personal", icon: "lucide:building", newHref: "/staff/new", newLabel: "+ Nuevo miembro" },
+  staff: { title: "Nosotros", icon: "lucide:building", newHref: "/staff/new", newLabel: "+ Nuevo miembro" },
   collections: { title: "Colecciones", icon: "lucide:library", newHref: "/collections/new", newLabel: "+ Nueva colección" },
   categories: { title: "Categorías", icon: "lucide:folder-tree", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
   admins: { title: "Usuarios", icon: "lucide:users-round", newHref: "/admins/new", newLabel: "+ Nuevo usuario" },
@@ -86,6 +86,32 @@ const isNew = Astro.url.pathname.endsWith("/new");
         data-list-search
       />
     </div>
+    {resource === "staff" && canEdit && (
+      <div
+        class="mt-3 flex items-center justify-between gap-2 px-2.5 py-2 bg-stone-50 border border-stone-200"
+        data-section-toggle
+        data-toggle-key="nosotros_enabled"
+      >
+        <div class="min-w-0">
+          <p class="text-[11px] uppercase tracking-[0.14em] text-stone-500 leading-none mb-1">Sección pública</p>
+          <p class="text-xs text-stone-700 leading-tight">
+            <span data-toggle-status>Cargando…</span>
+            <span class="text-stone-400"> · /nosotros</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Activar o desactivar la sección Nosotros del sitio público"
+          class="cas-toggle"
+          data-toggle-btn
+          disabled
+        >
+          <span class="cas-toggle-thumb" aria-hidden="true"></span>
+        </button>
+      </div>
+    )}
     {resource === "orders" && (
       <div class="mt-3 flex flex-wrap gap-1" data-list-filters>
         {ORDER_FILTERS.map((f, idx) => (
@@ -185,6 +211,40 @@ const isNew = Astro.url.pathname.endsWith("/new");
     background: #1c1917;
     color: #fafaf9;
     border-color: #1c1917;
+  }
+
+  /* Toggle switch — used by /staff to flip the public /nosotros
+     section on and off. Mirror visualmente del switch del sitio
+     público para que la operación se sienta familiar. */
+  .cas-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: #d6d3d1;
+    border: 0;
+    cursor: pointer;
+    transition: background 160ms ease;
+    flex-shrink: 0;
+  }
+  .cas-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .cas-toggle[aria-checked="true"] { background: #1c1917; }
+  .cas-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: white;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+    transition: transform 160ms ease;
+  }
+  .cas-toggle[aria-checked="true"] .cas-toggle-thumb {
+    transform: translateX(16px);
   }
   .lp-link {
     display: flex;
@@ -1067,5 +1127,69 @@ const isNew = Astro.url.pathname.endsWith("/new");
       });
       hydrateAll();
     });
+
+    // ---- Section toggle (only in /staff for the "Nosotros" section) ----
+    // The button starts disabled. On hydrate we fetch the current state
+    // and enable it; on click we flip and POST back. The site_config
+    // amplify rebuild trigger picks the change up automatically.
+    const hydrateToggle = async (el) => {
+      const key = el.getAttribute("data-toggle-key");
+      const btn = el.querySelector("[data-toggle-btn]");
+      const status = el.querySelector("[data-toggle-status]");
+      if (!key || !btn || !status) return;
+      const paint = (enabled) => {
+        btn.setAttribute("aria-checked", enabled ? "true" : "false");
+        status.textContent = enabled ? "Visible en el sitio público" : "Oculta del sitio público";
+      };
+      try {
+        const res = await fetch(`/api/site-toggle?key=${encodeURIComponent(key)}`, { credentials: "same-origin" });
+        if (!res.ok) {
+          status.textContent = "Error cargando estado";
+          return;
+        }
+        const body = await res.json();
+        paint(body.enabled !== false);
+        btn.disabled = false;
+      } catch {
+        status.textContent = "Error cargando estado";
+      }
+      // Wire click once.
+      if (el.dataset.toggleBound === "1") return;
+      el.dataset.toggleBound = "1";
+      btn.addEventListener("click", async () => {
+        const next = btn.getAttribute("aria-checked") !== "true";
+        btn.disabled = true;
+        try {
+          const res = await fetch("/api/site-toggle", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ key, enabled: next }),
+          });
+          if (!res.ok) throw new Error("save_failed");
+          paint(next);
+          // Trigger a build toast so the operator sees the rebuild kick in.
+          if (typeof window.casBuildPending === "function") window.casBuildPending();
+          if (typeof window.casToast === "function") {
+            window.casToast({
+              type: "success",
+              message: next ? "Sección Nosotros activada." : "Sección Nosotros oculta.",
+            });
+          }
+        } catch {
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "error", message: "No se pudo guardar el cambio." });
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    };
+    const hydrateAllToggles = () => {
+      document.querySelectorAll("[data-section-toggle]").forEach(hydrateToggle);
+    };
+    hydrateAllToggles();
+    document.addEventListener("astro:page-load", hydrateAllToggles);
+    document.addEventListener("astro:after-swap", hydrateAllToggles);
   })();
 </script>

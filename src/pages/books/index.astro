@@ -7,9 +7,9 @@ if (guard instanceof Response) return guard;
 const canEdit = guard.permission === "edit";
 ---
 
-<AppLayout title="Libros" resource="books">
+<AppLayout title="Catálogo" resource="books">
   <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
-    <p class="font-serif text-xl mb-2">Libros</p>
+    <p class="font-serif text-xl mb-2">Catálogo</p>
     <p class="text-sm mb-6">Selecciona un libro de la lista{canEdit && " o crea uno nuevo"}.</p>
     {canEdit && (
       <a href="/books/new" class="btn-primary">+ Nuevo libro</a>

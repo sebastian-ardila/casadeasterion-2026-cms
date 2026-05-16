@@ -18,11 +18,11 @@ const isOwner = user?.role === "owner";
 type SidebarSub = { href: string; label: string; icon: string; pageKey?: string };
 const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string; subItems?: SidebarSub[] }> = [
   { href: "/",              label: "Inicio",        icon: "lucide:home" },
-  { href: "/books",         label: "Libros",        icon: "lucide:book-open",       resource: "books",         countKey: "books" },
+  { href: "/books",         label: "Catálogo",      icon: "lucide:book-open",       resource: "books",         countKey: "books" },
   { href: "/posts",         label: "Publicaciones", icon: "lucide:newspaper",       resource: "posts",         countKey: "posts" },
   { href: "/authors",       label: "Autores",       icon: "lucide:users",           resource: "authors",       countKey: "authors" },
   { href: "/collaborators", label: "Colaboradores", icon: "lucide:user-plus",       resource: "collaborators", countKey: "collaborators" },
-  { href: "/staff",         label: "Personal",      icon: "lucide:building",        resource: "staff",         countKey: "staff" },
+  { href: "/staff",         label: "Nosotros",      icon: "lucide:building",        resource: "staff",         countKey: "staff" },
   { href: "/collections",   label: "Colecciones",   icon: "lucide:library",         resource: "collections",   countKey: "collections" },
   { href: "/categories",    label: "Categorías",    icon: "lucide:folder-tree",     resource: "categories",    countKey: "categories" },
   {
