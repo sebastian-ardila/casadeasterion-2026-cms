@@ -10,6 +10,7 @@ export type Resource =
   | "authors"
   | "collaborators"
   | "staff"
+  | "collections"
   | "categories"
   | "site"
   | "orders"
@@ -27,6 +28,7 @@ export const RESOURCES: Resource[] = [
   "authors",
   "collaborators",
   "staff",
+  "collections",
   "categories",
   "site",
   "orders",
@@ -44,6 +46,7 @@ export const CONFIGURABLE_RESOURCES: Resource[] = [
   "authors",
   "collaborators",
   "staff",
+  "collections",
   "categories",
   "site",
   "orders",
@@ -56,6 +59,7 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   authors: "Autores",
   collaborators: "Colaboradores",
   staff: "Personal",
+  collections: "Colecciones",
   categories: "Categorías",
   site: "Webpage",
   orders: "Pedidos",
@@ -70,6 +74,7 @@ export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   authors: "edit",
   collaborators: "edit",
   staff: "edit",
+  collections: "edit",
   categories: "view",
   site: "none",
   orders: "none",
@@ -84,6 +89,7 @@ export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   authors: "edit",
   collaborators: "edit",
   staff: "edit",
+  collections: "edit",
   categories: "edit",
   site: "edit",
   orders: "edit",
@@ -263,8 +269,8 @@ export async function getAllPermissions(
 
   const out: Record<Resource, Level> = {
     posts: "none", books: "none", authors: "none", collaborators: "none",
-    staff: "none", categories: "none", site: "none", orders: "none", subscribers: "none",
-    admins: "none",
+    staff: "none", collections: "none", categories: "none", site: "none",
+    orders: "none", subscribers: "none", admins: "none",
   };
   if (user.role === "owner") {
     for (const r of RESOURCES) out[r] = "edit";

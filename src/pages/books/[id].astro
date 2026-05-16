@@ -60,6 +60,7 @@ if (Astro.request.method === "POST") {
       description_md: str(fd, "description_md"),
       cover_image_url: str(fd, "cover_image_url"),
       category_id: str(fd, "category_id"),
+      collection_id: str(fd, "collection_id") || null,
       isbn: normalizeISBN(rawIsbn),
       pages: num(fd, "pages"),
       format: str(fd, "format"),
@@ -93,15 +94,17 @@ if (Astro.request.method === "POST") {
 }
 
 // Run all SSR fetches in parallel — single round trip instead of two.
-const [bookRes, authorsRes, categoriesRes, selectedAuthorIds] = await Promise.all([
+const [bookRes, authorsRes, categoriesRes, collectionsRes, selectedAuthorIds] = await Promise.all([
   supabase.from("books").select("*").eq("id", id).maybeSingle(),
   supabase.from("authors").select("id, name, photo_url").order("name"),
   supabase.from("categories").select("id, name, icon").order("name"),
+  (supabase.from as any)("collections").select("id, name").eq("status", "published").order("name"),
   fetchBookAuthorIds(supabase, id),
 ]);
 const book = bookRes.data;
 const authors = authorsRes.data ?? [];
 const categories = categoriesRes.data;
+const collections = (collectionsRes.data ?? []) as Array<{ id: string; name: string }>;
 if (!book) return Astro.redirect("/books");
 const categoryOptions = [
   { value: "", label: "Sin categoría" },
@@ -109,6 +112,14 @@ const categoryOptions = [
     value: c.id,
     label: c.name,
     icon: c.icon ? `lucide:${c.icon}` : undefined,
+  })),
+];
+const collectionOptions = [
+  { value: "", label: "Sin colección" },
+  ...collections.map((c) => ({
+    value: c.id,
+    label: c.name,
+    icon: "lucide:library",
   })),
 ];
 const formatOptions = [
@@ -191,6 +202,11 @@ const statusOptions = [
           <span class="label">Categoría</span>
           <Dropdown name="category_id" value={book.category_id ?? ""} options={categoryOptions} placeholder="Sin categoría" />
         </div>
+      </div>
+      <div class="flex flex-col gap-2">
+        <span class="label">Colección</span>
+        <Dropdown name="collection_id" value={(book as any).collection_id ?? ""} options={collectionOptions} placeholder="Sin colección" />
+        <p class="text-stone-500 text-xs">Opcional. Un libro puede pertenecer a una sola colección a la vez.</p>
       </div>
     </section>
 

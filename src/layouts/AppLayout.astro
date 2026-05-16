@@ -13,7 +13,7 @@ import { getAllPermissions, isCmsUser, type Resource } from "~/lib/auth";
 const user = Astro.locals.user;
 const permissions = isCmsUser(user) ? await getAllPermissions(Astro, user) : null;
 
-type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "staff" | "categories"> | "admins" | "orders";
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "staff" | "collections" | "categories"> | "admins" | "orders";
 
 interface Props {
   title?: string;

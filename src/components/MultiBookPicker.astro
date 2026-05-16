@@ -1,0 +1,407 @@
+---
+// Multi-book picker for collections. Renders the currently-assigned
+// books as an ordered list with reorder/remove controls and exposes
+// an "+ Agregar libro" affordance that adds from the remaining pool.
+//
+// The form submits a single hidden input (`<name>`) carrying a
+// comma-separated string of UUIDs in display order. The matching
+// server handler should split on "," and update books.collection_id
+// for the IDs that were added/removed (see ~/lib/collections-sync.ts).
+//
+// Mirrors MultiAuthorPicker but with a rectangular cover-style thumb
+// and book-title-first labelling. CSS prefix is .mbp-* so the two
+// components can co-exist on the same page without selector clashes.
+
+interface BookOption {
+  id: string;
+  title: string;
+  cover_image_url: string | null;
+}
+
+interface Props {
+  name: string;
+  /** Every book in the catalog, sorted by title. */
+  books: BookOption[];
+  /** Currently-assigned book IDs in display order. */
+  selectedIds: string[];
+  /** Optional label rendered above the list. */
+  label?: string;
+}
+
+const { name, books, selectedIds, label } = Astro.props as Props;
+const byId = new Map(books.map((b) => [b.id, b]));
+const selected = selectedIds
+  .map((id) => byId.get(id))
+  .filter(Boolean) as BookOption[];
+const initialValue = selectedIds.join(",");
+---
+
+<div
+  class="mbp-picker"
+  data-mbp-picker
+  data-name={name}
+>
+  {label && <span class="label">{label}</span>}
+
+  <input type="hidden" name={name} value={initialValue} data-mbp-value />
+
+  <ul class="mbp-list" data-mbp-list>
+    {selected.map((b, i) => (
+      <li class="mbp-item" data-mbp-item data-id={b.id}>
+        <div class="mbp-item-handle" aria-hidden="true">
+          <button type="button" class="mbp-btn mbp-up" data-mbp-up disabled={i === 0} aria-label="Subir">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+          </button>
+          <button type="button" class="mbp-btn mbp-down" data-mbp-down disabled={i === selected.length - 1} aria-label="Bajar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+        </div>
+        <div class="mbp-thumb">
+          {b.cover_image_url ? (
+            <img src={b.cover_image_url} alt="" loading="lazy" />
+          ) : (
+            <span class="mbp-thumb-empty" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+            </span>
+          )}
+        </div>
+        <span class="mbp-title">{b.title}</span>
+        <button type="button" class="mbp-btn mbp-remove" data-mbp-remove aria-label={`Quitar ${b.title}`}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </li>
+    ))}
+  </ul>
+
+  <p class="mbp-empty" data-mbp-empty class:list={[selected.length > 0 && "hidden"]}>
+    Sin libros asignados a esta colección.
+  </p>
+
+  <details class="mbp-add" data-mbp-add>
+    <summary class="mbp-add-summary">+ Agregar libro</summary>
+    <div class="mbp-add-search">
+      <input
+        type="search"
+        class="mbp-add-input"
+        data-mbp-add-input
+        placeholder="Buscar libro por título…"
+        autocomplete="off"
+      />
+    </div>
+    <ul class="mbp-add-list" data-mbp-add-list>
+      {books.map((b) => (
+        <li
+          class="mbp-add-item"
+          data-mbp-add-item
+          data-id={b.id}
+          data-title={b.title}
+          data-cover={b.cover_image_url ?? ""}
+          data-search={b.title.toLowerCase()}
+          class:list={[selectedIds.includes(b.id) && "hidden"]}
+        >
+          <button type="button" class="mbp-add-btn">
+            <span class="mbp-thumb">
+              {b.cover_image_url ? (
+                <img src={b.cover_image_url} alt="" loading="lazy" />
+              ) : (
+                <span class="mbp-thumb-empty" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+                </span>
+              )}
+            </span>
+            <span class="mbp-title">{b.title}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+    <p class="mbp-add-empty hidden" data-mbp-add-empty>
+      No quedan libros por agregar.
+    </p>
+  </details>
+</div>
+
+<style is:global>
+  .mbp-picker { display: flex; flex-direction: column; gap: 0.5rem; }
+  .mbp-list { display: flex; flex-direction: column; gap: 0.375rem; margin: 0; padding: 0; list-style: none; }
+  .mbp-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgb(231 229 228);
+    background: white;
+    border-radius: 2px;
+  }
+  .mbp-item-handle { display: flex; flex-direction: column; gap: 0; margin-right: 0.25rem; }
+  .mbp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.25rem;
+    border: 1px solid rgb(231 229 228);
+    background: white;
+    color: rgb(68 64 60);
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .mbp-btn:hover:not(:disabled) { background: rgb(245 245 244); }
+  .mbp-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .mbp-up { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-width: 0; }
+  .mbp-down { border-top-left-radius: 0; border-top-right-radius: 0; }
+  .mbp-remove { width: 1.75rem; height: 1.75rem; margin-left: auto; }
+  /* Rectangular book-cover thumb — 3:4 ratio matches the public site. */
+  .mbp-thumb {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 2.25rem;
+    overflow: hidden;
+    background: rgb(245 245 244);
+    flex-shrink: 0;
+    border-radius: 1px;
+  }
+  .mbp-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .mbp-thumb-empty { color: rgb(168 162 158); }
+  .mbp-title {
+    font-size: 0.875rem;
+    color: rgb(28 25 23);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mbp-empty {
+    font-size: 0.8125rem;
+    color: rgb(120 113 108);
+    margin: 0 0 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed rgb(231 229 228);
+    border-radius: 2px;
+  }
+  .mbp-empty.hidden { display: none; }
+  .mbp-add { margin-top: 0.25rem; }
+  .mbp-add-summary {
+    cursor: pointer;
+    font-size: 0.8125rem;
+    color: rgb(68 64 60);
+    padding: 0.375rem 0.5rem;
+    list-style: none;
+    user-select: none;
+    border: 1px solid rgb(231 229 228);
+    border-radius: 2px;
+    background: white;
+    display: inline-block;
+  }
+  .mbp-add-summary::-webkit-details-marker { display: none; }
+  .mbp-add-summary:hover { background: rgb(245 245 244); }
+  .mbp-add[open] .mbp-add-summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .mbp-add-search {
+    border: 1px solid rgb(231 229 228);
+    border-top: 0;
+    background: white;
+    padding: 0.375rem;
+  }
+  .mbp-add-input {
+    width: 100%;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.8125rem;
+    border: 1px solid rgb(231 229 228);
+    border-radius: 2px;
+    background: white;
+  }
+  .mbp-add-input:focus { outline: none; border-color: rgb(120 113 108); }
+  .mbp-add-list {
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    border: 1px solid rgb(231 229 228);
+    border-top: 0;
+    border-radius: 0 0 2px 2px;
+    background: white;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .mbp-add-item { padding: 0; }
+  .mbp-add-item.hidden { display: none; }
+  .mbp-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    border-radius: 2px;
+  }
+  .mbp-add-btn:hover { background: rgb(245 245 244); }
+  .mbp-add-empty {
+    font-size: 0.8125rem;
+    color: rgb(120 113 108);
+    padding: 0.5rem;
+    margin: 0;
+    border: 1px solid rgb(231 229 228);
+    border-top: 0;
+    border-radius: 0 0 2px 2px;
+    background: white;
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    if (window.__casMultiBookInit) return;
+    window.__casMultiBookInit = true;
+
+    function renderRow(id, title, cover) {
+      const li = document.createElement("li");
+      li.className = "mbp-item";
+      li.dataset.mbpItem = "";
+      li.dataset.id = id;
+      const coverHtml = cover
+        ? '<img src="' + cover + '" alt="" loading="lazy">'
+        : '<span class="mbp-thumb-empty" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span>';
+      li.innerHTML =
+        '<div class="mbp-item-handle" aria-hidden="true">' +
+        '<button type="button" class="mbp-btn mbp-up" data-mbp-up aria-label="Subir">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>' +
+        "</button>" +
+        '<button type="button" class="mbp-btn mbp-down" data-mbp-down aria-label="Bajar">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>' +
+        "</button>" +
+        "</div>" +
+        '<div class="mbp-thumb">' + coverHtml + "</div>" +
+        '<span class="mbp-title"></span>' +
+        '<button type="button" class="mbp-btn mbp-remove" data-mbp-remove aria-label="Quitar">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>' +
+        "</button>";
+      li.querySelector(".mbp-title").textContent = title;
+      return li;
+    }
+
+    function sync(root, opts) {
+      const list = root.querySelector("[data-mbp-list]");
+      const empty = root.querySelector("[data-mbp-empty]");
+      const hidden = root.querySelector("[data-mbp-value]");
+      const addList = root.querySelector("[data-mbp-add-list]");
+      const addEmpty = root.querySelector("[data-mbp-add-empty]");
+      const items = Array.from(list.querySelectorAll("[data-mbp-item]"));
+      const ids = items.map((el) => el.dataset.id);
+      const next = ids.join(",");
+      const changed = hidden.value !== next;
+      hidden.value = next;
+      if (opts && opts.initial) {
+        const form = root.closest("form");
+        if (form) form.dispatchEvent(new CustomEvent("cas:resnapshot", { bubbles: true }));
+      } else if (changed) {
+        const form = root.closest("form");
+        if (form) form.dispatchEvent(new CustomEvent("cas:dirty", { bubbles: true }));
+      }
+      if (empty) empty.classList.toggle("hidden", ids.length > 0);
+      items.forEach((el, i) => {
+        const up = el.querySelector("[data-mbp-up]");
+        const down = el.querySelector("[data-mbp-down]");
+        if (up) up.disabled = i === 0;
+        if (down) down.disabled = i === items.length - 1;
+      });
+      if (addList) {
+        const used = new Set(ids);
+        let visible = 0;
+        addList.querySelectorAll("[data-mbp-add-item]").forEach((el) => {
+          const taken = used.has(el.dataset.id);
+          const filteredOut = el.dataset.filteredOut === "1";
+          const hidden = taken || filteredOut;
+          el.classList.toggle("hidden", hidden);
+          if (!hidden) visible++;
+        });
+        if (addEmpty) addEmpty.classList.toggle("hidden", visible > 0);
+      }
+    }
+
+    function init(root) {
+      if (root.dataset.mbpBound) return;
+      root.dataset.mbpBound = "1";
+
+      const list = root.querySelector("[data-mbp-list]");
+      const addInput = root.querySelector("[data-mbp-add-input]");
+
+      const form = root.closest("form");
+      if (form && !form.dataset.mbpSubmitBound) {
+        form.dataset.mbpSubmitBound = "1";
+        form.addEventListener("submit", () => {
+          document
+            .querySelectorAll("[data-mbp-picker]")
+            .forEach((picker) => sync(picker));
+        });
+      }
+
+      // Search filter — purely client-side on data-search attribute.
+      if (addInput) {
+        addInput.addEventListener("input", (e) => {
+          const q = e.target.value.trim().toLowerCase();
+          root.querySelectorAll("[data-mbp-add-item]").forEach((el) => {
+            const text = el.dataset.search || "";
+            el.dataset.filteredOut = q && !text.includes(q) ? "1" : "";
+          });
+          sync(root);
+        });
+      }
+
+      root.addEventListener("click", (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+
+        const removeBtn = t.closest("[data-mbp-remove]");
+        if (removeBtn) {
+          const item = removeBtn.closest("[data-mbp-item]");
+          if (item) item.remove();
+          sync(root);
+          return;
+        }
+
+        const upBtn = t.closest("[data-mbp-up]");
+        if (upBtn) {
+          const item = upBtn.closest("[data-mbp-item]");
+          const prev = item && item.previousElementSibling;
+          if (item && prev) list.insertBefore(item, prev);
+          sync(root);
+          return;
+        }
+
+        const downBtn = t.closest("[data-mbp-down]");
+        if (downBtn) {
+          const item = downBtn.closest("[data-mbp-item]");
+          const next = item && item.nextElementSibling;
+          if (item && next) list.insertBefore(next, item);
+          sync(root);
+          return;
+        }
+
+        const addItem = t.closest("[data-mbp-add-item]");
+        if (addItem) {
+          e.preventDefault();
+          const id = addItem.dataset.id;
+          const title = addItem.dataset.title || "";
+          const cover = addItem.dataset.cover || "";
+          if (id && !list.querySelector('[data-id="' + id + '"]')) {
+            list.appendChild(renderRow(id, title, cover));
+          }
+          sync(root);
+          const details = root.querySelector("[data-mbp-add]");
+          if (details) details.open = false;
+        }
+      });
+
+      sync(root, { initial: true });
+    }
+
+    function initAll() {
+      document.querySelectorAll("[data-mbp-picker]").forEach(init);
+    }
+
+    initAll();
+    document.addEventListener("astro:page-load", initAll);
+  })();
+</script>

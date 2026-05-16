@@ -1,0 +1,158 @@
+---
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
+import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
+import FormActions from "~/components/FormActions.astro";
+import Dropdown from "~/components/Dropdown.astro";
+import MultiBookPicker from "~/components/MultiBookPicker.astro";
+import { Icon } from "astro-icon/components";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq, slugify } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+import { parseIds, syncCollectionBooks } from "~/lib/collections-sync";
+
+const guard = await requirePermission(Astro, "collections", "edit");
+if (guard instanceof Response) return guard;
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const name = strReq(fd, "name");
+    const slug = str(fd, "slug") || slugify(name);
+
+    // Push new collection to the end by default.
+    const { data: last } = await (supabase.from as any)("collections")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextOrder = (last?.sort_order ?? 0) + 10;
+
+    const { data, error } = await (supabase.from as any)("collections")
+      .insert({
+        name,
+        slug,
+        description_md: str(fd, "description_md") ?? null,
+        cover_image_url: str(fd, "cover_image_url") ?? null,
+        category_id: str(fd, "category_id") || null,
+        sort_order: nextOrder,
+        status: str(fd, "status") === "draft" ? "draft" : "published",
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    // Asignar libros seleccionados a esta colección (set books.collection_id).
+    const bookIds = parseIds(fd, "book_ids");
+    if (bookIds.length) {
+      await syncCollectionBooks(supabase, data.id, bookIds);
+    }
+
+    return Astro.redirect(`/collections/${data.id}?saved=1&action=created&entity=book&publish=1`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+// Datos para los pickers
+const [{ data: categories }, { data: books }] = await Promise.all([
+  supabase.from("categories").select("id, name, icon").order("name"),
+  supabase.from("books").select("id, title, cover_image_url").order("title"),
+]);
+
+const categoryOptions = [
+  { value: "", label: "Sin categoría" },
+  ...(categories ?? []).map((c) => ({
+    value: c.id,
+    label: c.name,
+    icon: c.icon ? `lucide:${c.icon}` : "lucide:folder",
+  })),
+];
+---
+
+<AppLayout title="Nueva colección" resource="collections">
+  <BackToList href="/collections" label="Colecciones" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nueva colección</h1>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se presenta esta colección en /colecciones.</p>
+      </div>
+      <Field label="Nombre" name="name" required description="Nombre completo de la colección (ej. Poesía contemporánea)." />
+      <Field label="Slug" name="slug" description="Se autogenera del nombre si lo dejas vacío. URL: /colecciones/<slug>." />
+      <div>
+        <span class="label flex items-center gap-1.5 mb-1.5">
+          <Icon name="lucide:folder-tree" class="w-3.5 h-3.5 text-stone-500" aria-hidden="true" />
+          Categoría
+        </span>
+        <Dropdown
+          name="category_id"
+          value=""
+          options={categoryOptions}
+          placeholder="Sin categoría"
+        />
+        <p class="text-stone-500 text-xs mt-1.5">Opcional. Permite filtrar las colecciones en el sitio público.</p>
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Portada</h2>
+        <p class="card-section-desc">Imagen representativa. Se muestra en el grid de /colecciones y en el header de la página de la colección.</p>
+      </div>
+      <ImageUpload name="cover_image_url" label="Portada" bucket="authors" />
+    </section>
+
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Descripción</h2>
+        <p class="card-section-desc">Texto introductorio. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="description_md" label="" />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Libros de la colección</h2>
+        <p class="card-section-desc">Selecciona qué libros del catálogo pertenecen a esta colección. Cada libro puede estar en una sola colección a la vez — si lo añades acá, se quitará de cualquier otra colección donde estuviera.</p>
+      </div>
+      <MultiBookPicker name="book_ids" books={books ?? []} selectedIds={[]} />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Publicación</h2>
+        <p class="card-section-desc">Determina si esta colección aparece ya en /colecciones.</p>
+      </div>
+      <label class="flex items-start gap-3 text-sm">
+        <input type="radio" name="status" value="published" checked class="mt-1" />
+        <span>
+          <span class="font-medium">Publicado</span>
+          <span class="block text-stone-500">Visible en el sitio público apenas se guarde.</span>
+        </span>
+      </label>
+      <label class="flex items-start gap-3 text-sm">
+        <input type="radio" name="status" value="draft" class="mt-1" />
+        <span>
+          <span class="font-medium">Borrador</span>
+          <span class="block text-stone-500">Solo visible en el CMS — no aparece todavía en /colecciones.</span>
+        </span>
+      </label>
+    </section>
+
+    <FormActions cancelHref="/collections" saveLabel="Crear colección" />
+  </form>
+</AppLayout>

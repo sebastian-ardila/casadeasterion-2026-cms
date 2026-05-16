@@ -58,6 +58,7 @@ const ALLOWED = new Set<ListResource>([
   "authors",
   "collaborators",
   "staff",
+  "collections",
   "categories",
   "admins",
   "orders",
@@ -178,6 +179,26 @@ export const GET: APIRoute = async (ctx) => {
       href: `/collaborators/${a.id}`,
       imageUrl: a.photo_url ?? null,
       imageStyle: "photo",
+    }));
+  } else if (resource === "collections") {
+    // Editorial collections — groupings of books beyond category. The
+    // subtitle shows the category name when set (so the editor can
+    // distinguish "Poesía contemporánea" → Poesía from "Tomos de
+    // filosofía" → Filosofía), or falls back to the slug.
+    const { data } = await (supabase.from as any)("collections")
+      .select("id, name, slug, cover_image_url, sort_order, status, updated_at, category:categories(name), editor:profiles!collections_updated_by_fkey(id, full_name, email)")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    items = (data ?? []).map((c: any) => ({
+      id: c.id,
+      title: c.name,
+      subtitle: c.category?.name || `/${c.slug}`,
+      meta: editorMeta(c.updated_at, c.editor),
+      editorId: c.editor?.id ?? null,
+      status: c.status,
+      href: `/collections/${c.id}`,
+      imageUrl: c.cover_image_url ?? null,
+      imageStyle: "cover",
     }));
   } else if (resource === "staff") {
     // Organizational profiles — team members of Casa de Asterión.
