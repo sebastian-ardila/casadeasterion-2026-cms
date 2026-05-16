@@ -246,7 +246,9 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     border-radius: 9999px;
     background: rgb(231 229 228);          /* stone-200 */
     color: rgb(68 64 60);                  /* stone-700 */
-    transition: background-color 0.12s, color 0.12s;
+    /* Sin transition — la fila completa anima su background pero el
+       counter cambia instantáneo. Animar el counter generaba un
+       "parpadeo" perceptible al navegar entre secciones. */
   }
   .cas-nav-count:empty { display: none; }  /* hide until JS fills it */
   .nav-link-active .cas-nav-count {
@@ -423,9 +425,16 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         const key = el.getAttribute("data-count-key");
         if (!key) return;
         const v = counts[key];
-        // Missing key (no permission) → leave empty so :empty CSS hides it.
-        el.textContent = typeof v === "number" ? formatCount(v) : "";
-        if (typeof v === "number") el.title = String(v);
+        const next = typeof v === "number" ? formatCount(v) : "";
+        // Solo actualizar el DOM si el valor cambió — evita reflow y
+        // flicker en cada astro:page-load cuando el count no varía.
+        if (el.textContent !== next) {
+          el.textContent = next;
+        }
+        if (typeof v === "number") {
+          const titleStr = String(v);
+          if (el.title !== titleStr) el.title = titleStr;
+        }
       });
     };
 
