@@ -213,6 +213,47 @@ const isNew = Astro.url.pathname.endsWith("/new");
     border-color: #1c1917;
   }
 
+  /* Orders list — cada row es un flex con la card a la izquierda
+     y dos mini-actions a la derecha (Ver detalle + WhatsApp). El
+     <li> coge display:flex para que el <a class="lp-link"> ocupe el
+     espacio restante y las acciones queden alineadas al final. */
+  .lp-order-row {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid rgb(245 245 244); /* mantiene la separación que tenía el li anterior */
+  }
+  .lp-order-row .lp-link {
+    flex: 1;
+    min-width: 0;
+    /* La línea inferior viene del <li>, no del propio <a>. */
+    border-bottom: 0 !important;
+  }
+  .lp-order-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 12px;
+    flex-shrink: 0;
+    border-left: 1px solid rgb(245 245 244);
+  }
+  .lp-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    color: rgb(120 113 108);  /* stone-500 */
+    background: transparent;
+    transition: background 120ms, color 120ms;
+  }
+  .lp-action:hover {
+    background: rgb(245 245 244);  /* stone-100 */
+    color: rgb(28 25 23);          /* stone-900 */
+  }
+
   /* Toggle switch — used by /staff to flip the public /nosotros
      section on and off. Mirror visualmente del switch del sitio
      público para que la operación se sienta familiar. */
@@ -912,8 +953,27 @@ const isNew = Astro.url.pathname.endsWith("/new");
           // can do a simple substring check.
           const searchText = normalize(`${it.title || ""} ${it.subtitle || ""}`);
 
+          // Orders-specific: dos mini-buttons al lado de la card —
+          // "Ver detalle" (mismo destino que el row entero, para
+          // claridad) y "WhatsApp" (abre wa.me en pestaña nueva).
+          // Pintados como acciones al borde derecho del row dentro de
+          // un wrapper flex; el row entero sigue siendo navegable
+          // pero las acciones tienen affordance explícito.
+          const isOrder = resource === "orders";
+          const DETAIL_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+          const WA_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="#128C7E" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884"/></svg>`;
+          const orderActions = isOrder
+            ? `<div class="lp-order-actions" data-list-actions>
+                <a href="${escape(it.href)}" class="lp-action" title="Ver detalle" aria-label="Ver detalle del pedido">${DETAIL_ICON}</a>
+                ${it.waHref
+                  ? `<a href="${escape(it.waHref)}" target="_blank" rel="noopener noreferrer" class="lp-action" title="Contactar por WhatsApp" aria-label="Contactar por WhatsApp">${WA_ICON}</a>`
+                  : ""}
+              </div>`
+            : "";
+          const liClass = isOrder ? "lp-order-row" : "";
+
           return `
-            <li data-list-row data-search-text="${escape(searchText)}" data-status="${escape(it.status || "")}">
+            <li data-list-row data-search-text="${escape(searchText)}" data-status="${escape(it.status || "")}" class="${liClass}">
               <a href="${escape(it.href)}" class="${cls}" data-astro-prefetch data-id="${escape(it.id)}">
                 <span class="lp-link-body">
                   ${grip}
@@ -929,6 +989,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
                 </span>
                 ${arrows}
               </a>
+              ${orderActions}
             </li>`;
         })
         .join("");

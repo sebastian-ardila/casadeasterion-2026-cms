@@ -25,6 +25,10 @@ type Item = {
   imageStyle?: "photo" | "cover" | "emoji" | "icon" | "none";
   /** Categories: extra metadata used to render reorder controls. */
   reorderable?: boolean;
+  /** Orders-specific: WhatsApp deep-link pre-armado. Si está
+   *  presente, la card pinta un mini-button "WhatsApp" al lado
+   *  del "Ver detalle". */
+  waHref?: string | null;
 };
 
 /** Activity label: "activo ahora" / "activo hace 2 h" / "activo hace 3 días" / "activo el 30 nov 2024". */
@@ -254,7 +258,7 @@ export const GET: APIRoute = async (ctx) => {
     const { data } = await supabase
       .from("purchase_intents")
       .select(
-        "id, full_name, email, total_amount, currency, status, updated_at, items:purchase_intent_items(id), editor:profiles!purchase_intents_updated_by_fkey(id, full_name, email)",
+        "id, full_name, email, phone, total_amount, currency, status, updated_at, items:purchase_intent_items(id), editor:profiles!purchase_intents_updated_by_fkey(id, full_name, email)",
       )
       .order("updated_at", { ascending: false });
     const formatMoney = (amount: number | null, currency: string) => {
@@ -265,6 +269,23 @@ export const GET: APIRoute = async (ctx) => {
         maximumFractionDigits: 0,
       }).format(Number(amount));
     };
+    // Helper para armar el wa.me link con el mensaje pre-llenado.
+    // Mismo patrón que en /orders/[id]: respeta el + si lo trae,
+    // asume +57 si son 10 dígitos sin código.
+    const buildWaHref = (phone: string | null, fullName: string | null): string | null => {
+      if (!phone) return null;
+      const cleaned = String(phone).replace(/[^\d+]/g, "");
+      const digits = cleaned.startsWith("+")
+        ? cleaned.slice(1)
+        : cleaned.length === 10 ? `57${cleaned}` : cleaned;
+      if (!digits) return null;
+      const firstName = (fullName ?? "").trim().split(/\s+/)[0] ?? "";
+      const greeting = firstName
+        ? `Hola ${firstName}, te escribo de Casa de Asterión Ediciones sobre tu pedido.`
+        : "Hola, te escribo de Casa de Asterión Ediciones sobre tu pedido.";
+      return `https://wa.me/${digits}?text=${encodeURIComponent(greeting)}`;
+    };
+
     items = (data ?? []).map((o: any) => {
       const count = Array.isArray(o.items) ? o.items.length : 0;
       const itemsLabel = count === 1 ? "1 libro" : `${count} libros`;
@@ -280,6 +301,11 @@ export const GET: APIRoute = async (ctx) => {
         href: `/orders/${o.id}`,
         imageUrl: null,
         imageStyle: "none" as const,
+        // Orders-specific: acciones rápidas que el ListPanel renderiza
+        // como mini-buttons en la card. waHref usa wa.me con el
+        // teléfono y mensaje pre-llenado; el detalle es la misma
+        // ruta del card.
+        waHref: buildWaHref(o.phone ?? null, o.full_name ?? null),
       };
     });
   } else if (resource === "admins") {
