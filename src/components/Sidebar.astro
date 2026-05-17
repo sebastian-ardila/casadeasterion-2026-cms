@@ -62,7 +62,10 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     <svg id="sidebar-icon-close" class="hidden" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
   </button>
   <div class="flex items-center gap-2 min-w-0">
-    <img src="/casadeasterion.webp" alt="" width="28" height="28" class="w-7 h-7 object-contain shrink-0" />
+    <span class="cas-logo-swap w-7 h-7 shrink-0">
+      <img src="/casadeasterion4.webp" alt="" width="28" height="28" class="cas-logo-default w-full h-full object-contain" />
+      <img src="/casadeasterion5.webp" alt="" width="28" height="28" loading="lazy" class="cas-logo-hover w-full h-full object-contain" />
+    </span>
     <p class="font-serif uppercase tracking-[0.16em] text-xs truncate">Casa de Asterión</p>
   </div>
   <div class="w-9" aria-hidden="true"></div>
@@ -81,7 +84,10 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
 >
   <div class="shrink-0 px-5 md:px-6 pt-5 md:pt-7 pb-4 border-b border-stone-200/70">
     <div class="flex items-center gap-3 mb-4">
-      <img src="/casadeasterion.webp" alt="" width="44" height="44" class="w-10 h-10 md:w-11 md:h-11 object-contain shrink-0" />
+      <span class="cas-logo-swap w-10 h-10 md:w-11 md:h-11 shrink-0">
+        <img src="/casadeasterion4.webp" alt="" width="44" height="44" class="cas-logo-default w-full h-full object-contain" />
+        <img src="/casadeasterion5.webp" alt="" width="44" height="44" loading="lazy" class="cas-logo-hover w-full h-full object-contain" />
+      </span>
       <div class="min-w-0">
         <p class="font-serif uppercase tracking-[0.18em] text-sm leading-tight">Casa de Asterión</p>
         <p class="text-[10px] uppercase tracking-[0.18em] text-stone-500 mt-0.5">CMS</p>

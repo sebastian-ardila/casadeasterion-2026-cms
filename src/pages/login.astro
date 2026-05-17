@@ -21,13 +21,23 @@ const friendlyReason = reason ? (FRIENDLY_REASON[reason] ?? reason) : null;
 
 <AuthLayout title="Acceder">
   <div class="text-center mb-10">
-    <img
-      src="/casadeasterion.webp"
-      alt=""
-      width="64"
-      height="64"
-      class="w-16 h-16 mx-auto mb-4 object-contain"
-    />
+    <span class="cas-logo-swap w-16 h-16 mx-auto mb-4 block">
+      <img
+        src="/casadeasterion4.webp"
+        alt=""
+        width="64"
+        height="64"
+        class="cas-logo-default w-full h-full object-contain"
+      />
+      <img
+        src="/casadeasterion5.webp"
+        alt=""
+        width="64"
+        height="64"
+        loading="lazy"
+        class="cas-logo-hover w-full h-full object-contain"
+      />
+    </span>
     <p class="font-serif uppercase tracking-[0.18em] text-sm">Casa de Asterión</p>
     <p class="text-[11px] uppercase tracking-[0.18em] text-stone-500 mt-1">CMS</p>
   </div>
