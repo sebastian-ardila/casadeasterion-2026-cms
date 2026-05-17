@@ -425,26 +425,31 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         const key = el.getAttribute("data-count-key");
         if (!key) return;
         const v = counts[key];
-        const next = typeof v === "number" ? formatCount(v) : "";
-        // Solo actualizar el DOM si el valor cambió — evita reflow y
-        // flicker en cada astro:page-load cuando el count no varía.
-        if (el.textContent !== next) {
-          el.textContent = next;
-        }
-        if (typeof v === "number") {
-          const titleStr = String(v);
-          if (el.title !== titleStr) el.title = titleStr;
-        }
+        // Si la respuesta del endpoint no incluye esta key (porque el
+        // usuario no tiene permiso, o porque countOf falló silenciosamente,
+        // o porque la red cortó la respuesta a mitad), MANTENEMOS el valor
+        // actual del badge en lugar de blanquearlo a "". Vaciarlo dispararía
+        // :empty { display: none } → "parpadeo" entre navegaciones.
+        if (typeof v !== "number") return;
+        const next = formatCount(v);
+        if (el.textContent !== next) el.textContent = next;
+        const titleStr = String(v);
+        if (el.title !== titleStr) el.title = titleStr;
       });
     };
 
-    // Read cached counts immediately so the badges show on first paint
-    // even before /api/sidebar-counts responds. Then refresh in the
-    // background.
-    try {
-      const cached = sessionStorage.getItem(SIDEBAR_COUNTS_CACHE_KEY);
-      if (cached) applyCounts(JSON.parse(cached));
-    } catch {}
+    // Re-aplica el cache al sidebar. Útil en boot y también en cada
+    // page-load: si por alguna razón Astro re-renderizó el sidebar
+    // server-side (los span del SSR vienen vacíos), volvemos a llenarlo
+    // antes que se vea vacío.
+    const applyCachedCounts = () => {
+      try {
+        const cached = sessionStorage.getItem(SIDEBAR_COUNTS_CACHE_KEY);
+        if (cached) applyCounts(JSON.parse(cached));
+      } catch {}
+    };
+
+    applyCachedCounts();
 
     let countsInflight = false;
     const refreshCounts = async () => {
@@ -463,10 +468,16 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
       }
     };
 
-    // Refresh on every navigation: a save in /posts/[id] may have just
-    // bumped the count, and persist:transitions don't re-render the
-    // sidebar so we have to re-fetch ourselves.
-    document.addEventListener("astro:page-load", refreshCounts);
+    // En cada navegación: primero rellenamos del cache (instantáneo, no
+    // espera la red) y luego refrescamos los counts. Si el sidebar
+    // persistió, applyCachedCounts es no-op (los badges ya tienen valor
+    // y el diff check no toca el DOM). Si por algún motivo el sidebar
+    // perdió su estado, esto evita el "parpadeo" de vacío → lleno.
+    document.addEventListener("astro:page-load", () => {
+      applyCachedCounts();
+      refreshCounts();
+    });
+    document.addEventListener("astro:after-swap", applyCachedCounts);
 
     // Per-parent expand/collapse state. The default is "open when the
     // parent route is active" — but the user can override (open when
