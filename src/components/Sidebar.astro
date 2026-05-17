@@ -256,6 +256,19 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
     color: rgb(245 245 244);
   }
 
+  /* Highlight contador de Pedidos — los pedidos son señal de venta y
+     merecen destacarse sobre el resto del menú. Solo cuando hay al
+     menos un pedido (no aplicamos color cuando el badge está vacío). */
+  .cas-nav-count[data-count-key="orders"]:not(:empty) {
+    background: rgb(254 215 170);          /* orange-200 */
+    color: rgb(124 45 18);                 /* orange-900 */
+    font-weight: 600;
+  }
+  .nav-link-active .cas-nav-count[data-count-key="orders"]:not(:empty) {
+    background: rgb(251 146 60);           /* orange-400 */
+    color: rgb(67 20 7);                   /* orange-950 */
+  }
+
   /* Expand/collapse caret for rows that have a sub-nav (Page →
      Home / Catálogo / …). Click toggles the chips below. The icon
      rotates 180° when the sub-nav is open. The label part of the

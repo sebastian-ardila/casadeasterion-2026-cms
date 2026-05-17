@@ -135,13 +135,16 @@ export const GET: APIRoute = async (ctx) => {
     const perms = await getAllPermissions(ctx, guard);
     const isOwner = guard.role === "owner";
     const isManager = isOwner || guard.role === "admin";
-    const [books, posts, authors, categories, subs, users] = await Promise.all([
+    const [books, posts, authors, categories, subs, users, orders, collections, collaborators] = await Promise.all([
       perms.books !== "none" ? supabase.from("books").select("id,status") : Promise.resolve({ data: null }),
       perms.posts !== "none" ? supabase.from("posts").select("id,status") : Promise.resolve({ data: null }),
       perms.authors !== "none" ? supabase.from("authors").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
       perms.categories !== "none" ? supabase.from("categories").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
       isOwner ? supabase.from("subscribers").select("id,confirmed_at,unsubscribed_at") : Promise.resolve({ data: null }),
       isManager ? supabase.from("profiles").select("id,role").in("role", ["owner", "admin", "editor"]) : Promise.resolve({ data: null }),
+      perms.orders !== "none" ? supabase.from("purchase_intents").select("id,status") : Promise.resolve({ data: null }),
+      perms.collections !== "none" ? supabase.from("collections").select("id,status") : Promise.resolve({ data: null }),
+      perms.collaborators !== "none" ? supabase.from("collaborators").select("id", { count: "exact", head: true }) : Promise.resolve({ count: null }),
     ] as const);
     const userRows = (users as any).data ?? null;
     const usersByRole = (role: string) =>
@@ -160,6 +163,11 @@ export const GET: APIRoute = async (ctx) => {
         users_owners: usersByRole("owner"),
         users_admins: usersByRole("admin"),
         users_editors: usersByRole("editor"),
+        orders_total: (orders as any).data?.length ?? 0,
+        orders_pending: (orders as any).data?.filter((o: any) => o.status === "pending").length ?? 0,
+        collections_total: (collections as any).data?.length ?? 0,
+        collections_published: (collections as any).data?.filter((c: any) => c.status === "published").length ?? 0,
+        collaborators: (collaborators as any).count ?? 0,
       },
     });
   }
