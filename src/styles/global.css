@@ -88,7 +88,13 @@
   }
 
   .nav-link {
-    @apply flex w-full items-center gap-2.5 cursor-pointer px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 hover:text-stone-900 transition;
+    /* No transition: previously had `transition` which animated
+       background-color and color over 150ms. When the active nav
+       link changed, the row's bg animated but the inner counter
+       didn't — leading to a perceived "flicker" where the count
+       badge looked momentarily mismatched against its row. Making
+       the whole row swap state instantly aligns counter + row. */
+    @apply flex w-full items-center gap-2.5 cursor-pointer px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 hover:text-stone-900;
   }
   .nav-link-active {
     @apply bg-stone-900 text-white hover:bg-stone-900 hover:text-white;
