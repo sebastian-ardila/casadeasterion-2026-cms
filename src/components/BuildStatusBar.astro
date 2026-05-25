@@ -249,24 +249,31 @@
         if (!res.ok) throw new Error("http_" + res.status);
         const data = await res.json();
         if (data.phase === "unavailable") {
-          // Endpoint can't talk to Amplify (missing creds, IAM perms,
-          // bad app id, transient AWS error). Show this as a visible
-          // terminal state with a close button instead of hiding the
-          // bar — otherwise the user just sees the bar flash and
-          // disappear with no idea why. Reason + message are logged
-          // to the console so devs can diagnose without DB access.
+          // Dos causas posibles:
+          //  - "no_amplify_configured": env vars faltantes en Amplify.
+          //    Es persistente — el siguiente poll fallaría igual.
+          //  - "amplify_query_failed": AWS rechazó/agotó la query.
+          //    Casi siempre transitorio (throttle, network glitch, IAM
+          //    intermitente). Si caemos en este blip justo cuando el
+          //    deploy ya funcionó, el sitio se publica pero el bar
+          //    decía "No se puede verificar el deploy" sin razón.
+          //
+          // Por eso: solo el primer caso es terminal; el segundo se
+          // trata como un error transitorio y seguimos polleando.
           console.warn(
             "[BuildStatusBar] /api/build-status returned unavailable:",
             data.reason || "(no reason)",
             data.message || "",
           );
-          setState({ state: "unavailable", terminalAt: Date.now() });
-          stopPoll();
-          return;
-        }
-        if (data.phase === "succeed") {
+          if (data.reason === "no_amplify_configured") {
+            setState({ state: "unavailable", terminalAt: Date.now() });
+            stopPoll();
+            return;
+          }
+          // amplify_query_failed (u otros): continuar polling. El
+          // watchdog MAX_RUNTIME corta si el problema persiste 10 min.
+        } else if (data.phase === "succeed") {
           setState({ state: "succeeded", terminalAt: Date.now() });
-          // Auto-dismiss after a linger.
           if (succeedDismissTimer) clearTimeout(succeedDismissTimer);
           succeedDismissTimer = setTimeout(() => {
             const s = readState();
@@ -274,8 +281,7 @@
           }, SUCCESS_LINGER);
           stopPoll();
           return;
-        }
-        if (data.phase === "failed") {
+        } else if (data.phase === "failed") {
           setState({ state: "failed", terminalAt: Date.now() });
           stopPoll();
           return;
