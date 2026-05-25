@@ -12,7 +12,7 @@ import { fullName, formatAgo } from "~/lib/relative-time";
 import { Icon } from "astro-icon/components";
 import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
-import { str, strReq, tags as parseTags } from "~/lib/forms";
+import { str, strReq, tags as parseTags, bool as parseBool } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
 import { FONT_OPTIONS } from "~/lib/fonts";
 
@@ -336,6 +336,7 @@ if (Astro.request.method === "POST") {
       { key: "organization_logo_url", value: str(fd, "organization_logo_url") ?? "" },
       { key: "hero_image_url",            value: str(fd, "hero_image_url") ?? "" },
       { key: "hero_bg_color",             value: str(fd, "hero_bg_color") ?? "" },
+      { key: "hero_seam_logo_enabled",    value: parseBool(fd, "hero_seam_logo_enabled") },
       { key: "hero_title",                value: strReq(fd, "hero_title") },
       { key: "hero_tagline",              value: strReq(fd, "hero_tagline") },
       { key: "hero_cta_primary_label",    value: strReq(fd, "hero_cta_primary_label") },
@@ -584,6 +585,28 @@ const DEFAULT_HERO_CARD = {
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Logo del seam — toggle del laberinto sobre el hero */}
+        <section class="card space-y-5">
+          <CardHeader icon="lucide:circle-dashed" title="Laberinto sobre el hero" desc="Logo a dos colores centrado sobre la frontera entre la imagen y el texto." />
+          <div class="flex items-center justify-between gap-4">
+            <div class="min-w-0">
+              <p class="text-sm text-stone-800 font-medium">Mostrar el laberinto</p>
+              <p class="text-xs text-stone-500 mt-0.5 leading-snug">Solo en desktop. Mitad negra sobre el texto, mitad blanca translúcida sobre la foto.</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked="true"
+              aria-label="Activar o desactivar el laberinto sobre el hero"
+              class="cas-toggle"
+              data-form-toggle="hero_seam_logo_enabled"
+            >
+              <span class="cas-toggle-thumb" aria-hidden="true"></span>
+            </button>
+            <input type="hidden" name="hero_seam_logo_enabled" value="true" />
           </div>
         </section>
 
@@ -3697,6 +3720,13 @@ const DEFAULT_HERO_CARD = {
       setImage("hero_image_url", cfg.hero_image_url ?? "");
       updateHeroFallbackStatus();
 
+      // Toggle del seam logo — default true cuando la row no existe.
+      const seamEnabled = cfg.hero_seam_logo_enabled === false ? false : true;
+      const seamBtn = form.querySelector('[data-form-toggle="hero_seam_logo_enabled"]');
+      const seamInput = form.querySelector('input[type="hidden"][name="hero_seam_logo_enabled"]');
+      if (seamBtn) seamBtn.setAttribute("aria-checked", seamEnabled ? "true" : "false");
+      if (seamInput) seamInput.value = seamEnabled ? "true" : "false";
+
       // Hero page bg color — find its ColorEditor and seed the value.
       const heroBgEditor = form.querySelector('[data-color-editor-id="hero-bg"]');
       if (heroBgEditor) {
@@ -3971,6 +4001,25 @@ const DEFAULT_HERO_CARD = {
         // or clears an image; refresh so the new image shows up in the
         // preview without waiting for input/change to bubble.
         wireFormRoot.addEventListener("cas:imageupload:change", renderHeroTextPreview);
+
+        // Toggle del seam-logo: click → flip aria-checked + hidden
+        // input + dispatch cas:dirty para que FormActions habilite el
+        // botón "Guardar".
+        wireFormRoot.querySelectorAll("[data-form-toggle]").forEach((btn) => {
+          if (btn.dataset.casToggleBound) return;
+          btn.dataset.casToggleBound = "1";
+          btn.addEventListener("click", () => {
+            const key = btn.getAttribute("data-form-toggle");
+            if (!key) return;
+            const next = btn.getAttribute("aria-checked") !== "true";
+            btn.setAttribute("aria-checked", next ? "true" : "false");
+            const hidden = wireFormRoot.querySelector(
+              'input[type="hidden"][name="' + key + '"]',
+            );
+            if (hidden) hidden.value = next ? "true" : "false";
+            wireFormRoot.dispatchEvent(new CustomEvent("cas:dirty", { bubbles: true }));
+          });
+        });
       }
 
       $$("[data-bind]").forEach(el => {
