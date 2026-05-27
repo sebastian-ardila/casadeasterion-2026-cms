@@ -9,6 +9,7 @@
 // Cualquier editor con edit en autores puede tocar los role_tags y la
 // identidad; las otras 3 secciones son vistas filtradas.
 import AppLayout from "~/layouts/AppLayout.astro";
+import { Icon } from "astro-icon/components";
 import Field from "~/components/Field.astro";
 import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
@@ -37,6 +38,14 @@ const ROLE_LABELS: Record<Role, string> = {
   collaborator: "Colaborador",
   translator: "Traductor",
   prologuist: "Prologista",
+};
+// Mismos iconos que el sidebar — refuerzan la asociación visual entre
+// el checkbox del rol y la sección donde aparecerá la persona.
+const ROLE_ICONS: Record<Role, string> = {
+  author: "lucide:users",
+  collaborator: "lucide:user-plus",
+  translator: "lucide:languages",
+  prologuist: "lucide:quote",
 };
 
 let formError: string | null = null;
@@ -173,6 +182,7 @@ const postSections: { role: Role; label: string; rows: LinkedPost[] }[] = [
               checked={currentTags.has(r)}
               class="w-4 h-4 accent-stone-900"
             />
+            <Icon name={ROLE_ICONS[r]} class="w-4 h-4 shrink-0 text-stone-500" aria-hidden="true" />
             <span class="text-sm">{ROLE_LABELS[r]}</span>
           </label>
         ))}

@@ -4,6 +4,7 @@
 // pre-marca el checkbox correspondiente: /people/new?role=translator
 // abre con "Traductor" tildado.
 import AppLayout from "~/layouts/AppLayout.astro";
+import { Icon } from "astro-icon/components";
 import Field from "~/components/Field.astro";
 import BackToList from "~/components/BackToList.astro";
 import MarkdownEditor from "~/components/MarkdownEditor.astro";
@@ -25,6 +26,12 @@ const ROLE_LABELS: Record<Role, string> = {
   collaborator: "Colaborador",
   translator: "Traductor",
   prologuist: "Prologista",
+};
+const ROLE_ICONS: Record<Role, string> = {
+  author: "lucide:users",
+  collaborator: "lucide:user-plus",
+  translator: "lucide:languages",
+  prologuist: "lucide:quote",
 };
 
 // Detectar role hint del query string. Si llega ?role=translator,
@@ -102,6 +109,7 @@ if (Astro.request.method === "POST") {
               checked={r === initialRole}
               class="w-4 h-4 accent-stone-900"
             />
+            <Icon name={ROLE_ICONS[r]} class="w-4 h-4 shrink-0 text-stone-500" aria-hidden="true" />
             <span class="text-sm">{ROLE_LABELS[r]}</span>
           </label>
         ))}
