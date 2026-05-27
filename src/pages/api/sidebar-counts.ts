@@ -35,8 +35,22 @@ export const GET: APIRoute = async (ctx) => {
     out[key] = count ?? 0;
   };
 
+  // Libros publicados o en borrador SIN precio asignado — flag
+  // editorial: aparece en el sidebar como badge naranja junto a Catálogo
+  // para que el editor recuerde completarlos. price_amount null o 0.
+  const countBooksWithoutPrice = async () => {
+    const { count } = await sb
+      .from("books")
+      .select("*", { count: "exact", head: true })
+      .or("price_amount.is.null,price_amount.eq.0");
+    out.books_without_price = count ?? 0;
+  };
+
   const tasks: Promise<unknown>[] = [];
-  if (perms.books         !== "none") tasks.push(countOf("books",         "books"));
+  if (perms.books         !== "none") {
+    tasks.push(countOf("books", "books"));
+    tasks.push(countBooksWithoutPrice());
+  }
   if (perms.posts         !== "none") tasks.push(countOf("posts",         "posts"));
   if (perms.authors       !== "none") tasks.push(countOf("authors",       "authors"));
   // Las 3 secciones siguientes son vistas filtradas de la tabla `authors`.

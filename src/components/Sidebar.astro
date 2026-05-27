@@ -13,13 +13,16 @@ const isOwner = user?.role === "owner";
 // `countKey`: identifies which value from /api/sidebar-counts the JS
 // should drop into this row's badge. Items without a key (Inicio,
 // Landing Page) just don't render a badge.
+// `warningCountKey`: optional second badge rendered to the LEFT of the
+// main count, styled like the Pedidos badge (orange). Used in Catálogo
+// to surface the number of books without price.
 // `subItems`: nested rows that show only when the parent route is
 // active. Used by Landing Page to expose Home / Catálogo / Artículos / etc.
 type SidebarSub = { href: string; label: string; icon: string; pageKey?: string };
-const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string; subItems?: SidebarSub[] }> = [
+const allItems: Array<{ href: string; label: string; icon: string; resource?: Resource; ownerOnly?: boolean; managerOnly?: boolean; countKey?: string; warningCountKey?: string; warningTitle?: string; subItems?: SidebarSub[] }> = [
   { href: "/",              label: "Inicio",        icon: "lucide:home" },
   { href: "/categories",    label: "Categorías",    icon: "lucide:folder-tree",     resource: "categories",    countKey: "categories" },
-  { href: "/books",         label: "Catálogo",      icon: "lucide:book-open",       resource: "books",         countKey: "books" },
+  { href: "/books",         label: "Catálogo",      icon: "lucide:book-open",       resource: "books",         countKey: "books", warningCountKey: "books_without_price", warningTitle: "Libros sin precio asignado" },
   { href: "/collections",   label: "Colecciones",   icon: "lucide:library",         resource: "collections",   countKey: "collections" },
   { href: "/posts",         label: "Publicaciones", icon: "lucide:newspaper",       resource: "posts",         countKey: "posts" },
   { href: "/authors",       label: "Autores",       icon: "lucide:users",           resource: "authors",       countKey: "authors" },
@@ -124,6 +127,14 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
         >
           <Icon name={item.icon} class="w-4 h-4 shrink-0" aria-hidden="true" />
           <span class="cas-nav-label">{item.label}</span>
+          {item.warningCountKey && (
+            <span
+              class="cas-nav-count cas-nav-count-warning"
+              data-count-key={item.warningCountKey}
+              title={item.warningTitle}
+              aria-label={item.warningTitle}
+            ></span>
+          )}
           {item.countKey && (
             <span class="cas-nav-count" data-count-key={item.countKey} aria-hidden="true"></span>
           )}
@@ -265,17 +276,25 @@ const isActive = (href: string) => path === href || (href !== "/" && path.starts
   }
 
   /* Highlight contador de Pedidos — los pedidos son señal de venta y
-     merecen destacarse sobre el resto del menú. Solo cuando hay al
-     menos un pedido (no aplicamos color cuando el badge está vacío). */
-  .cas-nav-count[data-count-key="orders"]:not(:empty) {
+     merecen destacarse sobre el resto del menú. Mismo tono naranja se
+     reutiliza para cualquier badge con .cas-nav-count-warning (p.ej.
+     Catálogo · libros sin precio). Solo aplicamos color cuando el
+     badge no está vacío. */
+  .cas-nav-count[data-count-key="orders"]:not(:empty),
+  .cas-nav-count-warning:not(:empty) {
     background: rgb(254 215 170);          /* orange-200 */
     color: rgb(124 45 18);                 /* orange-900 */
     font-weight: 600;
   }
-  .nav-link-active .cas-nav-count[data-count-key="orders"]:not(:empty) {
+  .nav-link-active .cas-nav-count[data-count-key="orders"]:not(:empty),
+  .nav-link-active .cas-nav-count-warning:not(:empty) {
     background: rgb(251 146 60);           /* orange-400 */
     color: rgb(67 20 7);                   /* orange-950 */
   }
+  /* Cuando hay TANTO warning como count regular en la misma fila,
+     metemos un gap pequeño entre ambos para que se lean como dos pills
+     diferenciadas y no como un único bloque dividido. */
+  .cas-nav-count-warning + .cas-nav-count { margin-left: 0.25rem; }
 
   /* Expand/collapse caret for rows that have a sub-nav (Page →
      Home / Catálogo / …). Click toggles the chips below. The icon
