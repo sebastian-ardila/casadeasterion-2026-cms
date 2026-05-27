@@ -333,10 +333,19 @@
 
 <script is:inline>
   (() => {
-    // Single init guard — the dialog persists across view transitions
-    // because it's wrapped in AppLayout, which uses transition:persist.
-    if (window.__casLeaveGuardInit) return;
-    window.__casLeaveGuardInit = true;
+    // El script se carga inline cada vez que esta página se renderiza.
+    // Separamos en dos pasos:
+    //   1. Listeners GLOBALES en document/window — solo una vez por sesión
+    //      del browser (gestionados por window.__casLeaveGuardGlobals).
+    //   2. Binding al dialog actual — cada navegación, porque Astro
+    //      view-transitions reemplaza el <dialog> (transition:persist no
+    //      aplica bien a un componente con múltiples elementos top-level).
+    //
+    // El bug antes: capturábamos refs al dialog en variables al inicio.
+    // Cuando el usuario llegaba al CMS desde una URL externa o navegaba
+    // al primer form, las refs quedaban undefined o apuntaban a un dialog
+    // viejo, y el modal nunca abría — interceptábamos el click pero
+    // openModal silenciosamente fallaba dejando al usuario atrapado.
 
     const SESSION_KEY = "cas:leave-after-save";
 
@@ -592,17 +601,31 @@
     }
 
     // ---------- Modal --------------------------------------------------
-    const dialog = document.querySelector("[data-cas-leave-guard]");
-    const listEl = dialog && dialog.querySelector("[data-cas-leave-guard-changes]");
-    const moreEl = dialog && dialog.querySelector("[data-cas-leave-guard-more]");
-    const cancelBtn = dialog && dialog.querySelector("[data-cas-leave-guard-cancel]");
-    const discardBtn = dialog && dialog.querySelector("[data-cas-leave-guard-discard]");
-    const saveBtn = dialog && dialog.querySelector("[data-cas-leave-guard-save]");
+    // Helper que consulta el dialog actual en el DOM (puede cambiar entre
+    // navegaciones de Astro). Si la página actual no incluye el LeaveGuard
+    // (caso raro), getDialog() devuelve null y los handlers se vuelven
+    // no-op.
+    function getDialog() {
+      return document.querySelector("[data-cas-leave-guard]");
+    }
+    function getDialogParts() {
+      const dialog = getDialog();
+      if (!dialog) return null;
+      const listEl    = dialog.querySelector("[data-cas-leave-guard-changes]");
+      const moreEl    = dialog.querySelector("[data-cas-leave-guard-more]");
+      const cancelBtn = dialog.querySelector("[data-cas-leave-guard-cancel]");
+      const discardBtn= dialog.querySelector("[data-cas-leave-guard-discard]");
+      const saveBtn   = dialog.querySelector("[data-cas-leave-guard-save]");
+      if (!listEl || !cancelBtn || !discardBtn || !saveBtn) return null;
+      return { dialog, listEl, moreEl, cancelBtn, discardBtn, saveBtn };
+    }
 
-    if (!dialog || !listEl || !cancelBtn || !discardBtn || !saveBtn) return;
-
-    let pendingHref = null;
-    let pendingForm = null;
+    // Estado global del modal (mantiene la promesa de href/form pendiente
+    // entre el click y el "Continuar editando / Salir / Guardar borrador").
+    if (!window.__casLeaveGuardState) {
+      window.__casLeaveGuardState = { pendingHref: null, pendingForm: null };
+    }
+    const state = window.__casLeaveGuardState;
     const MAX_VISIBLE = 8;
 
     function escapeHtml(s) {
@@ -613,8 +636,8 @@
         .replace(/"/g, "&quot;");
     }
 
-    function renderChanges(changes) {
-      listEl.innerHTML = "";
+    function renderChanges(parts, changes) {
+      parts.listEl.innerHTML = "";
       const visible = changes.slice(0, MAX_VISIBLE);
       for (const c of visible) {
         const li = document.createElement("li");
@@ -633,14 +656,16 @@
               `<span class="${afterClass}">${escapeHtml(c.after.text)}</span>` +
             `</div>` +
           `</div>`;
-        listEl.appendChild(li);
+        parts.listEl.appendChild(li);
       }
-      if (changes.length > MAX_VISIBLE) {
-        moreEl.hidden = false;
-        const rest = changes.length - MAX_VISIBLE;
-        moreEl.textContent = `Y ${rest} cambio${rest === 1 ? "" : "s"} más no mostrados.`;
-      } else {
-        moreEl.hidden = true;
+      if (parts.moreEl) {
+        if (changes.length > MAX_VISIBLE) {
+          parts.moreEl.hidden = false;
+          const rest = changes.length - MAX_VISIBLE;
+          parts.moreEl.textContent = `Y ${rest} cambio${rest === 1 ? "" : "s"} más no mostrados.`;
+        } else {
+          parts.moreEl.hidden = true;
+        }
       }
     }
 
@@ -677,85 +702,108 @@
     }
 
     function openModal(form, href) {
-      pendingForm = form;
-      pendingHref = href;
+      const parts = getDialogParts();
+      if (!parts) {
+        // Sin dialog en el DOM no podemos mostrar el modal — caemos a
+        // permitir la navegación para no atrapar al usuario.
+        if (href) window.location.href = href;
+        return;
+      }
+      state.pendingForm = form;
+      state.pendingHref = href;
       const changes = buildDiff(form);
-      renderChanges(changes);
+      renderChanges(parts, changes);
       // Hide the "Guardar borrador" affordance when the form has no
       // draft-capable status control — we can't promise a safe save.
-      saveBtn.hidden = !hasDraftStatus(form);
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
+      parts.saveBtn.hidden = !hasDraftStatus(form);
+      if (typeof parts.dialog.showModal === "function") {
+        try {
+          parts.dialog.showModal();
+        } catch {
+          parts.dialog.setAttribute("open", "");
+        }
       } else {
         // Fallback for browsers without <dialog>. Show as overlay.
-        dialog.setAttribute("open", "");
+        parts.dialog.setAttribute("open", "");
       }
-      cancelBtn.focus();
+      parts.cancelBtn.focus();
     }
 
     function closeModal() {
-      pendingForm = null;
-      pendingHref = null;
-      if (typeof dialog.close === "function") {
-        dialog.close();
+      state.pendingForm = null;
+      state.pendingHref = null;
+      const parts = getDialogParts();
+      if (!parts) return;
+      if (typeof parts.dialog.close === "function") {
+        try { parts.dialog.close(); } catch {}
       } else {
-        dialog.removeAttribute("open");
+        parts.dialog.removeAttribute("open");
       }
     }
 
-    cancelBtn.addEventListener("click", () => closeModal());
-    // <dialog>'s native ESC dispatches "cancel" then "close" — make sure
-    // we don't leak pending state.
-    dialog.addEventListener("close", () => {
-      pendingForm = null;
-      pendingHref = null;
-    });
+    // Bind del modal — idempotente vía data-cas-bound. Se llama en cada
+    // page-load porque Astro view-transitions reemplaza el <dialog> y
+    // los handlers viejos quedan colgando.
+    function bindModal() {
+      const parts = getDialogParts();
+      if (!parts) return;
+      if (parts.dialog.dataset.casBound === "1") return;
+      parts.dialog.dataset.casBound = "1";
 
-    discardBtn.addEventListener("click", () => {
-      const href = pendingHref;
-      const form = pendingForm;
-      closeModal();
-      // Clear the dirty snapshot so beforeunload doesn't fire and the
-      // guard doesn't intercept this navigation.
-      if (form) {
-        form.dataset.casInitialSnapshot = snapshotForm(form);
-      }
-      if (href) {
-        window.location.href = href;
-      } else {
-        // beforeunload path: ask the browser to proceed by removing
-        // our listener. Easiest: reload.
-        window.location.reload();
-      }
-    });
+      parts.cancelBtn.addEventListener("click", () => closeModal());
+      // ESC del <dialog> nativo dispara "cancel" + "close": limpiamos
+      // estado pendiente.
+      parts.dialog.addEventListener("close", () => {
+        state.pendingForm = null;
+        state.pendingHref = null;
+      });
 
-    saveBtn.addEventListener("click", () => {
-      const href = pendingHref;
-      const form = pendingForm;
-      if (!form) {
+      parts.discardBtn.addEventListener("click", () => {
+        const href = state.pendingHref;
+        const form = state.pendingForm;
         closeModal();
-        return;
-      }
-      // Force status=draft (supports both <select> and radios). If the
-      // form has no status control at all, just submit as-is.
-      setStatusToDraft(form);
-      // Remember where the user was trying to go. After the POST
-      // succeeds and the server redirects back to the entity detail
-      // page, the post-save handler below will pick this up and
-      // forward the browser to the original destination.
-      if (href) {
-        try { sessionStorage.setItem(SESSION_KEY, href); } catch {}
-      }
-      // Mark the form as clean so beforeunload and the click guard
-      // don't fire again as the form submits / redirects.
-      form.dataset.casInitialSnapshot = snapshotForm(form);
-      closeModal();
-      // Native submit (NOT requestSubmit) to bypass the disabled save
-      // button on clean state. The button might be disabled because
-      // setting status to "draft" doesn't necessarily flip the dirty
-      // detector — and even if it did, we want this submit regardless.
-      form.submit();
-    });
+        if (form) {
+          form.dataset.casInitialSnapshot = snapshotForm(form);
+        }
+        if (href) {
+          window.location.href = href;
+        } else {
+          window.location.reload();
+        }
+      });
+
+      parts.saveBtn.addEventListener("click", () => {
+        const href = state.pendingHref;
+        const form = state.pendingForm;
+        if (!form) {
+          closeModal();
+          return;
+        }
+        // Force status=draft (supports both <select> and radios). If the
+        // form has no status control at all, just submit as-is.
+        setStatusToDraft(form);
+        // Remember where the user was trying to go. After the POST
+        // succeeds and the server redirects back to the entity detail
+        // page, maybeForwardAfterSave() forwards the browser to the
+        // original destination.
+        if (href) {
+          try { sessionStorage.setItem(SESSION_KEY, href); } catch {}
+        }
+        // Mark the form as clean so beforeunload and the click guard
+        // don't fire again as the form submits / redirects.
+        form.dataset.casInitialSnapshot = snapshotForm(form);
+        closeModal();
+        // Native submit (NOT requestSubmit) to bypass the disabled save
+        // button on clean state.
+        form.submit();
+      });
+    }
+
+    // ---------- Global listeners (una sola vez por sesión) -------------
+    // Estos listeners NO deben re-bindearse en cada navegación (causarían
+    // disparos múltiples). Usamos un flag en window para idempotencia.
+    if (!window.__casLeaveGuardGlobalsBound) {
+      window.__casLeaveGuardGlobalsBound = true;
 
     // ---------- Submit handling ---------------------------------------
     // When a form is submitted normally (the FormActions "Guardar"
@@ -845,10 +893,20 @@
       }
     });
 
+    // Cada navegación de Astro reemplaza el <dialog> (transition:persist
+    // no aplica bien a un componente con múltiples elementos top-level).
+    // Re-bindeamos el modal después de cada page-load para que los
+    // botones del nuevo dialog tengan sus handlers.
+    document.addEventListener("astro:page-load", bindModal);
+
     // ---------- Post-save redirect ------------------------------------
     // After "Guardar borrador y salir", the form submits and the server
     // redirects back to the entity detail with ?saved=1. We detect that
     // landing and forward to the destination the user originally chose.
+    document.addEventListener("astro:page-load", maybeForwardAfterSave);
+    } /* fin __casLeaveGuardGlobalsBound */
+
+    // Función disponible tanto en el guard como en la primera ejecución.
     function maybeForwardAfterSave() {
       let target = null;
       try {
@@ -858,12 +916,15 @@
       const params = new URLSearchParams(window.location.search);
       if (params.get("saved") !== "1") return;
       try { sessionStorage.removeItem(SESSION_KEY); } catch {}
-      // Defer so the user briefly sees the "saved" toast / state.
       setTimeout(() => {
         window.location.href = target;
       }, 600);
     }
+
+    // Bind del modal y post-save check en cada ejecución del script
+    // inline (es decir, en cada SSR de una página). Idempotente vía
+    // data-cas-bound del dialog y vía sessionStorage para el post-save.
+    bindModal();
     maybeForwardAfterSave();
-    document.addEventListener("astro:page-load", maybeForwardAfterSave);
   })();
 </script>
