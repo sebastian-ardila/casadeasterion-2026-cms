@@ -7,13 +7,13 @@ if (guard instanceof Response) return guard;
 const canEdit = guard.permission === "edit";
 ---
 
-<AppLayout title="Prologistas" resource="prologuists">
+<AppLayout title="Prologuistas" resource="prologuists">
   <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
-    <p class="font-serif text-xl mb-2">Prologistas</p>
+    <p class="font-serif text-xl mb-2">Prologuistas</p>
     <p class="text-sm mb-2 max-w-md">Personas que han escrito prólogos para libros o publicaciones de Casa de Asterión.</p>
-    <p class="text-sm mb-6">Selecciona un prologista de la lista{canEdit && " o crea uno nuevo"}.</p>
+    <p class="text-sm mb-6">Selecciona un prologuista de la lista{canEdit && " o crea uno nuevo"}.</p>
     {canEdit && (
-      <a href="/prologuists/new" class="btn-primary">+ Nuevo prologista</a>
+      <a href="/prologuists/new" class="btn-primary">+ Nuevo prologuista</a>
     )}
   </div>
 </AppLayout>

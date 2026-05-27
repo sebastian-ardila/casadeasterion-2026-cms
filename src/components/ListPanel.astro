@@ -24,7 +24,7 @@ const headerByResource: Record<PanelResource, { title: string; icon: string; new
   authors: { title: "Autores", icon: "lucide:users", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
   collaborators: { title: "Colaboradores", icon: "lucide:user-plus", newHref: "/collaborators/new", newLabel: "+ Nuevo colaborador" },
   translators: { title: "Traductores", icon: "lucide:languages", newHref: "/translators/new", newLabel: "+ Nuevo traductor" },
-  prologuists: { title: "Prologistas", icon: "lucide:quote", newHref: "/prologuists/new", newLabel: "+ Nuevo prologista" },
+  prologuists: { title: "Prologuistas", icon: "lucide:quote", newHref: "/prologuists/new", newLabel: "+ Nuevo prologuista" },
   staff: { title: "Nosotros", icon: "lucide:building", newHref: "/staff/new", newLabel: "+ Nuevo miembro" },
   collections: { title: "Colecciones", icon: "lucide:library", newHref: "/collections/new", newLabel: "+ Nueva colección" },
   categories: { title: "Categorías", icon: "lucide:folder-tree", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
@@ -204,6 +204,14 @@ const isNew = Astro.url.pathname.endsWith("/new");
   .lp-status-cancelled {
     background: #e7e5e4;
     color: #57534e;
+  }
+  /* Warning pills (catálogo: libros sin precio, etc.). Tono ámbar
+     suficientemente distinto del verde de "pub" y del gris de "borr"
+     para que salte al hojear la lista. */
+  .lp-warning {
+    background: #fff7ed;
+    color: #9a3412;
+    border: 1px solid #fed7aa;
   }
   /* Filter chip active state — used by /orders. */
   .lp-filter-chip {
@@ -917,6 +925,20 @@ const isNew = Astro.url.pathname.endsWith("/new");
             ? `<span class="lp-status ${sv.cls}">${sv.label}</span>`
             : "";
 
+          // Warning badges (catálogo: libros sin precio, etc.). Aparecen
+          // a la derecha del status como pill ámbar/naranja. Soportamos
+          // varios warnings por fila aunque hoy solo usamos uno.
+          const WARNING_VARIANTS = {
+            "sin-precio": { cls: "lp-warning-price", label: "sin precio", title: "Este libro no tiene precio asignado" },
+          };
+          const warnings = Array.isArray(it.warnings)
+            ? it.warnings
+                .map((w) => WARNING_VARIANTS[w])
+                .filter(Boolean)
+                .map((w) => `<span class="lp-status lp-warning ${w.cls}" title="${escape(w.title)}">⚠ ${escape(w.label)}</span>`)
+                .join("")
+            : "";
+
           const isPhoto = it.imageStyle === "photo";
           const isEmoji = it.imageStyle === "emoji";
           const isIcon  = it.imageStyle === "icon";
@@ -984,6 +1006,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
                     <div class="lp-row-top">
                       <p class="lp-title">${escape(it.title)}</p>
                       ${status}
+                      ${warnings}
                     </div>
                     ${it.subtitle ? `<p class="lp-sub">${escape(it.subtitle)}</p>` : ""}
                     ${renderMetaBlock(it.meta, it.editorId)}

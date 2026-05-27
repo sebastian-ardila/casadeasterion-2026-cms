@@ -83,7 +83,7 @@ if (Astro.request.method === "POST") {
 
     const { error } = await supabase.from("books").update(update).eq("id", id);
     if (error) throw error;
-    // Sync de las 4 junctions (autores, traductores, prologistas,
+    // Sync de las 4 junctions (autores, traductores, prologuistas,
     // colaboradores). El trigger sync_primary_author actualiza
     // books.author_id automáticamente con el primer autor.
     await Promise.all([
@@ -249,11 +249,11 @@ const statusOptions = [
       <div>
         <MultiAuthorPicker
           name="prologuist_ids"
-          label="Prologistas"
+          label="Prologuistas"
           authors={prologuists}
           selectedIds={selectedProloguistIds}
-          entitySingular="prologista"
-          entityPlural="prologistas"
+          entitySingular="prologuista"
+          entityPlural="prologuistas"
         />
       </div>
       <div>

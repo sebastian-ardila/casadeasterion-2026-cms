@@ -10,7 +10,7 @@ const canEdit = guard.permission === "edit";
 <AppLayout title="Colaboradores" resource="collaborators">
   <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
     <p class="font-serif text-xl mb-2">Colaboradores</p>
-    <p class="text-sm mb-2 max-w-md">Personas que han aportado a la editorial sin ser autoras de libro: artículos, poemas, ilustraciones, lecturas críticas, etc. Para traducciones y prólogos hay secciones dedicadas (Traductores, Prologistas).</p>
+    <p class="text-sm mb-2 max-w-md">Personas que han aportado a la editorial sin ser autoras de libro: artículos, poemas, ilustraciones, lecturas críticas, etc. Para traducciones y prólogos hay secciones dedicadas (Traductores, Prologuistas).</p>
     <p class="text-sm mb-6">Selecciona un colaborador de la lista{canEdit && " o crea uno nuevo"}.</p>
     {canEdit && (
       <a href="/collaborators/new" class="btn-primary">+ Nuevo colaborador</a>

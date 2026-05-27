@@ -65,7 +65,7 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   authors: "Autores",
   collaborators: "Colaboradores",
   translators: "Traductores",
-  prologuists: "Prologistas",
+  prologuists: "Prologuistas",
   staff: "Nosotros",
   collections: "Colecciones",
   categories: "Categorías",

@@ -76,7 +76,7 @@ const ROLE_LABEL: Record<string, string> = {
   author: "Autor",
   collaborator: "Colaborador",
   translator: "Traductor",
-  prologuist: "Prologista",
+  prologuist: "Prologuista",
 };
 const ROLE_ORDER = ["author", "collaborator", "translator", "prologuist"] as const;
 function formatRoleTags(tags: string[] | null | undefined): string {
@@ -158,19 +158,30 @@ export const GET: APIRoute = async (ctx) => {
     // ambiguity in the books→authors relation, so we pin the FK.
     const { data } = await supabase
       .from("books")
-      .select("id, title, slug, status, updated_at, cover_image_url, authors!books_author_id_fkey(name), editor:profiles!books_updated_by_fkey(id, full_name, email)")
+      .select("id, title, slug, status, price_amount, updated_at, cover_image_url, authors!books_author_id_fkey(name), editor:profiles!books_updated_by_fkey(id, full_name, email)")
       .order("updated_at", { ascending: false });
-    items = (data ?? []).map((b: any) => ({
-      id: b.id,
-      title: b.title,
-      subtitle: b.authors?.name ?? b.slug,
-      meta: editorMeta(b.updated_at, b.editor),
-      editorId: b.editor?.id ?? null,
-      status: b.status,
-      href: `/books/${b.id}`,
-      imageUrl: b.cover_image_url ?? null,
-      imageStyle: "cover",
-    }));
+    items = (data ?? []).map((b: any) => {
+      const warnings: string[] = [];
+      // Libro publicado sin precio: bandera para el editor. Un libro
+      // sin precio se puede agregar al carrito pero el cliente verá
+      // "Consultar" en lugar de cifra — flag visual en la lista para
+      // que el editor lo detecte sin entrar a cada ficha.
+      if (b.price_amount == null || Number(b.price_amount) <= 0) {
+        warnings.push("sin-precio");
+      }
+      return {
+        id: b.id,
+        title: b.title,
+        subtitle: b.authors?.name ?? b.slug,
+        meta: editorMeta(b.updated_at, b.editor),
+        editorId: b.editor?.id ?? null,
+        status: b.status,
+        warnings,
+        href: `/books/${b.id}`,
+        imageUrl: b.cover_image_url ?? null,
+        imageStyle: "cover",
+      };
+    });
   } else if (
     resource === "authors" ||
     resource === "collaborators" ||
