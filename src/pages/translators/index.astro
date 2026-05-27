@@ -1,0 +1,22 @@
+---
+// Listing filtrada de personas con role_tag='translator'. La data y
+// el grid vienen del ListPanel (transition:persist). Esta página es
+// solo placeholder + CTA "+ Nuevo traductor".
+import AppLayout from "~/layouts/AppLayout.astro";
+import { requirePermission } from "~/lib/auth";
+
+const guard = await requirePermission(Astro, "translators", "view");
+if (guard instanceof Response) return guard;
+const canEdit = guard.permission === "edit";
+---
+
+<AppLayout title="Traductores" resource="translators">
+  <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
+    <p class="font-serif text-xl mb-2">Traductores</p>
+    <p class="text-sm mb-2 max-w-md">Personas que han traducido libros o publicaciones para Casa de Asterión. Si la misma persona también es autora, la editas en una sola ficha de "persona".</p>
+    <p class="text-sm mb-6">Selecciona un traductor de la lista{canEdit && " o crea uno nuevo"}.</p>
+    {canEdit && (
+      <a href="/translators/new" class="btn-primary">+ Nuevo traductor</a>
+    )}
+  </div>
+</AppLayout>

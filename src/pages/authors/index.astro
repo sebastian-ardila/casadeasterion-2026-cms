@@ -10,7 +10,8 @@ const canEdit = guard.permission === "edit";
 <AppLayout title="Autores" resource="authors">
   <div class="flex flex-col items-center justify-center min-h-[60vh] text-center text-stone-500">
     <p class="font-serif text-xl mb-2">Autores</p>
-    <p class="text-sm mb-6">Selecciona un autor de la lista{canEdit && " o crea uno nuevo"}.</p>
+    <p class="text-sm mb-2 max-w-md">Personas con rol de "autor". Una misma persona puede tener varios roles a la vez (autor + traductor, autor + prologista, etc.) — se edita una sola ficha.</p>
+    <p class="text-sm mb-6">Selecciona una persona de la lista{canEdit && " o crea una nueva"}.</p>
     {canEdit && (
       <a href="/authors/new" class="btn-primary">+ Nuevo autor</a>
     )}

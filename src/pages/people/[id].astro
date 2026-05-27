@@ -1,0 +1,273 @@
+---
+// Form canónico de "personas" — edita una fila de `authors` con su
+// set de role_tags. Esta ruta es la URL canónica para editar a una
+// persona, sin importar desde qué sección del sidebar (Autores,
+// Colaboradores, Traductores, Prologistas) se llegó. Una sola fuente
+// de verdad → un solo formulario.
+//
+// Permission gate: 'authors' (la tabla DB sigue llamándose así).
+// Cualquier editor con edit en autores puede tocar los role_tags y la
+// identidad; las otras 3 secciones son vistas filtradas.
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
+import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import AiSuggest from "~/components/AiSuggest.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
+import FormActions from "~/components/FormActions.astro";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq, tags as parseTags } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requirePermission(Astro, "authors", "view");
+if (guard instanceof Response) return guard;
+const canEdit = guard.permission === "edit";
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/authors");
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+
+// Roles que el editor puede asignar. Mantén alineado con el CHECK
+// constraint en migration 0045.
+const ALL_ROLES = ["author", "collaborator", "translator", "prologuist"] as const;
+type Role = (typeof ALL_ROLES)[number];
+const ROLE_LABELS: Record<Role, string> = {
+  author: "Autor",
+  collaborator: "Colaborador",
+  translator: "Traductor",
+  prologuist: "Prologista",
+};
+
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  if (!canEdit) return Astro.redirect("/?error=no_permission&section=authors");
+  try {
+    const fd = await Astro.request.formData();
+    if (str(fd, "_action") === "delete") {
+      const { error } = await supabase.from("authors").delete().eq("id", id);
+      if (error) throw error;
+      return Astro.redirect("/authors?saved=1&action=deleted&entity=author&publish=1");
+    }
+    const name = strReq(fd, "name");
+
+    // role_tags: parsear todos los checkboxes "role_<tag>"; valida
+    // contra el set permitido. Si el editor desmarcó todos, guardamos
+    // [] — la fila queda como persona "sin rol activo", visible
+    // únicamente en /authors (sin filtro).
+    const role_tags: Role[] = ALL_ROLES.filter((r) => fd.get(`role_${r}`) === "on");
+
+    const { error } = await supabase
+      .from("authors")
+      .update({
+        name,
+        slug: strReq(fd, "slug"),
+        bio_md: str(fd, "bio_md"),
+        photo_url: str(fd, "photo_url"),
+        role_tags,
+        links: {
+          twitter: str(fd, "link_twitter") ?? "",
+          web: str(fd, "link_web") ?? "",
+          instagram: str(fd, "link_instagram") ?? "",
+        },
+        keywords: parseTags(fd, "keywords"),
+      })
+      .eq("id", id);
+    if (error) throw error;
+    return Astro.redirect(`/people/${id}?saved=1&action=updated&entity=author&publish=1`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+
+const { data: author } = await supabase.from("authors").select("*").eq("id", id).maybeSingle();
+if (!author) return Astro.redirect("/authors");
+const links = (author.links as Record<string, string>) ?? {};
+const currentTags = new Set<string>(author.role_tags ?? []);
+
+// Audit sections — qué libros y posts tiene asociados, por rol. Una
+// query paralela por junction (8 en total) limitando a 50 rows cada
+// una porque es solo navegación rápida desde la ficha. Solo
+// renderizamos las secciones que tengan al menos un row.
+const [
+  bAuthors, bCollabs, bTrans, bProlog,
+  pAuthors, pCollabs, pTrans, pProlog,
+] = await Promise.all([
+  supabase.from("book_authors").select("book:books(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("book_collaborators").select("book:books(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("book_translators").select("book:books(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("book_prologuists").select("book:books(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("post_authors").select("post:posts(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("post_collaborators").select("post:posts(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("post_translators").select("post:posts(id, title, slug, status)").eq("author_id", id).limit(50),
+  supabase.from("post_prologuists").select("post:posts(id, title, slug, status)").eq("author_id", id).limit(50),
+]);
+
+type LinkedBook = { id: string; title: string; slug: string; status: string };
+type LinkedPost = { id: string; title: string; slug: string; status: string };
+const pickBooks = (rows: { data: any[] | null }) => (rows.data ?? []).map((r) => r.book).filter(Boolean) as LinkedBook[];
+const pickPosts = (rows: { data: any[] | null }) => (rows.data ?? []).map((r) => r.post).filter(Boolean) as LinkedPost[];
+
+const bookSections: { role: Role; label: string; rows: LinkedBook[] }[] = [
+  { role: "author",       label: "Libros como autor",        rows: pickBooks(bAuthors) },
+  { role: "translator",   label: "Libros que ha traducido",  rows: pickBooks(bTrans)   },
+  { role: "prologuist",   label: "Libros con su prólogo",    rows: pickBooks(bProlog)  },
+  { role: "collaborator", label: "Libros donde colabora",    rows: pickBooks(bCollabs) },
+].filter((s) => s.rows.length > 0);
+
+const postSections: { role: Role; label: string; rows: LinkedPost[] }[] = [
+  { role: "author",       label: "Publicaciones como autor",      rows: pickPosts(pAuthors) },
+  { role: "translator",   label: "Publicaciones que ha traducido", rows: pickPosts(pTrans)  },
+  { role: "prologuist",   label: "Publicaciones con su prólogo",   rows: pickPosts(pProlog) },
+  { role: "collaborator", label: "Publicaciones donde colabora",   rows: pickPosts(pCollabs)},
+].filter((s) => s.rows.length > 0);
+---
+
+<AppLayout title={author.name} resource="authors" activeId={author.id} breadcrumbLabel={author.name}>
+
+  <BackToList href="/authors" label="Personas" />
+
+  <header class="mb-8">
+    <p class="text-xs uppercase tracking-[0.16em] text-stone-500 mb-2">Editar persona</p>
+    <h1 class="font-serif text-3xl md:text-4xl mb-2 leading-tight">{author.name}</h1>
+    <p class="text-stone-500 text-xs">/{author.slug}</p>
+  </header>
+
+  {!canEdit && (
+    <p class="bg-amber-50 border border-amber-200 text-amber-900 text-sm p-3 mb-6 flex items-center gap-2">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="11" width="18" height="11" rx="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <span>Solo lectura — tienes permiso de ver pero no de editar a esta persona.</span>
+    </p>
+  )}
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+    <fieldset disabled={!canEdit} class="space-y-6 m-0 p-0 border-0 min-w-0">
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se nombra a la persona en el sitio.</p>
+      </div>
+      <Field label="Nombre" name="name" value={author.name} required description="Nombre completo." />
+      <Field label="Slug" name="slug" value={author.slug} required description="Identificador único en la URL: /autores/<slug>, /traductores/<slug>, etc." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Roles</h2>
+        <p class="card-section-desc">Selecciona uno o más roles. Esta persona aparecerá en las secciones del sidebar y del sitio público que coincidan con los roles marcados.</p>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {ALL_ROLES.map((r) => (
+          <label class="flex items-center gap-2.5 px-3 py-2 border border-stone-300 hover:border-stone-900 cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              name={`role_${r}`}
+              checked={currentTags.has(r)}
+              class="w-4 h-4 accent-stone-900"
+            />
+            <span class="text-sm">{ROLE_LABELS[r]}</span>
+          </label>
+        ))}
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Foto</h2>
+        <p class="card-section-desc">Imagen cuadrada que aparece en el listado y la ficha.</p>
+      </div>
+      <ImageUpload name="photo_url" value={author.photo_url} label="Foto" bucket="authors" />
+    </section>
+
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Biografía</h2>
+        <p class="card-section-desc">Texto introductorio. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="bio_md" value={author.bio_md} label="" />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Enlaces</h2>
+        <p class="card-section-desc">Páginas externas vinculadas (opcional).</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <Field label="Web" name="link_web" type="url" value={links.web} description="Sitio personal." />
+        <Field label="Twitter" name="link_twitter" type="url" value={links.twitter} description="URL del perfil completo." />
+        <Field label="Instagram" name="link_instagram" type="url" value={links.instagram} description="URL del perfil completo." />
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO</h2>
+        <p class="card-section-desc">Términos para que la ficha aparezca en buscadores.</p>
+      </div>
+      <AiSuggest kind="author" contentField="bio_md" />
+      <Field label="Palabras clave (SEO)" name="keywords" value={author.keywords?.join(", ")} description="Separadas por coma. Ejemplo: poesía colombiana, literatura latinoamericana." />
+    </section>
+
+    <FormActions cancelHref="/authors" canEdit={canEdit} />
+    </fieldset>
+  </form>
+
+  {(bookSections.length > 0 || postSections.length > 0) && (
+    <section class="mt-12 max-w-3xl space-y-6">
+      <h2 class="font-serif text-2xl">Vínculos en el catálogo</h2>
+      {bookSections.map((s) => (
+        <div class="card space-y-2">
+          <h3 class="card-section-title">{s.label}</h3>
+          <ul class="text-sm space-y-1">
+            {s.rows.map((b) => (
+              <li>
+                <a href={`/books/${b.id}`} class="underline decoration-stone-300 hover:decoration-stone-900">
+                  {b.title}
+                </a>
+                {b.status !== "published" && <span class="text-stone-400 text-xs ml-2">(borrador)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {postSections.map((s) => (
+        <div class="card space-y-2">
+          <h3 class="card-section-title">{s.label}</h3>
+          <ul class="text-sm space-y-1">
+            {s.rows.map((p) => (
+              <li>
+                <a href={`/posts/${p.id}`} class="underline decoration-stone-300 hover:decoration-stone-900">
+                  {p.title}
+                </a>
+                {p.status !== "published" && <span class="text-stone-400 text-xs ml-2">(borrador)</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  )}
+
+  {canEdit && (
+  <form
+    method="POST"
+    class="mt-12 pt-6 border-t border-red-200 max-w-3xl"
+    data-cas-confirm="Los libros y publicaciones donde esta persona aparezca quedarán sin esa referencia."
+    data-cas-confirm-title="¿Borrar esta persona?"
+    data-cas-confirm-subtitle={author.name}
+    data-cas-confirm-label="Borrar"
+  >
+    <input type="hidden" name="_action" value="delete" />
+    <p class="text-sm text-stone-600 mb-3">Zona de peligro</p>
+    <button type="submit" class="btn-danger">Borrar persona</button>
+  </form>
+  )}
+</AppLayout>

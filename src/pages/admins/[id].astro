@@ -84,6 +84,7 @@ const canEdit = grantedEdit && (isOwner || isEditorRow);
 type ConfigurableResource = (typeof CONFIGURABLE_RESOURCES)[number];
 const perms: Record<ConfigurableResource, Level> = {
   posts: "none", books: "none", authors: "none", collaborators: "none",
+  translators: "none", prologuists: "none",
   staff: "none", collections: "none", categories: "none", site: "none",
   orders: "none", subscribers: "none",
 };
@@ -111,6 +112,8 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
   books: "lucide:book-open",
   authors: "lucide:users",
   collaborators: "lucide:user-plus",
+  translators: "lucide:languages",
+  prologuists: "lucide:quote",
   staff: "lucide:building",
   collections: "lucide:library",
   categories: "lucide:folder-tree",

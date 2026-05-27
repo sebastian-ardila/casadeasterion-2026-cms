@@ -1,0 +1,150 @@
+---
+// Crear una persona nueva. Form canónico — accesible desde "+ Nuevo X"
+// en cualquiera de las 4 secciones de personas. El parámetro ?role=
+// pre-marca el checkbox correspondiente: /people/new?role=translator
+// abre con "Traductor" tildado.
+import AppLayout from "~/layouts/AppLayout.astro";
+import Field from "~/components/Field.astro";
+import BackToList from "~/components/BackToList.astro";
+import MarkdownEditor from "~/components/MarkdownEditor.astro";
+import AiSuggest from "~/components/AiSuggest.astro";
+import ImageUpload from "~/components/ImageUpload.astro";
+import FormActions from "~/components/FormActions.astro";
+import { requirePermission } from "~/lib/auth";
+import { getSupabaseServerClient } from "~/lib/supabase-server";
+import { str, strReq, slugify, tags as parseTags } from "~/lib/forms";
+import { friendlyError } from "~/lib/errors";
+
+const guard = await requirePermission(Astro, "authors", "edit");
+if (guard instanceof Response) return guard;
+
+const ALL_ROLES = ["author", "collaborator", "translator", "prologuist"] as const;
+type Role = (typeof ALL_ROLES)[number];
+const ROLE_LABELS: Record<Role, string> = {
+  author: "Autor",
+  collaborator: "Colaborador",
+  translator: "Traductor",
+  prologuist: "Prologista",
+};
+
+// Detectar role hint del query string. Si llega ?role=translator,
+// arrancamos con "Traductor" marcado en lugar de "Autor".
+const requestedRole = Astro.url.searchParams.get("role");
+const isValidRole = (r: string | null): r is Role =>
+  !!r && (ALL_ROLES as readonly string[]).includes(r);
+const initialRole: Role = isValidRole(requestedRole) ? requestedRole : "author";
+
+const supabase = getSupabaseServerClient(Astro.request, Astro.cookies);
+let formError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  try {
+    const fd = await Astro.request.formData();
+    const name = strReq(fd, "name");
+    const slug = str(fd, "slug") ?? slugify(name);
+    const role_tags: Role[] = ALL_ROLES.filter((r) => fd.get(`role_${r}`) === "on");
+
+    const { data, error } = await supabase
+      .from("authors")
+      .insert({
+        name,
+        slug,
+        bio_md: str(fd, "bio_md"),
+        photo_url: str(fd, "photo_url"),
+        role_tags,
+        links: {
+          twitter: str(fd, "link_twitter") ?? "",
+          web: str(fd, "link_web") ?? "",
+          instagram: str(fd, "link_instagram") ?? "",
+        },
+        keywords: parseTags(fd, "keywords"),
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    return Astro.redirect(`/people/${data.id}?saved=1&action=created&entity=author&publish=1`);
+  } catch (err) {
+    formError = friendlyError(err);
+  }
+}
+---
+
+<AppLayout title="Nueva persona" resource="authors">
+  <BackToList href="/authors" label="Personas" />
+  <h1 class="font-serif text-3xl md:text-4xl mb-8">Nueva persona</h1>
+
+  {formError && (
+    <p class="bg-red-50 border border-red-200 text-red-900 text-sm p-3 mb-6">{formError}</p>
+  )}
+
+  <form method="POST" class="space-y-6 max-w-3xl">
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Identidad</h2>
+        <p class="card-section-desc">Cómo se nombra a la persona en el sitio.</p>
+      </div>
+      <Field label="Nombre" name="name" required description="Nombre completo." />
+      <Field label="Slug" name="slug" description="Se autogenera del nombre si lo dejas vacío." />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Roles</h2>
+        <p class="card-section-desc">Selecciona uno o más roles. Esta persona aparecerá en las secciones del sidebar y del sitio público que coincidan con los roles marcados.</p>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {ALL_ROLES.map((r) => (
+          <label class="flex items-center gap-2.5 px-3 py-2 border border-stone-300 hover:border-stone-900 cursor-pointer transition-colors">
+            <input
+              type="checkbox"
+              name={`role_${r}`}
+              checked={r === initialRole}
+              class="w-4 h-4 accent-stone-900"
+            />
+            <span class="text-sm">{ROLE_LABELS[r]}</span>
+          </label>
+        ))}
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Foto</h2>
+        <p class="card-section-desc">Imagen cuadrada, mínimo 600×600px. Se convierte a WebP.</p>
+      </div>
+      <ImageUpload name="photo_url" label="Foto" bucket="authors" />
+    </section>
+
+    <section class="card space-y-3">
+      <div>
+        <h2 class="card-section-title">Biografía</h2>
+        <p class="card-section-desc">Texto introductorio. Soporta markdown.</p>
+      </div>
+      <MarkdownEditor name="bio_md" label="" />
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Enlaces</h2>
+        <p class="card-section-desc">Páginas externas vinculadas (opcional).</p>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-4">
+        <Field label="Web" name="link_web" type="url" description="Sitio personal." />
+        <Field label="Twitter" name="link_twitter" type="url" description="URL del perfil." />
+        <Field label="Instagram" name="link_instagram" type="url" description="URL del perfil." />
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">SEO</h2>
+        <p class="card-section-desc">Términos para que la ficha aparezca en buscadores.</p>
+      </div>
+      <AiSuggest kind="author" contentField="bio_md" />
+      <Field label="Palabras clave (SEO)" name="keywords" description="Separadas por coma." />
+    </section>
+
+    <FormActions cancelHref="/authors" saveLabel="Crear persona" />
+  </form>
+</AppLayout>

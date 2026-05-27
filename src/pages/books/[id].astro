@@ -16,8 +16,8 @@ import { friendlyError } from "~/lib/errors";
 import { normalizeISBN, isValidISBN } from "~/lib/isbn";
 import {
   parseAuthorIds,
-  syncBookAuthors,
-  fetchBookAuthorIds,
+  syncBookRole,
+  fetchBookRoleIds,
 } from "~/lib/multi-author";
 
 const guard = await requirePermission(Astro, "books", "view");
@@ -83,9 +83,15 @@ if (Astro.request.method === "POST") {
 
     const { error } = await supabase.from("books").update(update).eq("id", id);
     if (error) throw error;
-    // Sync the multi-author junction. The maintenance trigger updates
-    // books.author_id to the first ID in the list automatically.
-    await syncBookAuthors(supabase, id, parseAuthorIds(fd, "author_ids"));
+    // Sync de las 4 junctions (autores, traductores, prologistas,
+    // colaboradores). El trigger sync_primary_author actualiza
+    // books.author_id automáticamente con el primer autor.
+    await Promise.all([
+      syncBookRole(supabase, "author",       id, parseAuthorIds(fd, "author_ids")),
+      syncBookRole(supabase, "translator",   id, parseAuthorIds(fd, "translator_ids")),
+      syncBookRole(supabase, "prologuist",   id, parseAuthorIds(fd, "prologuist_ids")),
+      syncBookRole(supabase, "collaborator", id, parseAuthorIds(fd, "collaborator_ids")),
+    ]);
     const triggersRebuild = newStatus === "published" || existing?.status === "published";
     return Astro.redirect(`/books/${id}?saved=1&action=updated&entity=book${triggersRebuild ? "&publish=1" : ""}`);
   } catch (err) {
@@ -93,16 +99,32 @@ if (Astro.request.method === "POST") {
   }
 }
 
-// Run all SSR fetches in parallel — single round trip instead of two.
-const [bookRes, authorsRes, categoriesRes, collectionsRes, selectedAuthorIds] = await Promise.all([
+// Cargar todas las personas filtradas por rol — cada picker ve solo
+// las personas marcadas con ese tag (un autor puro no aparece en el
+// picker de traductores, etc.). Junto con las 4 listas, cargamos los
+// IDs ya enlazados al libro para hidratar cada picker con selección.
+const [
+  bookRes, authorsRes, translatorsRes, prologuistsRes, collaboratorsRes,
+  categoriesRes, collectionsRes,
+  selectedAuthorIds, selectedTranslatorIds, selectedProloguistIds, selectedCollaboratorIds,
+] = await Promise.all([
   supabase.from("books").select("*").eq("id", id).maybeSingle(),
-  supabase.from("authors").select("id, name, photo_url").order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["author"]).order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["translator"]).order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["prologuist"]).order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["collaborator"]).order("name"),
   supabase.from("categories").select("id, name, icon").order("name"),
   (supabase.from as any)("collections").select("id, name").eq("status", "published").order("name"),
-  fetchBookAuthorIds(supabase, id),
+  fetchBookRoleIds(supabase, "author",       id),
+  fetchBookRoleIds(supabase, "translator",   id),
+  fetchBookRoleIds(supabase, "prologuist",   id),
+  fetchBookRoleIds(supabase, "collaborator", id),
 ]);
 const book = bookRes.data;
-const authors = authorsRes.data ?? [];
+const authors      = authorsRes.data ?? [];
+const translators  = translatorsRes.data ?? [];
+const prologuists  = prologuistsRes.data ?? [];
+const collaborators = collaboratorsRes.data ?? [];
 const categories = categoriesRes.data;
 const collections = (collectionsRes.data ?? []) as Array<{ id: string; name: string }>;
 if (!book) return Astro.redirect("/books");
@@ -187,26 +209,56 @@ const statusOptions = [
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Clasificación</h2>
-        <p class="card-section-desc">Asocia el libro a un autor y a una categoría del menú.</p>
+        <p class="card-section-desc">Categoría y colección del libro en el menú del sitio público.</p>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
-        <div>
-          <MultiAuthorPicker
-            name="author_ids"
-            label="Autores"
-            authors={authors}
-            selectedIds={selectedAuthorIds}
-          />
-        </div>
         <div class="flex flex-col gap-2">
           <span class="label">Categoría</span>
           <Dropdown name="category_id" value={book.category_id ?? ""} options={categoryOptions} placeholder="Sin categoría" />
         </div>
+        <div class="flex flex-col gap-2">
+          <span class="label">Colección</span>
+          <Dropdown name="collection_id" value={(book as any).collection_id ?? ""} options={collectionOptions} placeholder="Sin colección" />
+        </div>
       </div>
-      <div class="flex flex-col gap-2">
-        <span class="label">Colección</span>
-        <Dropdown name="collection_id" value={(book as any).collection_id ?? ""} options={collectionOptions} placeholder="Sin colección" />
-        <p class="text-stone-500 text-xs">Opcional. Un libro puede pertenecer a una sola colección a la vez.</p>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Personas vinculadas</h2>
+        <p class="card-section-desc">Personas asociadas al libro por rol. Cada picker solo muestra personas marcadas con ese rol; si necesitas que alguien aparezca en otro picker, edítale su ficha en Autores/Traductores/etc. y activa el rol.</p>
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="author_ids"
+          label="Autores"
+          authors={authors}
+          selectedIds={selectedAuthorIds}
+        />
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="translator_ids"
+          label="Traductores"
+          authors={translators}
+          selectedIds={selectedTranslatorIds}
+        />
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="prologuist_ids"
+          label="Prologistas"
+          authors={prologuists}
+          selectedIds={selectedProloguistIds}
+        />
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="collaborator_ids"
+          label="Colaboradores"
+          authors={collaborators}
+          selectedIds={selectedCollaboratorIds}
+        />
       </div>
     </section>
 

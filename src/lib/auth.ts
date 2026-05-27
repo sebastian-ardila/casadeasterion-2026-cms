@@ -9,6 +9,8 @@ export type Resource =
   | "books"
   | "authors"
   | "collaborators"
+  | "translators"
+  | "prologuists"
   | "staff"
   | "collections"
   | "categories"
@@ -27,6 +29,8 @@ export const RESOURCES: Resource[] = [
   "books",
   "authors",
   "collaborators",
+  "translators",
+  "prologuists",
   "staff",
   "collections",
   "categories",
@@ -45,6 +49,8 @@ export const CONFIGURABLE_RESOURCES: Resource[] = [
   "books",
   "authors",
   "collaborators",
+  "translators",
+  "prologuists",
   "staff",
   "collections",
   "categories",
@@ -58,6 +64,8 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   books: "Catálogo",
   authors: "Autores",
   collaborators: "Colaboradores",
+  translators: "Traductores",
+  prologuists: "Prologistas",
   staff: "Nosotros",
   collections: "Colecciones",
   categories: "Categorías",
@@ -73,6 +81,8 @@ export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   books: "edit",
   authors: "edit",
   collaborators: "edit",
+  translators: "edit",
+  prologuists: "edit",
   staff: "edit",
   collections: "edit",
   categories: "view",
@@ -88,6 +98,8 @@ export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   books: "edit",
   authors: "edit",
   collaborators: "edit",
+  translators: "edit",
+  prologuists: "edit",
   staff: "edit",
   collections: "edit",
   categories: "edit",
@@ -269,6 +281,7 @@ export async function getAllPermissions(
 
   const out: Record<Resource, Level> = {
     posts: "none", books: "none", authors: "none", collaborators: "none",
+    translators: "none", prologuists: "none",
     staff: "none", collections: "none", categories: "none", site: "none",
     orders: "none", subscribers: "none", admins: "none",
   };

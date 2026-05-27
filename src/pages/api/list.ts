@@ -61,12 +61,32 @@ const ALLOWED = new Set<ListResource>([
   "books",
   "authors",
   "collaborators",
+  "translators",
+  "prologuists",
   "staff",
   "collections",
   "categories",
   "admins",
   "orders",
 ]);
+
+// Etiqueta visible para cada role_tag (mostrada como subtitle de las
+// filas en /authors, /collaborators, /translators, /prologuists).
+const ROLE_LABEL: Record<string, string> = {
+  author: "Autor",
+  collaborator: "Colaborador",
+  translator: "Traductor",
+  prologuist: "Prologista",
+};
+const ROLE_ORDER = ["author", "collaborator", "translator", "prologuist"] as const;
+function formatRoleTags(tags: string[] | null | undefined): string {
+  if (!tags || tags.length === 0) return "Sin roles";
+  // Ordenar para consistencia visual entre filas.
+  const sorted = [...tags].sort(
+    (a, b) => ROLE_ORDER.indexOf(a as any) - ROLE_ORDER.indexOf(b as any),
+  );
+  return sorted.map((t) => ROLE_LABEL[t] ?? t).join(" · ");
+}
 
 // Legacy fallback emoji per category `kind`. Used only when a
 // category hasn't been given a lucide icon yet. The `kind` column
@@ -151,36 +171,47 @@ export const GET: APIRoute = async (ctx) => {
       imageUrl: b.cover_image_url ?? null,
       imageStyle: "cover",
     }));
-  } else if (resource === "authors") {
-    const { data } = await supabase
+  } else if (
+    resource === "authors" ||
+    resource === "collaborators" ||
+    resource === "translators" ||
+    resource === "prologuists"
+  ) {
+    // Las 4 secciones de personas comparten la tabla `authors`. La
+    // diferencia es solo el filtro por `role_tags` y el subtítulo
+    // muestra TODOS los roles que cumple esa persona, no solo el
+    // del filtro — así el editor que abre /translators ve también si
+    // María es además autora.
+    //
+    // /authors NO filtra: muestra a todas las personas (igual que
+    // antes mostraba "Autores" cuando autores era la única tabla).
+    // Las otras tres SÍ filtran por su tag para que la lista solo
+    // muestre a quienes cumplen ese rol.
+    const ROLE_TAG: Record<string, string | null> = {
+      authors: null,
+      collaborators: "collaborator",
+      translators: "translator",
+      prologuists: "prologuist",
+    };
+    const tagToFilter = ROLE_TAG[resource];
+    let query = supabase
       .from("authors")
-      .select("id, name, slug, photo_url, updated_at, editor:profiles!authors_updated_by_fkey(id, full_name, email)")
+      .select("id, name, slug, photo_url, role_tags, updated_at, editor:profiles!authors_updated_by_fkey(id, full_name, email)")
       .order("name");
+    if (tagToFilter) {
+      query = query.contains("role_tags", [tagToFilter]);
+    }
+    const { data } = await query;
     items = (data ?? []).map((a: any) => ({
       id: a.id,
       title: a.name,
-      subtitle: `/${a.slug}`,
+      subtitle: formatRoleTags(a.role_tags),
       meta: editorMeta(a.updated_at, a.editor),
       editorId: a.editor?.id ?? null,
-      href: `/authors/${a.id}`,
-      imageUrl: a.photo_url ?? null,
-      imageStyle: "photo",
-    }));
-  } else if (resource === "collaborators") {
-    // Mirror of authors. Same shape & FK pattern; lives in its own
-    // table so editors can keep contributing roles (translator,
-    // illustrator, prologue writer) separate from the canonical author.
-    const { data } = await supabase
-      .from("collaborators")
-      .select("id, name, slug, photo_url, updated_at, editor:profiles!collaborators_updated_by_fkey(id, full_name, email)")
-      .order("name");
-    items = (data ?? []).map((a: any) => ({
-      id: a.id,
-      title: a.name,
-      subtitle: `/${a.slug}`,
-      meta: editorMeta(a.updated_at, a.editor),
-      editorId: a.editor?.id ?? null,
-      href: `/collaborators/${a.id}`,
+      // Edición canónica: SIEMPRE /people/[id], independientemente
+      // de qué listado abrió el editor. Una sola URL para una sola
+      // persona.
+      href: `/people/${a.id}`,
       imageUrl: a.photo_url ?? null,
       imageStyle: "photo",
     }));

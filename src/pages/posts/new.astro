@@ -13,7 +13,7 @@ import { requirePermission } from "~/lib/auth";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { num, str, strReq, tags as parseTags, jsonStringArray, slugify } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
-import { parseAuthorIds, syncPostAuthors, syncPostCollaborators } from "~/lib/multi-author";
+import { parseAuthorIds, syncPostRole } from "~/lib/multi-author";
 
 const guard = await requirePermission(Astro, "posts", "edit");
 if (guard instanceof Response) return guard;
@@ -58,8 +58,12 @@ if (Astro.request.method === "POST") {
       .select("id")
       .single();
     if (error) throw error;
-    await syncPostAuthors(supabase, data.id, parseAuthorIds(fd, "author_ids"));
-    await syncPostCollaborators(supabase, data.id, parseAuthorIds(fd, "collaborator_ids"));
+    await Promise.all([
+      syncPostRole(supabase, "author",       data.id, parseAuthorIds(fd, "author_ids")),
+      syncPostRole(supabase, "translator",   data.id, parseAuthorIds(fd, "translator_ids")),
+      syncPostRole(supabase, "prologuist",   data.id, parseAuthorIds(fd, "prologuist_ids")),
+      syncPostRole(supabase, "collaborator", data.id, parseAuthorIds(fd, "collaborator_ids")),
+    ]);
     const willPublish = status === "published";
     return Astro.redirect(`/posts/${data.id}?saved=1&action=created&entity=post${willPublish ? "&publish=1" : ""}`);
   } catch (err) {
@@ -67,13 +71,24 @@ if (Astro.request.method === "POST") {
   }
 }
 
-const [{ data: authorsData }, { data: collaboratorsData }, { data: categories }, { data: booksData }] = await Promise.all([
-  supabase.from("authors").select("id, name, photo_url").order("name"),
-  supabase.from("collaborators").select("id, name, photo_url").order("name"),
+const [
+  { data: authorsData },
+  { data: translatorsData },
+  { data: prologuistsData },
+  { data: collaboratorsData },
+  { data: categories },
+  { data: booksData },
+] = await Promise.all([
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["author"]).order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["translator"]).order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["prologuist"]).order("name"),
+  supabase.from("authors").select("id, name, photo_url").contains("role_tags", ["collaborator"]).order("name"),
   supabase.from("categories").select("id, name, icon").order("name"),
   supabase.from("books").select("id, title").eq("status", "published").order("title"),
 ]);
-const authors = authorsData ?? [];
+const authors      = authorsData ?? [];
+const translators  = translatorsData ?? [];
+const prologuists  = prologuistsData ?? [];
 const collaborators = collaboratorsData ?? [];
 const books = booksData ?? [];
 const categoryOptions = [
@@ -127,25 +142,7 @@ const statusOptions = [
     <section class="card space-y-5">
       <div>
         <h2 class="card-section-title">Clasificación</h2>
-        <p class="card-section-desc">Asocia la publicación a autores, colaboradores, una categoría del menú, y opcionalmente a un libro.</p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div class="cell-stack">
-          <MultiAuthorPicker
-            name="author_ids"
-            label="Autores"
-            authors={authors}
-            selectedIds={[]}
-          />
-        </div>
-        <div class="cell-stack">
-          <MultiAuthorPicker
-            name="collaborator_ids"
-            label="Colaboradores"
-            authors={collaborators}
-            selectedIds={[]}
-          />
-        </div>
+        <p class="card-section-desc">Categoría del menú y, opcionalmente, el libro al que pertenece esta publicación.</p>
       </div>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="cell-stack flex flex-col gap-2">
@@ -156,6 +153,45 @@ const statusOptions = [
           <span class="label">Pertenece a un libro</span>
           <Dropdown name="book_id" options={bookOptions} placeholder="No pertenece a un libro" />
         </div>
+      </div>
+    </section>
+
+    <section class="card space-y-5">
+      <div>
+        <h2 class="card-section-title">Personas vinculadas</h2>
+        <p class="card-section-desc">Personas asociadas a la publicación por rol. Cada picker solo muestra personas marcadas con ese rol.</p>
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="author_ids"
+          label="Autores"
+          authors={authors}
+          selectedIds={[]}
+        />
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="translator_ids"
+          label="Traductores"
+          authors={translators}
+          selectedIds={[]}
+        />
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="prologuist_ids"
+          label="Prologistas"
+          authors={prologuists}
+          selectedIds={[]}
+        />
+      </div>
+      <div>
+        <MultiAuthorPicker
+          name="collaborator_ids"
+          label="Colaboradores"
+          authors={collaborators}
+          selectedIds={[]}
+        />
       </div>
     </section>
 

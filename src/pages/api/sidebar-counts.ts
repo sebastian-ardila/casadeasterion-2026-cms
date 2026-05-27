@@ -24,11 +24,25 @@ export const GET: APIRoute = async (ctx) => {
     out[key] = count ?? 0;
   };
 
+  // Cuenta personas en `authors` que tienen el role_tag indicado.
+  // Mismo head:true pattern; el contains-on-array funciona vía
+  // PostgREST con el operador `cs`.
+  const countAuthorsWithRole = async (role: string, key: string) => {
+    const { count } = await sb
+      .from("authors")
+      .select("*", { count: "exact", head: true })
+      .contains("role_tags", [role]);
+    out[key] = count ?? 0;
+  };
+
   const tasks: Promise<unknown>[] = [];
   if (perms.books         !== "none") tasks.push(countOf("books",         "books"));
   if (perms.posts         !== "none") tasks.push(countOf("posts",         "posts"));
   if (perms.authors       !== "none") tasks.push(countOf("authors",       "authors"));
-  if (perms.collaborators !== "none") tasks.push(countOf("collaborators", "collaborators"));
+  // Las 3 secciones siguientes son vistas filtradas de la tabla `authors`.
+  if (perms.collaborators !== "none") tasks.push(countAuthorsWithRole("collaborator", "collaborators"));
+  if (perms.translators   !== "none") tasks.push(countAuthorsWithRole("translator",   "translators"));
+  if (perms.prologuists   !== "none") tasks.push(countAuthorsWithRole("prologuist",   "prologuists"));
   if (perms.staff         !== "none") tasks.push(countOf("staff",         "staff"));
   if (perms.collections   !== "none") tasks.push(countOf("collections",   "collections"));
   if (perms.categories    !== "none") tasks.push(countOf("categories",    "categories"));

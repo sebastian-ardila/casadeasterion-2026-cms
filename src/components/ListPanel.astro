@@ -5,7 +5,7 @@ import type { Resource, Level } from "~/lib/auth";
 // "admins" and "orders" are special panels with their own auth gates
 // (owner-only and owner+admin respectively) and aren't part of the
 // per-user permissions matrix.
-type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "staff" | "collections" | "categories"> | "admins" | "orders";
+type PanelResource = Extract<Resource, "posts" | "books" | "authors" | "collaborators" | "translators" | "prologuists" | "staff" | "collections" | "categories"> | "admins" | "orders";
 
 interface Props {
   resource: PanelResource;
@@ -23,6 +23,8 @@ const headerByResource: Record<PanelResource, { title: string; icon: string; new
   books: { title: "Catálogo", icon: "lucide:book-open", newHref: "/books/new", newLabel: "+ Nuevo libro" },
   authors: { title: "Autores", icon: "lucide:users", newHref: "/authors/new", newLabel: "+ Nuevo autor" },
   collaborators: { title: "Colaboradores", icon: "lucide:user-plus", newHref: "/collaborators/new", newLabel: "+ Nuevo colaborador" },
+  translators: { title: "Traductores", icon: "lucide:languages", newHref: "/translators/new", newLabel: "+ Nuevo traductor" },
+  prologuists: { title: "Prologistas", icon: "lucide:quote", newHref: "/prologuists/new", newLabel: "+ Nuevo prologista" },
   staff: { title: "Nosotros", icon: "lucide:building", newHref: "/staff/new", newLabel: "+ Nuevo miembro" },
   collections: { title: "Colecciones", icon: "lucide:library", newHref: "/collections/new", newLabel: "+ Nueva colección" },
   categories: { title: "Categorías", icon: "lucide:folder-tree", newHref: "/categories/new", newLabel: "+ Nueva categoría" },
@@ -1178,7 +1180,7 @@ const isNew = Astro.url.pathname.endsWith("/new");
     document.addEventListener("astro:page-load", () => {
       const url = new URL(window.location.href);
       if (!url.searchParams.has("saved")) return;
-      ["posts", "books", "authors", "collaborators", "staff", "collections", "categories", "orders"].forEach((r) => {
+      ["posts", "books", "authors", "collaborators", "translators", "prologuists", "staff", "collections", "categories", "orders"].forEach((r) => {
         try {
           sessionStorage.removeItem(cacheKey(r));
         } catch {}
