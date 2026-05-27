@@ -53,7 +53,7 @@
         data-cas-leave-guard-cancel
         class="cas-leave-guard-btn cas-leave-guard-btn-ghost"
       >
-        Cancelar
+        Continuar editando
       </button>
       <button
         type="button"
@@ -572,6 +572,25 @@
       form.submit();
     });
 
+    // ---------- Submit handling ---------------------------------------
+    // When a form is submitted normally (the FormActions "Guardar"
+    // button), the resulting POST → redirect would otherwise trigger
+    // beforeunload's "leave site?" prompt because the form is still
+    // marked dirty. Clearing the snapshot here makes the guard happy.
+    // The capture phase runs before any other submit handler so we
+    // don't race with FormGuards or page-specific logic.
+    document.addEventListener(
+      "submit",
+      (e) => {
+        if (e.defaultPrevented) return;
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (form.dataset.casInitialSnapshot == null) return;
+        form.dataset.casInitialSnapshot = snapshotForm(form);
+      },
+      { capture: true },
+    );
+
     // ---------- Click interception ------------------------------------
     document.addEventListener(
       "click",
@@ -580,18 +599,10 @@
         const target = e.target;
         if (!(target instanceof Element)) return;
 
-        // 1. Logout button — show the modal so the user doesn't lose
-        //    work to a stray ⌘+click.
-        if (target.closest("#cms-logout-btn")) {
-          const form = getDirtyForm();
-          if (!form) return;
-          e.preventDefault();
-          e.stopPropagation();
-          openModal(form, null /* logout has no href; discard reloads */);
-          return;
-        }
-
-        // 2. Internal anchor.
+        // Internal anchor. (Logout is intentionally NOT intercepted
+        // here — its flow tears down the Supabase session and the
+        // modal's "Guardar borrador" couldn't keep the user logged
+        // in afterwards. The native beforeunload still catches it.)
         const a = target.closest("a[href]");
         if (!a) return;
         // Allow modifier-clicks (cmd/ctrl/shift) to open in a new tab —
