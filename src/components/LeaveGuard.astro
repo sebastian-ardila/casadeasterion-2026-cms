@@ -453,13 +453,95 @@
     }
 
     // ---------- Diff ---------------------------------------------------
-    function summarize(value) {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // Intenta resolver un value crudo a su texto legible mirando los
+    // controles del form. Devuelve null si no puede resolver y el
+    // caller cae al renderizado del raw value.
+    //
+    // Soporta:
+    //   - <Dropdown> custom (data-dropdown + data-dd-option/data-label)
+    //   - <MultiAuthorPicker> (data-map-picker + data-map-add-item con data-name)
+    //   - <select name=X> nativo
+    //   - <input type="radio" name=X value=value> + label asociado
+    function resolveDisplayValue(form, name, rawValue) {
+      if (rawValue == null || rawValue === "") return null;
+
+      // Dropdown custom: value único en el hidden input.
+      const dropdown = form.querySelector(`[data-dropdown][data-name="${CSS.escape(name)}"]`);
+      if (dropdown) {
+        if (!rawValue) return null;
+        const opt = dropdown.querySelector(`[data-dd-option][data-value="${CSS.escape(rawValue)}"]`);
+        const label = opt && (opt.getAttribute("data-label") || (opt.textContent || "").trim());
+        if (label) return label;
+      }
+
+      // MultiAuthorPicker: lista de UUIDs separados por coma.
+      const picker = form.querySelector(`[data-map-picker][data-name="${CSS.escape(name)}"]`);
+      if (picker) {
+        const ids = rawValue.split(",").map((s) => s.trim()).filter(Boolean);
+        if (ids.length === 0) return null;
+        const names = ids.map((id) => {
+          const item = picker.querySelector(`[data-map-add-item][data-id="${CSS.escape(id)}"]`);
+          const n = item && item.getAttribute("data-name");
+          return n || id.slice(0, 8) + "…";
+        });
+        // Si hay 1-3 nombres los enumeramos; si hay más, agrupamos.
+        if (names.length <= 3) return names.join(", ");
+        return `${names.slice(0, 2).join(", ")} y ${names.length - 2} más`;
+      }
+
+      // <select> nativo.
+      const sel = form.querySelector(`select[name="${CSS.escape(name)}"]`);
+      if (sel) {
+        const opt = Array.from(sel.options).find((o) => o.value === rawValue);
+        if (opt) return (opt.textContent || "").trim() || rawValue;
+      }
+
+      // Radio: buscamos el radio con name+value y leemos el label
+      // (sea <label for> o el texto del padre <label>).
+      const radio = form.querySelector(
+        `input[type="radio"][name="${CSS.escape(name)}"][value="${CSS.escape(rawValue)}"]`,
+      );
+      if (radio) {
+        let labelText = "";
+        if (radio.id) {
+          const lbl = form.querySelector(`label[for="${CSS.escape(radio.id)}"]`);
+          if (lbl) labelText = (lbl.textContent || "").trim();
+        }
+        if (!labelText) {
+          const wrap = radio.closest("label");
+          if (wrap) labelText = (wrap.textContent || "").trim();
+        }
+        if (labelText) return labelText;
+      }
+
+      return null;
+    }
+
+    function summarize(form, name, value) {
       if (value == null || value === "") return { empty: true, text: "(vacío)" };
+
+      // Intento resolver el value a texto legible antes de cualquier
+      // otro tratamiento. Esto cubre UUIDs de Dropdown/MultiAuthor,
+      // values de <select>, etc.
+      const resolved = resolveDisplayValue(form, name, value);
+      if (resolved != null) {
+        const max = 140;
+        const text = resolved.length > max ? resolved.slice(0, max).trimEnd() + "…" : resolved;
+        return { empty: false, text };
+      }
+
       if (value.startsWith("file:")) {
         const n = value.slice(5);
         return { empty: false, text: `${n} archivo${n === "1" ? "" : "s"} adjunto${n === "1" ? "" : "s"}` };
       }
-      // UUID-comma list (multi-author pickers etc.): show the count.
+      // UUID suelto que no resolvimos (no había picker/dropdown): muestra
+      // solo "(referencia)" para no confundir al editor con el ID crudo.
+      if (UUID_RE.test(value)) {
+        return { empty: false, text: "(referencia)" };
+      }
+      // UUID-comma list sin picker: degradamos al conteo.
       if (/^[0-9a-f-]{8,}(,[0-9a-f-]{8,})+$/i.test(value)) {
         const n = value.split(",").length;
         return { empty: false, text: `${n} elementos` };
@@ -499,8 +581,8 @@
         changes.push({
           name,
           label: labelFor(form, name),
-          before: summarize(v.before),
-          after: summarize(v.after),
+          before: summarize(form, name, v.before),
+          after: summarize(form, name, v.after),
         });
       });
       // Stable order: alphabetical by label so it doesn't shift across
