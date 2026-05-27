@@ -1,0 +1,673 @@
+---
+// Global unsaved-changes guard. Sits once at the top of AppLayout. When
+// the user clicks an internal link, opens the logout flow, or reloads
+// the page while ANY form on screen has unsaved changes (detected via
+// the snapshot the FormActions bar stashes in the form's dataset), it
+// intercepts the action and shows a modal with:
+//   - a summary of every changed field,
+//   - "Guardar borrador y salir" (sets status=draft and submits),
+//   - "Salir sin guardar" (discards and proceeds),
+//   - "Cancelar" (stays put).
+//
+// The component is opt-in per form via the FormActions bar's
+// `dirtyAware` prop (defaults true). Forms without that bar are
+// invisible to the guard.
+---
+
+<dialog
+  data-cas-leave-guard
+  class="cas-leave-guard"
+  aria-labelledby="cas-leave-guard-title"
+  aria-describedby="cas-leave-guard-desc"
+>
+  <form method="dialog" class="cas-leave-guard-form">
+    <header class="cas-leave-guard-header">
+      <div class="cas-leave-guard-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div>
+        <h2 id="cas-leave-guard-title">Cambios sin guardar</h2>
+        <p id="cas-leave-guard-desc" class="cas-leave-guard-sub">
+          Si sales ahora perderás los cambios que hiciste en este formulario.
+        </p>
+      </div>
+    </header>
+
+    <section class="cas-leave-guard-summary">
+      <p class="cas-leave-guard-summary-title">Resumen de cambios</p>
+      <ul data-cas-leave-guard-changes class="cas-leave-guard-list"></ul>
+      <p
+        data-cas-leave-guard-more
+        class="cas-leave-guard-more"
+        hidden
+      ></p>
+    </section>
+
+    <footer class="cas-leave-guard-actions">
+      <button
+        type="button"
+        data-cas-leave-guard-cancel
+        class="cas-leave-guard-btn cas-leave-guard-btn-ghost"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        data-cas-leave-guard-discard
+        class="cas-leave-guard-btn cas-leave-guard-btn-discard"
+      >
+        Salir sin guardar
+      </button>
+      <button
+        type="button"
+        data-cas-leave-guard-save
+        class="cas-leave-guard-btn cas-leave-guard-btn-primary"
+      >
+        Guardar borrador y salir
+      </button>
+    </footer>
+  </form>
+</dialog>
+
+<style is:global>
+  dialog.cas-leave-guard {
+    width: min(560px, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 0;
+    border: 0;
+    background: white;
+    color: rgb(28 25 23);
+    box-shadow: 0 25px 60px -10px rgb(0 0 0 / 0.35), 0 10px 25px -5px rgb(0 0 0 / 0.15);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  dialog.cas-leave-guard::backdrop {
+    background: rgb(28 25 23 / 0.55);
+    backdrop-filter: blur(2px);
+  }
+  .cas-leave-guard-form {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 2rem);
+  }
+  .cas-leave-guard-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.875rem;
+    padding: 1.25rem 1.5rem 1rem;
+    border-bottom: 1px solid rgb(231 229 228);
+  }
+  .cas-leave-guard-icon {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgb(255 247 237);
+    color: rgb(154 52 18);
+    border: 1px solid rgb(254 215 170);
+    border-radius: 9999px;
+  }
+  .cas-leave-guard-header h2 {
+    font-family: var(--font-serif, "Cormorant Garamond", Georgia, serif);
+    font-size: 1.25rem;
+    line-height: 1.2;
+    margin: 0 0 0.25rem;
+  }
+  .cas-leave-guard-sub {
+    margin: 0;
+    font-size: 0.875rem;
+    color: rgb(87 83 78);
+    line-height: 1.4;
+  }
+  .cas-leave-guard-summary {
+    padding: 1rem 1.5rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .cas-leave-guard-summary-title {
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    color: rgb(120 113 108);
+    margin: 0 0 0.625rem;
+  }
+  .cas-leave-guard-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cas-leave-guard-item {
+    border: 1px solid rgb(231 229 228);
+    border-radius: 3px;
+    padding: 0.5rem 0.75rem;
+    background: rgb(250 250 249);
+    font-size: 0.8125rem;
+  }
+  .cas-leave-guard-item-label {
+    display: block;
+    text-transform: uppercase;
+    font-size: 0.625rem;
+    letter-spacing: 0.16em;
+    color: rgb(120 113 108);
+    margin-bottom: 0.25rem;
+  }
+  .cas-leave-guard-item-diff {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: rgb(28 25 23);
+    word-break: break-word;
+  }
+  .cas-leave-guard-item-before,
+  .cas-leave-guard-item-after {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    line-height: 1.4;
+  }
+  .cas-leave-guard-item-before {
+    color: rgb(120 113 108);
+  }
+  .cas-leave-guard-item-tag {
+    flex-shrink: 0;
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgb(120 113 108);
+    padding-top: 0.05em;
+    width: 3.2rem;
+  }
+  .cas-leave-guard-item-value {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .cas-leave-guard-item-value-empty {
+    color: rgb(168 162 158);
+    font-style: italic;
+  }
+  .cas-leave-guard-more {
+    margin: 0.75rem 0 0;
+    font-size: 0.75rem;
+    color: rgb(120 113 108);
+    font-style: italic;
+  }
+  .cas-leave-guard-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.875rem 1.5rem;
+    border-top: 1px solid rgb(231 229 228);
+    background: rgb(250 250 249);
+  }
+  .cas-leave-guard-btn {
+    cursor: pointer;
+    font-size: 0.8125rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .cas-leave-guard-btn-ghost {
+    background: white;
+    border-color: rgb(231 229 228);
+    color: rgb(68 64 60);
+  }
+  .cas-leave-guard-btn-ghost:hover {
+    background: rgb(245 245 244);
+    border-color: rgb(214 211 209);
+  }
+  .cas-leave-guard-btn-discard {
+    background: white;
+    border-color: rgb(252 165 165);
+    color: rgb(153 27 27);
+  }
+  .cas-leave-guard-btn-discard:hover {
+    background: rgb(254 242 242);
+    border-color: rgb(248 113 113);
+  }
+  .cas-leave-guard-btn-primary {
+    background: rgb(28 25 23);
+    color: white;
+    border-color: rgb(28 25 23);
+  }
+  .cas-leave-guard-btn-primary:hover {
+    background: rgb(68 64 60);
+    border-color: rgb(68 64 60);
+  }
+  .cas-leave-guard-btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    // Single init guard — the dialog persists across view transitions
+    // because it's wrapped in AppLayout, which uses transition:persist.
+    if (window.__casLeaveGuardInit) return;
+    window.__casLeaveGuardInit = true;
+
+    const SESSION_KEY = "cas:leave-after-save";
+
+    // Mirror of FormActions.snapshotForm. Duplicated (not imported) so
+    // LeaveGuard stays a standalone is:inline script without bundler
+    // dependencies. Keep both in sync if you change one.
+    function snapshotForm(form) {
+      const arr = [];
+      form.querySelectorAll("[name]").forEach((el) => {
+        const e = el;
+        if (!e.name) return;
+        if (e.type === "checkbox" || e.type === "radio") {
+          arr.push([e.name + ":" + (e.value || ""), e.checked ? "1" : ""]);
+        } else if (e.type === "file") {
+          arr.push([e.name, e.files && e.files.length ? "file:" + e.files.length : ""]);
+        } else if (e.type === "submit" || e.type === "button" || e.type === "reset") {
+          return;
+        } else {
+          arr.push([e.name, e.value ?? ""]);
+        }
+      });
+      return JSON.stringify(arr.sort());
+    }
+
+    function getDirtyForm() {
+      const bars = document.querySelectorAll('[data-cas-form-bar][data-cas-dirty-aware="1"]');
+      for (const bar of bars) {
+        const form = bar.closest("form");
+        if (!form) continue;
+        const initial = form.dataset.casInitialSnapshot;
+        if (initial == null) continue;
+        if (snapshotForm(form) !== initial) return form;
+      }
+      return null;
+    }
+
+    // ---------- Label resolution ---------------------------------------
+    // Map of name → human label. Hard-coded names that don't have an
+    // obvious DOM label fall back here. Anything found via the normal
+    // resolution path wins over this map.
+    const NAME_LABELS = {
+      title: "Título",
+      subtitle: "Subtítulo",
+      slug: "Slug",
+      name: "Nombre",
+      content_md: "Contenido",
+      description_md: "Descripción",
+      bio_md: "Biografía",
+      excerpt: "Resumen",
+      cover_image_url: "Imagen de portada",
+      cover_image_alt: "Alt de portada",
+      gallery_urls: "Galería",
+      photo_url: "Foto",
+      icon: "Ícono",
+      status: "Estado",
+      category_id: "Categoría",
+      collection_id: "Colección",
+      book_id: "Libro asociado",
+      isbn: "ISBN",
+      pages: "Páginas",
+      format: "Formato",
+      price_amount: "Precio",
+      price_currency: "Moneda",
+      publication_date: "Fecha de publicación",
+      reading_time_minutes: "Tiempo de lectura",
+      meta_description: "Meta description",
+      tags: "Tags",
+      keywords: "Keywords",
+      canonical_url: "URL canónica",
+      author_ids: "Autores",
+      translator_ids: "Traductores",
+      prologuist_ids: "Prologuistas",
+      collaborator_ids: "Colaboradores",
+      book_ids: "Libros",
+      post_ids: "Publicaciones",
+      role: "Rol",
+      role_tags: "Roles",
+      email: "Email",
+      full_name: "Nombre completo",
+      position: "Cargo",
+      order: "Orden",
+      sort_order: "Orden",
+      url: "URL",
+      website: "Sitio web",
+    };
+
+    function humanizeName(name) {
+      const base = name.split(":")[0].replace(/_/g, " ").trim();
+      if (!base) return name;
+      return base.charAt(0).toUpperCase() + base.slice(1);
+    }
+
+    function labelFor(form, name) {
+      const base = name.split(":")[0];
+      // 1. Try <label for=id> matching an input with this name.
+      const input = form.querySelector(`[name="${CSS.escape(base)}"]`);
+      if (input && input.id) {
+        const lbl = form.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+        const txt = lbl && (lbl.textContent || "").trim();
+        if (txt) return txt;
+      }
+      // 2. Try a sibling .label inside the same wrapper. Many of our
+      //    cell-stack components don't use <label for>.
+      if (input) {
+        const wrap = input.closest(".cell-stack, .field, [data-leave-guard-group]");
+        const lbl = wrap && wrap.querySelector(".label, [data-leave-guard-label]");
+        const txt = lbl && (lbl.textContent || "").trim();
+        if (txt) return txt;
+      }
+      // 3. Hard-coded fallback.
+      if (NAME_LABELS[base]) return NAME_LABELS[base];
+      // 4. Humanized name as last resort.
+      return humanizeName(base);
+    }
+
+    // ---------- Diff ---------------------------------------------------
+    function summarize(value) {
+      if (value == null || value === "") return { empty: true, text: "(vacío)" };
+      if (value.startsWith("file:")) {
+        const n = value.slice(5);
+        return { empty: false, text: `${n} archivo${n === "1" ? "" : "s"} adjunto${n === "1" ? "" : "s"}` };
+      }
+      // UUID-comma list (multi-author pickers etc.): show the count.
+      if (/^[0-9a-f-]{8,}(,[0-9a-f-]{8,})+$/i.test(value)) {
+        const n = value.split(",").length;
+        return { empty: false, text: `${n} elementos` };
+      }
+      // Long values truncated for the modal.
+      const max = 140;
+      const text = value.length > max ? value.slice(0, max).trimEnd() + "…" : value;
+      return { empty: false, text };
+    }
+
+    function buildDiff(form) {
+      const initialJson = form.dataset.casInitialSnapshot;
+      if (!initialJson) return [];
+      let before, after;
+      try {
+        before = new Map(JSON.parse(initialJson));
+      } catch {
+        return [];
+      }
+      after = new Map(JSON.parse(snapshotForm(form)));
+      // Aggregate changes by base field name (strip the ":value" suffix
+      // we attach to checkboxes/radios so the user sees one row per
+      // field, not one per option).
+      const byField = new Map();
+      const keys = new Set([...before.keys(), ...after.keys()]);
+      for (const key of keys) {
+        const beforeVal = before.get(key) || "";
+        const afterVal = after.get(key) || "";
+        if (beforeVal === afterVal) continue;
+        const baseName = String(key).split(":")[0];
+        if (!byField.has(baseName)) {
+          byField.set(baseName, { before: beforeVal, after: afterVal });
+        }
+      }
+      const changes = [];
+      byField.forEach((v, name) => {
+        changes.push({
+          name,
+          label: labelFor(form, name),
+          before: summarize(v.before),
+          after: summarize(v.after),
+        });
+      });
+      // Stable order: alphabetical by label so it doesn't shift across
+      // re-opens of the modal.
+      changes.sort((a, b) => a.label.localeCompare(b.label, "es"));
+      return changes;
+    }
+
+    // ---------- Modal --------------------------------------------------
+    const dialog = document.querySelector("[data-cas-leave-guard]");
+    const listEl = dialog && dialog.querySelector("[data-cas-leave-guard-changes]");
+    const moreEl = dialog && dialog.querySelector("[data-cas-leave-guard-more]");
+    const cancelBtn = dialog && dialog.querySelector("[data-cas-leave-guard-cancel]");
+    const discardBtn = dialog && dialog.querySelector("[data-cas-leave-guard-discard]");
+    const saveBtn = dialog && dialog.querySelector("[data-cas-leave-guard-save]");
+
+    if (!dialog || !listEl || !cancelBtn || !discardBtn || !saveBtn) return;
+
+    let pendingHref = null;
+    let pendingForm = null;
+    const MAX_VISIBLE = 8;
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderChanges(changes) {
+      listEl.innerHTML = "";
+      const visible = changes.slice(0, MAX_VISIBLE);
+      for (const c of visible) {
+        const li = document.createElement("li");
+        li.className = "cas-leave-guard-item";
+        const beforeClass = c.before.empty ? "cas-leave-guard-item-value cas-leave-guard-item-value-empty" : "cas-leave-guard-item-value";
+        const afterClass = c.after.empty ? "cas-leave-guard-item-value cas-leave-guard-item-value-empty" : "cas-leave-guard-item-value";
+        li.innerHTML =
+          `<span class="cas-leave-guard-item-label">${escapeHtml(c.label)}</span>` +
+          `<div class="cas-leave-guard-item-diff">` +
+            `<div class="cas-leave-guard-item-before">` +
+              `<span class="cas-leave-guard-item-tag">Antes</span>` +
+              `<span class="${beforeClass}">${escapeHtml(c.before.text)}</span>` +
+            `</div>` +
+            `<div class="cas-leave-guard-item-after">` +
+              `<span class="cas-leave-guard-item-tag">Ahora</span>` +
+              `<span class="${afterClass}">${escapeHtml(c.after.text)}</span>` +
+            `</div>` +
+          `</div>`;
+        listEl.appendChild(li);
+      }
+      if (changes.length > MAX_VISIBLE) {
+        moreEl.hidden = false;
+        const rest = changes.length - MAX_VISIBLE;
+        moreEl.textContent = `Y ${rest} cambio${rest === 1 ? "" : "s"} más no mostrados.`;
+      } else {
+        moreEl.hidden = true;
+      }
+    }
+
+    function openModal(form, href) {
+      pendingForm = form;
+      pendingHref = href;
+      const changes = buildDiff(form);
+      renderChanges(changes);
+      // If the form has no draft-capable status field, hide the
+      // "Guardar borrador" affordance — we can't promise a safe save.
+      const statusEl = form.querySelector('[name="status"]');
+      const hasDraftOption =
+        statusEl &&
+        statusEl.tagName === "SELECT" &&
+        Array.from(statusEl.options).some((o) => o.value === "draft");
+      saveBtn.hidden = !hasDraftOption;
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        // Fallback for browsers without <dialog>. Show as overlay.
+        dialog.setAttribute("open", "");
+      }
+      cancelBtn.focus();
+    }
+
+    function closeModal() {
+      pendingForm = null;
+      pendingHref = null;
+      if (typeof dialog.close === "function") {
+        dialog.close();
+      } else {
+        dialog.removeAttribute("open");
+      }
+    }
+
+    cancelBtn.addEventListener("click", () => closeModal());
+    // <dialog>'s native ESC dispatches "cancel" then "close" — make sure
+    // we don't leak pending state.
+    dialog.addEventListener("close", () => {
+      pendingForm = null;
+      pendingHref = null;
+    });
+
+    discardBtn.addEventListener("click", () => {
+      const href = pendingHref;
+      const form = pendingForm;
+      closeModal();
+      // Clear the dirty snapshot so beforeunload doesn't fire and the
+      // guard doesn't intercept this navigation.
+      if (form) {
+        form.dataset.casInitialSnapshot = snapshotForm(form);
+      }
+      if (href) {
+        window.location.href = href;
+      } else {
+        // beforeunload path: ask the browser to proceed by removing
+        // our listener. Easiest: reload.
+        window.location.reload();
+      }
+    });
+
+    saveBtn.addEventListener("click", () => {
+      const href = pendingHref;
+      const form = pendingForm;
+      if (!form) {
+        closeModal();
+        return;
+      }
+      // Force status=draft when possible — that's what "Guardar
+      // borrador" means. If the form has no status select, just submit
+      // as-is.
+      const statusEl = form.querySelector('[name="status"]');
+      if (statusEl && statusEl.tagName === "SELECT") {
+        statusEl.value = "draft";
+      }
+      // Remember where the user was trying to go. After the POST
+      // succeeds and the server redirects back to the entity detail
+      // page, the post-save handler below will pick this up and
+      // forward the browser to the original destination.
+      if (href) {
+        try { sessionStorage.setItem(SESSION_KEY, href); } catch {}
+      }
+      // Mark the form as clean so beforeunload and the click guard
+      // don't fire again as the form submits / redirects.
+      form.dataset.casInitialSnapshot = snapshotForm(form);
+      closeModal();
+      // Native submit (NOT requestSubmit) to bypass the disabled save
+      // button on clean state. The button might be disabled because
+      // setting status to "draft" doesn't necessarily flip the dirty
+      // detector — and even if it did, we want this submit regardless.
+      form.submit();
+    });
+
+    // ---------- Click interception ------------------------------------
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (e.defaultPrevented) return;
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        // 1. Logout button — show the modal so the user doesn't lose
+        //    work to a stray ⌘+click.
+        if (target.closest("#cms-logout-btn")) {
+          const form = getDirtyForm();
+          if (!form) return;
+          e.preventDefault();
+          e.stopPropagation();
+          openModal(form, null /* logout has no href; discard reloads */);
+          return;
+        }
+
+        // 2. Internal anchor.
+        const a = target.closest("a[href]");
+        if (!a) return;
+        // Allow modifier-clicks (cmd/ctrl/shift) to open in a new tab —
+        // the current page keeps its state intact.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (a.target && a.target !== "" && a.target !== "_self") return;
+        let url;
+        try {
+          url = new URL(a.getAttribute("href"), window.location.href);
+        } catch {
+          return;
+        }
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname === window.location.pathname && url.search === window.location.search) {
+          // Same page (anchor jump, query-only change) — let it through.
+          return;
+        }
+        const form = getDirtyForm();
+        if (!form) return;
+        // Don't intercept clicks INSIDE the dialog itself.
+        if (a.closest("[data-cas-leave-guard]")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openModal(form, url.href);
+      },
+      { capture: true },
+    );
+
+    // ---------- beforeunload ------------------------------------------
+    // For reloads, tab close, and any navigation we don't catch via
+    // click (browser back/forward without astro:before-preparation).
+    window.addEventListener("beforeunload", (e) => {
+      if (getDirtyForm()) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    });
+
+    // Astro view-transitions also bypasses click. Belt-and-suspenders:
+    // intercept before-preparation when a dirty form is on screen.
+    document.addEventListener("astro:before-preparation", (e) => {
+      if (e.defaultPrevented) return;
+      const form = getDirtyForm();
+      if (!form) return;
+      try {
+        const to = e.to instanceof URL ? e.to : new URL(e.to);
+        if (to.pathname === window.location.pathname && to.search === window.location.search) {
+          return;
+        }
+        e.preventDefault();
+        openModal(form, to.href);
+      } catch {
+        // If we can't parse the target URL, fall through and let it
+        // navigate — better than locking the user in.
+      }
+    });
+
+    // ---------- Post-save redirect ------------------------------------
+    // After "Guardar borrador y salir", the form submits and the server
+    // redirects back to the entity detail with ?saved=1. We detect that
+    // landing and forward to the destination the user originally chose.
+    function maybeForwardAfterSave() {
+      let target = null;
+      try {
+        target = sessionStorage.getItem(SESSION_KEY);
+      } catch {}
+      if (!target) return;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("saved") !== "1") return;
+      try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+      // Defer so the user briefly sees the "saved" toast / state.
+      setTimeout(() => {
+        window.location.href = target;
+      }, 600);
+    }
+    maybeForwardAfterSave();
+    document.addEventListener("astro:page-load", maybeForwardAfterSave);
+  })();
+</script>

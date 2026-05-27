@@ -96,6 +96,11 @@ const {
     bar.dataset.casBound = "1";
 
     let initial = snapshotForm(form);
+    // Expose snapshot to the global LeaveGuard component via dataset.
+    // LeaveGuard reads this to compute the diff when the user tries to
+    // navigate away with unsaved changes. The "_dirtyAware" flag tells
+    // LeaveGuard to consider this form (set by the bar's data attr).
+    form.dataset.casInitialSnapshot = initial;
     const apply = () => {
       const dirty = snapshotForm(form) !== initial;
       saveBtn.disabled = !dirty;
@@ -117,12 +122,14 @@ const {
     // dirty from the start. They fire cas:resnapshot on the form.
     form.addEventListener("cas:resnapshot", () => {
       initial = snapshotForm(form);
+      form.dataset.casInitialSnapshot = initial;
       apply();
     });
 
     window.addEventListener("pageshow", (e) => {
       if ((e as PageTransitionEvent).persisted) {
         initial = snapshotForm(form);
+        form.dataset.casInitialSnapshot = initial;
         apply();
       }
     });
