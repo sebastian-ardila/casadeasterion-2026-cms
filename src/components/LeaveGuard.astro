@@ -75,8 +75,21 @@
 
 <style is:global>
   dialog.cas-leave-guard {
+    /* Posicionamiento explícito: algunas combinaciones de reset CSS +
+       Astro transitions pueden interferir con el centrado nativo de
+       <dialog>. Forzamos fixed + transform para garantizar el centro
+       independientemente del flujo. */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    /* Ancho fijo (no fluido al contenido) y alto cap para que el cuerpo
+       interno scrolle si la lista de cambios es larga. Sin esto, el
+       diálogo "crecía" mientras renderChanges() poblaba el <ul>. */
     width: min(560px, calc(100vw - 2rem));
-    max-height: calc(100vh - 2rem);
+    max-height: min(640px, calc(100vh - 2rem));
+    height: auto;
     padding: 0;
     border: 0;
     background: white;
@@ -85,9 +98,37 @@
     border-radius: 4px;
     overflow: hidden;
   }
+  /* Animación de entrada: fade + leve scale desde 96% para que aparezca
+     definido en su posición final en lugar de "crecer" desde 0. */
+  dialog.cas-leave-guard[open] {
+    animation: cas-leave-guard-in 160ms ease-out;
+  }
+  dialog.cas-leave-guard[open]::backdrop {
+    animation: cas-leave-guard-backdrop-in 160ms ease-out;
+  }
+  @keyframes cas-leave-guard-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+  @keyframes cas-leave-guard-backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
   dialog.cas-leave-guard::backdrop {
     background: rgb(28 25 23 / 0.55);
     backdrop-filter: blur(2px);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    dialog.cas-leave-guard[open],
+    dialog.cas-leave-guard[open]::backdrop {
+      animation: none;
+    }
   }
   .cas-leave-guard-form {
     display: flex;
@@ -482,19 +523,46 @@
       }
     }
 
+    // Returns true if the form has any "draft" capable status control:
+    //   - <select name="status"> with an <option value="draft">
+    //   - <input type="radio" name="status" value="draft">
+    // Else "Guardar borrador y salir" stays hidden.
+    function hasDraftStatus(form) {
+      const selectStatus = form.querySelector('select[name="status"]');
+      if (selectStatus) {
+        return Array.from(selectStatus.options).some((o) => o.value === "draft");
+      }
+      const radioDraft = form.querySelector('input[type="radio"][name="status"][value="draft"]');
+      return !!radioDraft;
+    }
+
+    // Switches the form's status control to "draft" before submitting.
+    // Returns true if it managed to set it.
+    function setStatusToDraft(form) {
+      const selectStatus = form.querySelector('select[name="status"]');
+      if (selectStatus) {
+        const has = Array.from(selectStatus.options).some((o) => o.value === "draft");
+        if (has) {
+          selectStatus.value = "draft";
+          return true;
+        }
+      }
+      const radioDraft = form.querySelector('input[type="radio"][name="status"][value="draft"]');
+      if (radioDraft) {
+        radioDraft.checked = true;
+        return true;
+      }
+      return false;
+    }
+
     function openModal(form, href) {
       pendingForm = form;
       pendingHref = href;
       const changes = buildDiff(form);
       renderChanges(changes);
-      // If the form has no draft-capable status field, hide the
-      // "Guardar borrador" affordance — we can't promise a safe save.
-      const statusEl = form.querySelector('[name="status"]');
-      const hasDraftOption =
-        statusEl &&
-        statusEl.tagName === "SELECT" &&
-        Array.from(statusEl.options).some((o) => o.value === "draft");
-      saveBtn.hidden = !hasDraftOption;
+      // Hide the "Guardar borrador" affordance when the form has no
+      // draft-capable status control — we can't promise a safe save.
+      saveBtn.hidden = !hasDraftStatus(form);
       if (typeof dialog.showModal === "function") {
         dialog.showModal();
       } else {
@@ -547,13 +615,9 @@
         closeModal();
         return;
       }
-      // Force status=draft when possible — that's what "Guardar
-      // borrador" means. If the form has no status select, just submit
-      // as-is.
-      const statusEl = form.querySelector('[name="status"]');
-      if (statusEl && statusEl.tagName === "SELECT") {
-        statusEl.value = "draft";
-      }
+      // Force status=draft (supports both <select> and radios). If the
+      // form has no status control at all, just submit as-is.
+      setStatusToDraft(form);
       // Remember where the user was trying to go. After the POST
       // succeeds and the server redirects back to the entity detail
       // page, the post-save handler below will pick this up and
