@@ -28,7 +28,11 @@ export const GET: APIRoute = async (ctx) => {
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(PAGE);
-  if (before) q = q.lt("id", Number(before));
+  if (before) {
+    const beforeId = Number(before);
+    if (!Number.isFinite(beforeId)) return json({ error: "invalid_before" }, 400);
+    q = q.lt("id", beforeId);
+  }
 
   const { data, error } = await q;
   if (error) return json({ error: error.message }, 500);
