@@ -17,6 +17,7 @@ export type Resource =
   | "site"
   | "orders"
   | "subscribers"
+  | "activity"
   | "admins";
 export type Level = "none" | "view" | "edit";
 
@@ -37,6 +38,7 @@ export const RESOURCES: Resource[] = [
   "site",
   "orders",
   "subscribers",
+  "activity",
   "admins",
 ];
 
@@ -57,6 +59,7 @@ export const CONFIGURABLE_RESOURCES: Resource[] = [
   "site",
   "orders",
   "subscribers",
+  "activity",
 ];
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
@@ -72,6 +75,7 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   site: "Webpage",
   orders: "Pedidos",
   subscribers: "Suscriptores",
+  activity: "Auditoría",
   admins: "Usuarios",
 };
 
@@ -89,6 +93,7 @@ export const EDITOR_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   site: "none",
   orders: "none",
   subscribers: "none",
+  activity: "none",
   admins: "none",
 };
 
@@ -106,6 +111,7 @@ export const ADMIN_DEFAULT_PERMISSIONS: Record<Resource, Level> = {
   site: "edit",
   orders: "edit",
   subscribers: "edit",
+  activity: "none",
   admins: "none",
 };
 
@@ -283,7 +289,7 @@ export async function getAllPermissions(
     posts: "none", books: "none", authors: "none", collaborators: "none",
     translators: "none", prologuists: "none",
     staff: "none", collections: "none", categories: "none", site: "none",
-    orders: "none", subscribers: "none", admins: "none",
+    orders: "none", subscribers: "none", activity: "none", admins: "none",
   };
   if (user.role === "owner") {
     for (const r of RESOURCES) out[r] = "edit";

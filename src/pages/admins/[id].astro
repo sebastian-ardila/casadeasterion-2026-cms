@@ -3,7 +3,9 @@ import AppLayout from "~/layouts/AppLayout.astro";
 import BackToList from "~/components/BackToList.astro";
 import Dropdown from "~/components/Dropdown.astro";
 import { Icon } from "astro-icon/components";
-import { requirePermission, CONFIGURABLE_RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import { requirePermission, getAllPermissions, CONFIGURABLE_RESOURCES, RESOURCE_LABEL, invalidateAuthCache, type Resource, type Level } from "~/lib/auth";
+import { describeAuditEntry, AUDIT_ICONS, type AuditEntry } from "~/lib/audit";
+import { formatAgo } from "~/lib/relative-time";
 import { getSupabaseServerClient } from "~/lib/supabase-server";
 import { strReq } from "~/lib/forms";
 import { friendlyError } from "~/lib/errors";
@@ -70,6 +72,22 @@ const [{ data: profile }, { data: permRows }] = await Promise.all([
 
 if (!profile) return Astro.redirect("/admins");
 
+// El historial de acciones del usuario de la ficha. Solo se carga si el
+// usuario LOGUEADO tiene permiso de auditoría (owner siempre lo tiene).
+const viewerPerms = await getAllPermissions(Astro, owner);
+const canViewActivity = viewerPerms.activity === "view" || viewerPerms.activity === "edit";
+
+let auditEntries: AuditEntry[] = [];
+if (canViewActivity) {
+  const { data: auditRows } = await supabase
+    .from("audit_log")
+    .select("id, action, resource, record_label, details, created_at")
+    .eq("actor_id", id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  auditEntries = (auditRows ?? []) as unknown as AuditEntry[];
+}
+
 const isOwnerRow = profile.role === "owner";
 const isAdminRow = profile.role === "admin";
 const isEditorRow = profile.role === "editor";
@@ -86,7 +104,7 @@ const perms: Record<ConfigurableResource, Level> = {
   posts: "none", books: "none", authors: "none", collaborators: "none",
   translators: "none", prologuists: "none",
   staff: "none", collections: "none", categories: "none", site: "none",
-  orders: "none", subscribers: "none",
+  orders: "none", subscribers: "none", activity: "none",
 };
 if (isOwnerRow) {
   for (const r of CONFIGURABLE_RESOURCES) perms[r] = "edit";
@@ -120,6 +138,7 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
   site: "lucide:settings",
   orders: "lucide:shopping-bag",
   subscribers: "lucide:mail",
+  activity: "lucide:history",
 };
 ---
 
@@ -189,7 +208,7 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
           <Dropdown
             name={`level_${r}`}
             value={perms[r]}
-            options={LEVELS}
+            options={r === "activity" ? LEVELS.filter((l) => l.value !== "edit") : LEVELS}
             disabled={isOwnerRow || !canEdit}
           />
         </div>
@@ -208,6 +227,52 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
       <p class="text-xs text-stone-500 mt-5 italic">Solo lectura — no tienes permiso de editar.</p>
     )}
   </form>
+
+  {canViewActivity && (
+    <section class="card max-w-3xl mb-12" data-audit-feed data-profile-id={profile.id}>
+      <div class="mb-5">
+        <h2 class="card-section-title">Historial de actividad</h2>
+        <p class="card-section-desc">
+          Acciones recientes de {profile.full_name ?? profile.email} en el CMS.
+        </p>
+      </div>
+
+      {auditEntries.length === 0 ? (
+        <p class="text-sm text-stone-500 italic">Sin actividad registrada.</p>
+      ) : (
+        <ul class="flex flex-col gap-3" data-audit-list>
+          {auditEntries.map((entry) => {
+            const { icon, text } = describeAuditEntry(entry);
+            return (
+              <li class="flex items-start gap-3" data-audit-id={entry.id}>
+                <span class="mt-0.5 shrink-0 text-stone-500">
+                  <Icon name={icon} class="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span class="min-w-0">
+                  <span class="text-sm text-stone-800">{text}</span>
+                  <span class="block text-[11px] italic text-stone-400">{formatAgo(entry.created_at)}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* Plantillas de iconos pre-renderizadas (ocultas): el script de "Ver más"
+          las clona por nombre porque iconify no está disponible en runtime. */}
+      <div class="hidden" data-audit-icon-templates aria-hidden="true">
+        {AUDIT_ICONS.map((n) => (
+          <span data-icon-name={n}><Icon name={n} class="w-4 h-4" /></span>
+        ))}
+      </div>
+
+      {auditEntries.length === 50 && (
+        <div class="mt-5 pt-5 border-t border-stone-100">
+          <button type="button" class="btn cursor-pointer" data-audit-more>Ver más</button>
+        </div>
+      )}
+    </section>
+  )}
 
   {/* Danger zone — revoke (anyone with edit) or fully delete (owner only).
       Hidden for owner row and for the logged-in user editing themselves. */}
@@ -428,13 +493,75 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
       });
     };
 
-    document.addEventListener("astro:page-load", () => { wire(); wireDelete(); });
-    document.addEventListener("astro:after-swap", () => { wire(); wireDelete(); });
+    // "Ver más" del historial de actividad. Pide la siguiente página al
+    // endpoint (que ya devuelve el texto formateado) y la añade a la lista.
+    const wireAudit = () => {
+      const feed = document.querySelector("[data-audit-feed]");
+      const btn = document.querySelector("[data-audit-more]");
+      if (!feed || !btn || btn.dataset.casWired) return;
+      btn.dataset.casWired = "1";
+      const profileId = feed.dataset.profileId;
+      const list = feed.querySelector("[data-audit-list]");
+      const templates = feed.querySelector("[data-audit-icon-templates]");
+      const iconSvg = (el, iconName) => {
+        // Clonar la plantilla pre-renderizada del icono correcto (por nombre).
+        // iconify no está disponible en runtime, por eso usamos plantillas SSR.
+        const tmpl = templates?.querySelector(
+          `[data-icon-name="${(iconName || "").replace(/"/g, '\\"')}"] svg`,
+        );
+        if (tmpl) el.appendChild(tmpl.cloneNode(true));
+      };
+      btn.addEventListener("click", async () => {
+        if (!list || !profileId) return;
+        const last = list.querySelector("li:last-child");
+        const before = last?.dataset.auditId;
+        btn.disabled = true;
+        btn.textContent = "Cargando…";
+        try {
+          const url = `/api/admins/audit?profileId=${encodeURIComponent(profileId)}` +
+            (before ? `&before=${encodeURIComponent(before)}` : "");
+          const res = await fetch(url, { credentials: "same-origin", headers: { accept: "application/json" } });
+          if (!res.ok) throw new Error("http_" + res.status);
+          const data = await res.json();
+          for (const e of data.entries ?? []) {
+            const li = document.createElement("li");
+            li.className = "flex items-start gap-3";
+            li.dataset.auditId = String(e.id);
+            const ico = document.createElement("span");
+            ico.className = "mt-0.5 shrink-0 text-stone-500";
+            iconSvg(ico, e.icon);
+            const body = document.createElement("span");
+            body.className = "min-w-0";
+            const txt = document.createElement("span");
+            txt.className = "text-sm text-stone-800";
+            txt.textContent = e.text;
+            const ago = document.createElement("span");
+            ago.className = "block text-[11px] italic text-stone-400";
+            ago.textContent = e.ago;
+            body.appendChild(txt); body.appendChild(ago);
+            li.appendChild(ico); li.appendChild(body);
+            list.appendChild(li);
+          }
+          if (!data.hasMore) btn.remove();
+        } catch {
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "error", message: "No se pudo cargar más actividad." });
+          }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Ver más";
+        }
+      });
+    };
+
+    document.addEventListener("astro:page-load", () => { wire(); wireDelete(); wireAudit(); });
+    document.addEventListener("astro:after-swap", () => { wire(); wireDelete(); wireAudit(); });
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => { wire(); wireDelete(); });
+      document.addEventListener("DOMContentLoaded", () => { wire(); wireDelete(); wireAudit(); });
     } else {
       wire();
       wireDelete();
+      wireAudit();
     }
   })();
 </script>
