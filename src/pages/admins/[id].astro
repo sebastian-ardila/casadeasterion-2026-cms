@@ -107,7 +107,10 @@ const perms: Record<ConfigurableResource, Level> = {
   orders: "none", subscribers: "none", activity: "none",
 };
 if (isOwnerRow) {
-  for (const r of CONFIGURABLE_RESOURCES) perms[r] = "edit";
+  // El owner tiene acceso completo, pero "activity" (Auditoría) solo admite
+  // none/view — su dropdown no ofrece "Editar", así que mostramos "Ver" para
+  // que no caiga al placeholder por un valor ("edit") que no existe ahí.
+  for (const r of CONFIGURABLE_RESOURCES) perms[r] = r === "activity" ? "view" : "edit";
 } else {
   for (const row of permRows ?? []) {
     if ((CONFIGURABLE_RESOURCES as string[]).includes(row.resource)) {
