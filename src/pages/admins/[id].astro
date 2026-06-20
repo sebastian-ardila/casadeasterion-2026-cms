@@ -493,13 +493,75 @@ const RESOURCE_ICON: Record<ConfigurableResource, string> = {
       });
     };
 
-    document.addEventListener("astro:page-load", () => { wire(); wireDelete(); });
-    document.addEventListener("astro:after-swap", () => { wire(); wireDelete(); });
+    // "Ver más" del historial de actividad. Pide la siguiente página al
+    // endpoint (que ya devuelve el texto formateado) y la añade a la lista.
+    const wireAudit = () => {
+      const feed = document.querySelector("[data-audit-feed]");
+      const btn = document.querySelector("[data-audit-more]");
+      if (!feed || !btn || btn.dataset.casWired) return;
+      btn.dataset.casWired = "1";
+      const profileId = feed.dataset.profileId;
+      const list = feed.querySelector("[data-audit-list]");
+      const templates = feed.querySelector("[data-audit-icon-templates]");
+      const iconSvg = (el, iconName) => {
+        // Clonar la plantilla pre-renderizada del icono correcto (por nombre).
+        // iconify no está disponible en runtime, por eso usamos plantillas SSR.
+        const tmpl = templates?.querySelector(
+          `[data-icon-name="${(iconName || "").replace(/"/g, '\\"')}"] svg`,
+        );
+        if (tmpl) el.appendChild(tmpl.cloneNode(true));
+      };
+      btn.addEventListener("click", async () => {
+        if (!list || !profileId) return;
+        const last = list.querySelector("li:last-child");
+        const before = last?.dataset.auditId;
+        btn.disabled = true;
+        btn.textContent = "Cargando…";
+        try {
+          const url = `/api/admins/audit?profileId=${encodeURIComponent(profileId)}` +
+            (before ? `&before=${encodeURIComponent(before)}` : "");
+          const res = await fetch(url, { credentials: "same-origin", headers: { accept: "application/json" } });
+          if (!res.ok) throw new Error("http_" + res.status);
+          const data = await res.json();
+          for (const e of data.entries ?? []) {
+            const li = document.createElement("li");
+            li.className = "flex items-start gap-3";
+            li.dataset.auditId = String(e.id);
+            const ico = document.createElement("span");
+            ico.className = "mt-0.5 shrink-0 text-stone-500";
+            iconSvg(ico, e.icon);
+            const body = document.createElement("span");
+            body.className = "min-w-0";
+            const txt = document.createElement("span");
+            txt.className = "text-sm text-stone-800";
+            txt.textContent = e.text;
+            const ago = document.createElement("span");
+            ago.className = "block text-[11px] italic text-stone-400";
+            ago.textContent = e.ago;
+            body.appendChild(txt); body.appendChild(ago);
+            li.appendChild(ico); li.appendChild(body);
+            list.appendChild(li);
+          }
+          if (!data.hasMore) btn.remove();
+        } catch {
+          if (typeof window.casToast === "function") {
+            window.casToast({ type: "error", message: "No se pudo cargar más actividad." });
+          }
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Ver más";
+        }
+      });
+    };
+
+    document.addEventListener("astro:page-load", () => { wire(); wireDelete(); wireAudit(); });
+    document.addEventListener("astro:after-swap", () => { wire(); wireDelete(); wireAudit(); });
     if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => { wire(); wireDelete(); });
+      document.addEventListener("DOMContentLoaded", () => { wire(); wireDelete(); wireAudit(); });
     } else {
       wire();
       wireDelete();
+      wireAudit();
     }
   })();
 </script>
