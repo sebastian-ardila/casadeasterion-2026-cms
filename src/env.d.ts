@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly PUBLIC_SITE_AMPLIFY_APP_ID: string;
   readonly AMPLIFY_READER_ACCESS_KEY_ID: string;
   readonly AMPLIFY_READER_SECRET_ACCESS_KEY: string;
+  readonly AMPLIFY_REGION?: string;
 }
 
 interface ImportMeta {

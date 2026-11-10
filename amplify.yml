@@ -10,6 +10,10 @@ applications:
             - pnpm install --frozen-lockfile --config.node-linker=hoisted
         build:
           commands:
+            # Amplify solo expone las env vars de la app durante el build, no
+            # en la Lambda SSR. Las volcamos a .env.production para que Astro
+            # las inlinee en el código del servidor (solo server-side).
+            - env | grep -E '^(AMPLIFY_READER_ACCESS_KEY_ID|AMPLIFY_READER_SECRET_ACCESS_KEY|AMPLIFY_REGION|OPENAI_API_KEY)=' >> .env.production || true
             - pnpm build
             - sed -i 's/nodejs20\.x/nodejs22.x/g' .amplify-hosting/deploy-manifest.json
             # Strip devDependencies before shipping node_modules into the

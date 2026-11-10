@@ -2,14 +2,22 @@ import type { APIRoute } from "astro";
 import { AmplifyClient, ListJobsCommand } from "@aws-sdk/client-amplify";
 import { requireAdmin } from "~/lib/auth";
 
-// Read an env var from both runtime (process.env, populated by Amplify
-// Hosting Lambda at request time) and build-time (import.meta.env, which
-// Astro only inlines for PUBLIC_* by default). Non-PUBLIC variables are
-// generally only visible via process.env in SSR contexts.
+// Amplify Hosting (WEB_COMPUTE) solo expone las env vars de la app en el
+// BUILD; la Lambda SSR no las recibe en process.env. amplify.yml las
+// vuelca a .env.production antes de `pnpm build` y Astro las inlinea aquí.
+// Acceso ESTÁTICO a import.meta.env.X: un acceso dinámico (env[name]) no
+// se reemplaza en build. process.env queda como respaldo (dev / otros hosts).
+const BUILD_ENV: Record<string, string | undefined> = {
+  PUBLIC_SITE_AMPLIFY_APP_ID: import.meta.env.PUBLIC_SITE_AMPLIFY_APP_ID,
+  AMPLIFY_READER_ACCESS_KEY_ID: import.meta.env.AMPLIFY_READER_ACCESS_KEY_ID,
+  AMPLIFY_READER_SECRET_ACCESS_KEY: import.meta.env.AMPLIFY_READER_SECRET_ACCESS_KEY,
+  AMPLIFY_REGION: import.meta.env.AMPLIFY_REGION,
+};
+
 function readEnv(name: string): string | undefined {
   const v =
-    (typeof process !== "undefined" ? process.env?.[name] : undefined) ??
-    (import.meta.env as Record<string, string | undefined>)[name];
+    BUILD_ENV[name] ??
+    (typeof process !== "undefined" ? process.env?.[name] : undefined);
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
