@@ -2,6 +2,8 @@
 import AppLayout from "~/layouts/AppLayout.astro";
 import Field from "~/components/Field.astro";
 import ImageUpload from "~/components/ImageUpload.astro";
+import HeroImageEditor from "~/components/HeroImageEditor.astro";
+import { normalizeHeroImageConfig } from "~/lib/hero-image";
 import CardHeader from "~/components/CardHeader.astro";
 import Dropdown from "~/components/Dropdown.astro";
 import ColorEditor from "~/components/ColorEditor.astro";
@@ -104,6 +106,23 @@ function parseJsonArray(fd: FormData, key: string): unknown[] {
   } catch {
     return [];
   }
+}
+
+// Encuadre por dispositivo de la imagen del hero (HeroImageEditor).
+// Las imágenes propias de Tablet/Móvil llegan en sus propios inputs
+// (ImageUpload) y pisan lo que traiga el JSON. Devuelve null si el
+// editor no envió nada, para no resetear la config guardada.
+function parseHeroImageConfig(fd: FormData) {
+  const raw = fd.get("hero_image_config")?.toString() ?? "";
+  if (!raw) return null;
+  let parsed: unknown = null;
+  try { parsed = JSON.parse(raw); } catch { return null; }
+  const cfg = normalizeHeroImageConfig(parsed);
+  const tablet = fd.get("hero_image_tablet_url");
+  const mobile = fd.get("hero_image_mobile_url");
+  if (typeof tablet === "string") cfg.tablet.image_url = tablet.trim();
+  if (typeof mobile === "string") cfg.mobile.image_url = mobile.trim();
+  return cfg;
 }
 
 const CONTENT_SOURCE_OPTIONS = [
@@ -348,6 +367,9 @@ if (Astro.request.method === "POST") {
       // botón Guardar y se persiste por separado.
     ];
 
+    const heroImageConfig = parseHeroImageConfig(fd);
+    if (heroImageConfig) rows.push({ key: "hero_image_config", value: heroImageConfig });
+
     const { error } = await supabase
       .from("site_configuration")
       .upsert(rows as never, { onConflict: "key" });
@@ -542,8 +564,7 @@ const DEFAULT_HERO_CARD = {
           sits on the right. */}
       <div data-tab-panel="hero" class="space-y-6 max-w-3xl">
         {/* Imagen y fondo */}
-        <section class="card space-y-5">
-          <CardHeader icon="lucide:image" title="Imagen del hero" desc="Foto que ocupa la mitad derecha en desktop y aparece debajo del contenido en mobile." />
+        <HeroImageEditor fallbackUrl={HERO_FALLBACK_URL}>
           <div class="space-y-4">
             <div class="block min-w-0">
               <span class="label flex items-center gap-1.5">
@@ -558,12 +579,7 @@ const DEFAULT_HERO_CARD = {
                 editorId="hero-bg"
               />
             </div>
-            <ImageUpload
-              name="hero_image_url"
-              label="Tu imagen"
-              bucket="covers"
-              hint="Click o arrastra. Recomendado: 2400×1600px o más, horizontal."
-            />
+            
             <div class="block min-w-0">
               <span class="label flex items-center justify-between gap-2">
                 <span>Imagen por defecto</span>
@@ -586,7 +602,7 @@ const DEFAULT_HERO_CARD = {
               </div>
             </div>
           </div>
-        </section>
+        </HeroImageEditor>
 
         {/* Logo del seam — toggle del laberinto sobre el hero */}
         <section class="card space-y-5">
@@ -3608,12 +3624,36 @@ const DEFAULT_HERO_CARD = {
       setEmpty("[data-pv-web-primary], [data-pv-mobile-primary]", ctaPrimary);
       setEmpty("[data-pv-web-secondary], [data-pv-mobile-secondary]", ctaSecondary);
 
-      // Hero image — same fallback the public site uses.
-      const imageUrl = `url('${heroImage.replace(/'/g, "%27")}')`;
-      const webImg = $("[data-pv-image-web]");
+      // Hero image — same fallback the public site uses, con el encuadre
+      // por dispositivo del HeroImageEditor (fit, posición, zoom, imagen
+      // propia de Móvil y proporción).
+      const hie = document.querySelector("[data-hero-image-editor]")?.__casHieGet?.();
+      const paintPvImage = (el, url, c) => {
+        if (!el) return;
+        el.style.backgroundImage = "none";
+        el.style.position = "relative";
+        el.style.overflow = "hidden";
+        let img = el.querySelector("img[data-pv-img]");
+        if (!img) {
+          img = document.createElement("img");
+          img.setAttribute("data-pv-img", "");
+          img.alt = "";
+          img.style.cssText = "position:absolute;inset:0;width:100%;height:100%;";
+          el.appendChild(img);
+        }
+        if (img.getAttribute("src") !== url) img.src = url;
+        const fit = c?.fit || "cover", x = c?.x ?? 50, y = c?.y ?? 50, zoom = c?.zoom ?? 100;
+        img.style.objectFit = fit;
+        img.style.objectPosition = `${x}% ${y}%`;
+        img.style.transformOrigin = `${x}% ${y}%`;
+        img.style.transform = zoom === 100 ? "" : `scale(${zoom / 100})`;
+      };
+      const mobileCfg = hie?.mobile;
+      const mobileUrl = mobileCfg && !mobileCfg.inherit_image && mobileCfg.image_url ? mobileCfg.image_url : heroImage;
+      paintPvImage($("[data-pv-image-web]"), heroImage, hie?.web);
       const mobImg = $("[data-pv-image-mobile]");
-      if (webImg) webImg.style.backgroundImage = imageUrl;
-      if (mobImg) mobImg.style.backgroundImage = imageUrl;
+      paintPvImage(mobImg, mobileUrl, mobileCfg);
+      if (mobImg) mobImg.style.aspectRatio = (mobileCfg?.ratio || "4/3").replace("/", " / ");
 
       // Bg color shared across both frames. Falls back to the same
       // --bg-alt token the public site uses when nothing's been set.
@@ -3718,6 +3758,8 @@ const DEFAULT_HERO_CARD = {
       setImage("og_image_default", cfg.og_image_default ?? "");
       setImage("organization_logo_url", cfg.organization_logo_url ?? "");
       setImage("hero_image_url", cfg.hero_image_url ?? "");
+      // Encuadre por dispositivo + imágenes propias de Tablet/Móvil.
+      document.querySelector("[data-hero-image-editor]")?.__casHieSet?.(cfg.hero_image_config ?? null);
       updateHeroFallbackStatus();
 
       // Toggle del seam logo — default true cuando la row no existe.
@@ -4366,6 +4408,7 @@ const DEFAULT_HERO_CARD = {
           }
         });
       });
+      document.addEventListener("cas:heroimage:change", () => renderHeroTextPreview());
       document.addEventListener("cas:imageupload:change", (e) => {
         const d = e.detail || {};
         if (d.name === "hero_image_url") {
