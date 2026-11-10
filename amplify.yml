@@ -13,8 +13,10 @@ applications:
             # Amplify solo expone las env vars de la app durante el build, no
             # en la Lambda SSR. Las volcamos a .env.production para que Astro
             # las inlinee en el código del servidor (solo server-side).
+            # OJO: el build corre SIN esas vars en el entorno; si existen en
+            # process.env, Astro 5 deja `process.env.X` en vez del valor.
             - env | grep -E '^(AMPLIFY_READER_ACCESS_KEY_ID|AMPLIFY_READER_SECRET_ACCESS_KEY|AMPLIFY_REGION|OPENAI_API_KEY)=' >> .env.production || true
-            - pnpm build
+            - env -u AMPLIFY_READER_ACCESS_KEY_ID -u AMPLIFY_READER_SECRET_ACCESS_KEY -u AMPLIFY_REGION -u OPENAI_API_KEY pnpm build
             - sed -i 's/nodejs20\.x/nodejs22.x/g' .amplify-hosting/deploy-manifest.json
             # Strip devDependencies before shipping node_modules into the
             # Lambda output. TipTap (and friends) are bundled into the client
